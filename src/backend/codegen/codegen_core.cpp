@@ -683,6 +683,11 @@ bool NativeCodeGen::compile(Program& program, const std::string& outputFile) {
     pe_.addImport("kernel32.dll", "GetLocalTime");
     pe_.addImport("kernel32.dll", "GetTickCount64");
     pe_.addImport("kernel32.dll", "GetEnvironmentVariableA");
+    // Async/threading support
+    pe_.addImport("kernel32.dll", "CreateThread");
+    pe_.addImport("kernel32.dll", "WaitForSingleObject");
+    pe_.addImport("kernel32.dll", "GetExitCodeThread");
+    pe_.addImport("kernel32.dll", "CloseHandle");
     
     pe_.finalizeImports();
     

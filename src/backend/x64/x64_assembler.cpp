@@ -62,10 +62,13 @@ void X64Assembler::mov_mem_rbp_rcx(int32_t offset) { emit8(0x48); emit8(0x89); e
 void X64Assembler::mov_mem_rbp_rdx(int32_t offset) { emit8(0x48); emit8(0x89); emit8(0x95); emit32(offset); }
 void X64Assembler::mov_rax_mem_rax() { emit8(0x48); emit8(0x8B); emit8(0x00); }
 void X64Assembler::mov_mem_rcx_rax() { emit8(0x48); emit8(0x89); emit8(0x01); }
+void X64Assembler::mov_mem_rax_rcx() { emit8(0x48); emit8(0x89); emit8(0x08); }
+void X64Assembler::mov_rcx_mem_rax() { emit8(0x48); emit8(0x8B); emit8(0x08); }
 void X64Assembler::lea_rcx_rip_fixup(uint32_t targetRVA) { emit8(0x48); emit8(0x8D); emit8(0x0D); fixupRIP(targetRVA); }
 void X64Assembler::lea_rax_rip_fixup(uint32_t targetRVA) { emit8(0x48); emit8(0x8D); emit8(0x05); fixupRIP(targetRVA); }
 void X64Assembler::lea_rax_rbp(int32_t offset) { emit8(0x48); emit8(0x8D); emit8(0x85); emit32(offset); }
 void X64Assembler::lea_rcx_rbp(int32_t offset) { emit8(0x48); emit8(0x8D); emit8(0x8D); emit32(offset); }
+void X64Assembler::lea_rdx_rbp_offset(int32_t offset) { emit8(0x48); emit8(0x8D); emit8(0x95); emit32(offset); }
 
 
 void X64Assembler::push_rbp() { emit8(0x55); }
@@ -91,8 +94,10 @@ void X64Assembler::cqo() { emit8(0x48); emit8(0x99); }
 void X64Assembler::idiv_rcx() { emit8(0x48); emit8(0xF7); emit8(0xF9); }
 void X64Assembler::neg_rax() { emit8(0x48); emit8(0xF7); emit8(0xD8); }
 void X64Assembler::inc_rax() { emit8(0x48); emit8(0xFF); emit8(0xC0); }
+void X64Assembler::inc_rcx() { emit8(0x48); emit8(0xFF); emit8(0xC1); }
 void X64Assembler::dec_rax() { emit8(0x48); emit8(0xFF); emit8(0xC8); }
 void X64Assembler::cmp_rax_rcx() { emit8(0x48); emit8(0x39); emit8(0xC8); }
+void X64Assembler::cmp_rax_imm32(int32_t val) { emit8(0x48); emit8(0x3D); emit32(val); }
 void X64Assembler::cmp_rax_mem_rbp(int32_t offset) { emit8(0x48); emit8(0x3B); emit8(0x85); emit32(offset); }
 void X64Assembler::test_rax_rax() { emit8(0x48); emit8(0x85); emit8(0xC0); }
 void X64Assembler::sete_al() { emit8(0x0F); emit8(0x94); emit8(0xC0); }

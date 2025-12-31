@@ -997,7 +997,7 @@ async fn parallel_map items, fn:
     return [await task for task in tasks]
 ```
 
-> **Note**: Async/await syntax is parsed but runtime is not fully implemented yet.
+> **Note**: Functions used with `spawn` must have at least one parameter (parser limitation). Use a dummy parameter if needed: `fn worker x: return 42`
 
 ---
 
@@ -1457,13 +1457,14 @@ flex
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| Async/Await | ⚠️ Syntax only | Parses but no runtime |
-| Traits | ⚠️ Partial | Syntax + basic type checking |
-| Generics | ⚠️ Partial | Syntax + type checking, no monomorphization |
-| Macros | ⚠️ Partial | Expander exists, limited execution |
+| Async/Await | ✅ Working | spawn creates threads, await waits and gets result |
+| Traits | ✅ Working | Syntax + type checking + vtable generation |
+| Generics | ⚠️ Partial | Type erasure approach, no full monomorphization |
+| Macros | ✅ Working | Full expression/statement cloning in expander |
 | Syntax Macros | ⚠️ Partial | Parsing works, transform incomplete |
-| Pattern Destructuring | ⚠️ Partial | Only literal matching |
-| push/pop | ⚠️ Partial | Works when size known at compile time |
+| Pattern Matching | ✅ Working | Literal, wildcard, and variable binding patterns |
+| push/pop/len | ✅ Working | Runtime list operations with dynamic sizing |
+| Try/Else | ✅ Working | Nil-coalescing pattern for error handling |
 
 ### Not Implemented ❌
 

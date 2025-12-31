@@ -157,6 +157,20 @@ private:
     // Extern/FFI support
     std::map<std::string, uint32_t> externFunctions_;     // Extern function name -> import RVA
     
+    // Trait/vtable support
+    struct TraitInfo {
+        std::string name;
+        std::vector<std::string> methodNames;             // Method names in order
+    };
+    struct ImplInfo {
+        std::string traitName;
+        std::string typeName;
+        std::map<std::string, std::string> methodLabels;  // Method name -> label
+    };
+    std::map<std::string, TraitInfo> traits_;             // Trait name -> info
+    std::map<std::string, ImplInfo> impls_;               // "trait:type" -> impl info
+    std::map<std::string, uint32_t> vtables_;             // "trait:type" -> vtable RVA
+    
     void visit(IntegerLiteral& node) override;
     void visit(FloatLiteral& node) override;
     void visit(StringLiteral& node) override;

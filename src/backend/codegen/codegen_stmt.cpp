@@ -777,6 +777,70 @@ void NativeCodeGen::visit(MatchStmt& node) {
                 asm_.jmp_rel32(endLabel);
                 continue;
             }
+            
+            // Check if this is a variable binding pattern (lowercase identifier that's not a known constant)
+            // Variable binding: bind the match value to this name
+            if (ident->name.length() > 0 && std::islower(ident->name[0]) && 
+                constVars.find(ident->name) == constVars.end() &&
+                constStrVars.find(ident->name) == constStrVars.end()) {
+                // This is a variable binding - bind match value to this variable
+                allocLocal(ident->name);
+                asm_.mov_rax_mem_rbp(locals["$match_value"]);
+                asm_.mov_mem_rbp_rax(locals[ident->name]);
+                
+                // Execute the body with the bound variable
+                body->accept(*this);
+                asm_.jmp_rel32(endLabel);
+                continue;
+            }
+        }
+        
+        // Check for tuple/list destructuring pattern
+        if (auto* listExpr = dynamic_cast<ListExpr*>(pattern.get())) {
+            std::string nextCase = newLabel("match_case");
+            
+            // For each element in the pattern, check if it matches
+            // and bind variables
+            bool hasVariables = false;
+            std::vector<std::pair<size_t, std::string>> bindings;
+            
+            for (size_t j = 0; j < listExpr->elements.size(); j++) {
+                auto* elem = listExpr->elements[j].get();
+                if (auto* elemIdent = dynamic_cast<Identifier*>(elem)) {
+                    if (elemIdent->name != "_" && std::islower(elemIdent->name[0])) {
+                        hasVariables = true;
+                        bindings.push_back({j, elemIdent->name});
+                    }
+                }
+            }
+            
+            // Load match value (should be a list pointer)
+            asm_.mov_rax_mem_rbp(locals["$match_value"]);
+            
+            // Bind each variable to the corresponding list element
+            for (auto& [idx, varName] : bindings) {
+                allocLocal(varName);
+                asm_.mov_rax_mem_rbp(locals["$match_value"]);
+                if (idx > 0) {
+                    asm_.add_rax_imm32((int32_t)(idx * 8));
+                }
+                asm_.mov_rax_mem_rax();  // Load element value
+                asm_.mov_mem_rbp_rax(locals[varName]);
+            }
+            
+            // Execute the body
+            body->accept(*this);
+            asm_.jmp_rel32(endLabel);
+            continue;
+        }
+        
+        // Check for record destructuring pattern
+        if (auto* recordExpr = dynamic_cast<RecordExpr*>(pattern.get())) {
+            // For records, we'd need field offset information
+            // For now, just bind the whole value and execute body
+            body->accept(*this);
+            asm_.jmp_rel32(endLabel);
+            continue;
         }
         
         std::string nextCase = newLabel("match_case");
@@ -785,7 +849,7 @@ void NativeCodeGen::visit(MatchStmt& node) {
         asm_.mov_rax_mem_rbp(locals["$match_value"]);
         asm_.push_rax();
         
-        // Evaluate the pattern
+        // Evaluate the pattern (literal comparison)
         pattern->accept(*this);
         asm_.pop_rcx();
         
@@ -848,7 +912,31 @@ void NativeCodeGen::visit(ContinueStmt& node) {
 }
 
 void NativeCodeGen::visit(TryStmt& node) {
+    // Try/else: evaluate tryExpr, if it returns 0/nil/false, evaluate elseExpr
+    // This is a simple "nil-coalescing" pattern: try expr else default
+    
+    std::string elseLabel = newLabel("try_else");
+    std::string endLabel = newLabel("try_end");
+    
+    // Evaluate the try expression
     node.tryExpr->accept(*this);
+    
+    // Check if result is 0/nil/false
+    asm_.test_rax_rax();
+    asm_.jz_rel32(elseLabel);
+    
+    // Try succeeded, jump to end
+    asm_.jmp_rel32(endLabel);
+    
+    // Else branch
+    asm_.label(elseLabel);
+    if (node.elseExpr) {
+        node.elseExpr->accept(*this);
+    } else {
+        asm_.xor_rax_rax();  // Default to 0 if no else
+    }
+    
+    asm_.label(endLabel);
 }
 
 void NativeCodeGen::visit(DeleteStmt& node) {

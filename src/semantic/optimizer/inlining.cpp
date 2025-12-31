@@ -554,6 +554,20 @@ ExprPtr InliningPass::cloneExpression(Expression* expr, const std::map<std::stri
     else if (auto* strLit = dynamic_cast<StringLiteral*>(expr)) {
         return std::make_unique<StringLiteral>(strLit->value, strLit->location);
     }
+    else if (auto* interp = dynamic_cast<InterpolatedString*>(expr)) {
+        auto newInterp = std::make_unique<InterpolatedString>(interp->location);
+        for (auto& part : interp->parts) {
+            if (auto* str = std::get_if<std::string>(&part)) {
+                newInterp->parts.push_back(*str);
+            } else if (auto* exprPtr = std::get_if<ExprPtr>(&part)) {
+                auto cloned = cloneExpression(exprPtr->get(), argMap);
+                if (cloned) {
+                    newInterp->parts.push_back(std::move(cloned));
+                }
+            }
+        }
+        return newInterp;
+    }
     else if (auto* boolLit = dynamic_cast<BoolLiteral*>(expr)) {
         return std::make_unique<BoolLiteral>(boolLit->value, boolLit->location);
     }
@@ -591,6 +605,10 @@ ExprPtr InliningPass::cloneExpression(Expression* expr, const std::map<std::stri
         for (auto& arg : call->args) {
             newCall->args.push_back(cloneExpression(arg.get(), argMap));
         }
+        for (auto& namedArg : call->namedArgs) {
+            newCall->namedArgs.push_back({namedArg.first, cloneExpression(namedArg.second.get(), argMap)});
+        }
+        newCall->isHotCallSite = call->isHotCallSite;
         return newCall;
     }
     else if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {
@@ -628,6 +646,78 @@ ExprPtr InliningPass::cloneExpression(Expression* expr, const std::map<std::stri
             newRecord->fields.push_back({field.first, cloneExpression(field.second.get(), argMap)});
         }
         return newRecord;
+    }
+    else if (auto* range = dynamic_cast<RangeExpr*>(expr)) {
+        return std::make_unique<RangeExpr>(
+            cloneExpression(range->start.get(), argMap),
+            cloneExpression(range->end.get(), argMap),
+            range->step ? cloneExpression(range->step.get(), argMap) : nullptr,
+            range->location
+        );
+    }
+    else if (auto* lambda = dynamic_cast<LambdaExpr*>(expr)) {
+        auto newLambda = std::make_unique<LambdaExpr>(lambda->location);
+        newLambda->params = lambda->params;  // Copy params (name, type pairs)
+        newLambda->body = cloneExpression(lambda->body.get(), argMap);
+        return newLambda;
+    }
+    else if (auto* listComp = dynamic_cast<ListCompExpr*>(expr)) {
+        return std::make_unique<ListCompExpr>(
+            cloneExpression(listComp->expr.get(), argMap),
+            listComp->var,
+            cloneExpression(listComp->iterable.get(), argMap),
+            listComp->condition ? cloneExpression(listComp->condition.get(), argMap) : nullptr,
+            listComp->location
+        );
+    }
+    else if (auto* addrOf = dynamic_cast<AddressOfExpr*>(expr)) {
+        return std::make_unique<AddressOfExpr>(
+            cloneExpression(addrOf->operand.get(), argMap),
+            addrOf->location
+        );
+    }
+    else if (auto* deref = dynamic_cast<DerefExpr*>(expr)) {
+        return std::make_unique<DerefExpr>(
+            cloneExpression(deref->operand.get(), argMap),
+            deref->location
+        );
+    }
+    else if (auto* newExpr = dynamic_cast<NewExpr*>(expr)) {
+        auto cloned = std::make_unique<NewExpr>(newExpr->typeName, newExpr->location);
+        for (auto& arg : newExpr->args) {
+            cloned->args.push_back(cloneExpression(arg.get(), argMap));
+        }
+        return cloned;
+    }
+    else if (auto* cast = dynamic_cast<CastExpr*>(expr)) {
+        return std::make_unique<CastExpr>(
+            cloneExpression(cast->expr.get(), argMap),
+            cast->targetType,
+            cast->location
+        );
+    }
+    else if (auto* await = dynamic_cast<AwaitExpr*>(expr)) {
+        return std::make_unique<AwaitExpr>(
+            cloneExpression(await->operand.get(), argMap),
+            await->location
+        );
+    }
+    else if (auto* spawn = dynamic_cast<SpawnExpr*>(expr)) {
+        return std::make_unique<SpawnExpr>(
+            cloneExpression(spawn->operand.get(), argMap),
+            spawn->location
+        );
+    }
+    else if (auto* dsl = dynamic_cast<DSLBlock*>(expr)) {
+        return std::make_unique<DSLBlock>(dsl->dslName, dsl->rawContent, dsl->location);
+    }
+    else if (auto* assign = dynamic_cast<AssignExpr*>(expr)) {
+        return std::make_unique<AssignExpr>(
+            cloneExpression(assign->target.get(), argMap),
+            assign->op,
+            cloneExpression(assign->value.get(), argMap),
+            assign->location
+        );
     }
     
     // For other expression types, return nullptr (not supported for inlining)
@@ -708,11 +798,62 @@ StmtPtr InliningPass::cloneStatement(Statement* stmt, const std::map<std::string
         );
     }
     else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt)) {
-        return std::make_unique<ForStmt>(
+        auto newFor = std::make_unique<ForStmt>(
             forStmt->var,
             cloneExpression(forStmt->iterable.get(), argMap),
             cloneStatement(forStmt->body.get(), argMap),
             forStmt->location
+        );
+        newFor->unrollHint = forStmt->unrollHint;
+        return newFor;
+    }
+    else if (auto* matchStmt = dynamic_cast<MatchStmt*>(stmt)) {
+        auto newMatch = std::make_unique<MatchStmt>(
+            cloneExpression(matchStmt->value.get(), argMap),
+            matchStmt->location
+        );
+        for (auto& c : matchStmt->cases) {
+            newMatch->cases.push_back({
+                cloneExpression(c.first.get(), argMap),
+                cloneStatement(c.second.get(), argMap)
+            });
+        }
+        newMatch->defaultCase = cloneStatement(matchStmt->defaultCase.get(), argMap);
+        return newMatch;
+    }
+    else if (auto* breakStmt = dynamic_cast<BreakStmt*>(stmt)) {
+        return std::make_unique<BreakStmt>(breakStmt->location);
+    }
+    else if (auto* continueStmt = dynamic_cast<ContinueStmt*>(stmt)) {
+        return std::make_unique<ContinueStmt>(continueStmt->location);
+    }
+    else if (auto* tryStmt = dynamic_cast<TryStmt*>(stmt)) {
+        return std::make_unique<TryStmt>(
+            cloneExpression(tryStmt->tryExpr.get(), argMap),
+            cloneExpression(tryStmt->elseExpr.get(), argMap),
+            tryStmt->location
+        );
+    }
+    else if (auto* unsafeBlock = dynamic_cast<UnsafeBlock*>(stmt)) {
+        return std::make_unique<UnsafeBlock>(
+            cloneStatement(unsafeBlock->body.get(), argMap),
+            unsafeBlock->location
+        );
+    }
+    else if (auto* destructDecl = dynamic_cast<DestructuringDecl*>(stmt)) {
+        auto newDecl = std::make_unique<DestructuringDecl>(
+            destructDecl->kind,
+            destructDecl->names,
+            cloneExpression(destructDecl->initializer.get(), argMap),
+            destructDecl->location
+        );
+        newDecl->isMutable = destructDecl->isMutable;
+        return newDecl;
+    }
+    else if (auto* deleteStmt = dynamic_cast<DeleteStmt*>(stmt)) {
+        return std::make_unique<DeleteStmt>(
+            cloneExpression(deleteStmt->expr.get(), argMap),
+            deleteStmt->location
         );
     }
     

@@ -1161,10 +1161,119 @@ void NativeCodeGen::visit(CastExpr& node) {
 }
 
 void NativeCodeGen::visit(AwaitExpr& node) {
+    // Await: if the operand is a "future" (thread handle), wait for it
+    // For now, we implement a simple synchronous await that just evaluates the expression
+    // A full implementation would use WaitForSingleObject on a thread handle
+    
     node.operand->accept(*this);
+    
+    // Check if result is a thread handle (non-zero pointer-like value)
+    // If so, wait for it to complete
+    
+    // Test if it looks like a handle (> 0x1000, typical for handles)
+    asm_.cmp_rax_imm32(0x1000);
+    std::string notHandle = newLabel("await_not_handle");
+    std::string done = newLabel("await_done");
+    asm_.jl_rel32(notHandle);
+    
+    // Save handle to a local variable
+    allocLocal("$await_handle");
+    asm_.mov_mem_rbp_rax(locals["$await_handle"]);
+    
+    // It's a handle - wait for thread to complete
+    // WaitForSingleObject(handle, INFINITE)
+    asm_.mov_rcx_rax();  // handle
+    asm_.mov_rdx_imm64(0xFFFFFFFF);  // INFINITE
+    
+    if (!stackAllocated_) asm_.sub_rsp_imm32(0x28);
+    asm_.call_mem_rip(pe_.getImportRVA("WaitForSingleObject"));
+    if (!stackAllocated_) asm_.add_rsp_imm32(0x28);
+    
+    // Get the thread's exit code (return value)
+    // GetExitCodeThread(handle, &exitCode)
+    allocLocal("$await_result");
+    asm_.mov_rcx_mem_rbp(locals["$await_handle"]);  // handle
+    asm_.lea_rdx_rbp_offset(locals["$await_result"]);
+    
+    if (!stackAllocated_) asm_.sub_rsp_imm32(0x28);
+    asm_.call_mem_rip(pe_.getImportRVA("GetExitCodeThread"));
+    if (!stackAllocated_) asm_.add_rsp_imm32(0x28);
+    
+    // Close the thread handle
+    asm_.mov_rcx_mem_rbp(locals["$await_handle"]);
+    if (!stackAllocated_) asm_.sub_rsp_imm32(0x28);
+    asm_.call_mem_rip(pe_.getImportRVA("CloseHandle"));
+    if (!stackAllocated_) asm_.add_rsp_imm32(0x28);
+    
+    // Return the exit code
+    asm_.mov_rax_mem_rbp(locals["$await_result"]);
+    asm_.jmp_rel32(done);
+    
+    asm_.label(notHandle);
+    // Not a handle - just return the value as-is (already in rax)
+    
+    asm_.label(done);
 }
 
 void NativeCodeGen::visit(SpawnExpr& node) {
+    // Spawn: create a new thread to execute the expression
+    // For function calls, we create a thread that runs the function
+    // Returns a thread handle that can be awaited
+    
+    if (auto* call = dynamic_cast<CallExpr*>(node.operand.get())) {
+        if (auto* ident = dynamic_cast<Identifier*>(call->callee.get())) {
+            // Check if this is a known function
+            if (asm_.labels.count(ident->name)) {
+                // For functions with no arguments, we can spawn directly
+                // CreateThread(NULL, 0, lpStartAddress, lpParameter, 0, NULL)
+                
+                if (call->args.empty()) {
+                    // Get function address into r8 directly
+                    // lea r8, [rip + function_label]
+                    asm_.code.push_back(0x4C); asm_.code.push_back(0x8D); asm_.code.push_back(0x05);
+                    asm_.fixupLabel(ident->name);
+                    
+                    // CreateThread params:
+                    // rcx = lpThreadAttributes (NULL)
+                    // rdx = dwStackSize (0 = default)
+                    // r8 = lpStartAddress (function pointer) - already set
+                    // r9 = lpParameter (NULL for no-arg functions)
+                    // [rsp+0x20] = dwCreationFlags (0)
+                    // [rsp+0x28] = lpThreadId (NULL)
+                    
+                    asm_.xor_rax_rax();
+                    asm_.mov_rcx_rax();  // lpThreadAttributes = NULL
+                    asm_.mov_rdx_rax();  // dwStackSize = 0
+                    // r8 already has function address
+                    // mov r9, 0 (lpParameter = NULL)
+                    asm_.code.push_back(0x4D); asm_.code.push_back(0x31); asm_.code.push_back(0xC9);
+                    
+                    // [rsp+0x20] = 0 (dwCreationFlags)
+                    // mov [rsp+0x20], rax
+                    asm_.code.push_back(0x48); asm_.code.push_back(0x89);
+                    asm_.code.push_back(0x44); asm_.code.push_back(0x24); asm_.code.push_back(0x20);
+                    
+                    // [rsp+0x28] = NULL (lpThreadId)
+                    // mov [rsp+0x28], rax
+                    asm_.code.push_back(0x48); asm_.code.push_back(0x89);
+                    asm_.code.push_back(0x44); asm_.code.push_back(0x24); asm_.code.push_back(0x28);
+                    
+                    if (!stackAllocated_) asm_.sub_rsp_imm32(0x30);
+                    asm_.call_mem_rip(pe_.getImportRVA("CreateThread"));
+                    if (!stackAllocated_) asm_.add_rsp_imm32(0x30);
+                    
+                    // rax now contains the thread handle
+                    return;
+                }
+                
+                // For functions with arguments, we need to package them
+                // For now, fall back to synchronous execution for functions with args
+                // A full implementation would allocate a struct with function ptr + args
+            }
+        }
+    }
+    
+    // Default: just evaluate the expression synchronously
     node.operand->accept(*this);
 }
 

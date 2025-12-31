@@ -447,11 +447,63 @@ void NativeCodeGen::visit(ModuleDecl& node) {
 
 void NativeCodeGen::visit(EnumDecl& node) { (void)node; }
 void NativeCodeGen::visit(TypeAlias& node) { (void)node; }
-void NativeCodeGen::visit(TraitDecl& node) { (void)node; }
+
+void NativeCodeGen::visit(TraitDecl& node) {
+    // Register the trait and its methods
+    TraitInfo info;
+    info.name = node.name;
+    for (auto& method : node.methods) {
+        info.methodNames.push_back(method->name);
+    }
+    traits_[node.name] = info;
+}
 
 void NativeCodeGen::visit(ImplBlock& node) {
+    // Generate method implementations with mangled names
+    std::string implKey = node.traitName + ":" + node.typeName;
+    ImplInfo info;
+    info.traitName = node.traitName;
+    info.typeName = node.typeName;
+    
     for (auto& method : node.methods) {
+        // Mangle method name: Type_Trait_method or Type_method
+        std::string mangledName;
+        if (!node.traitName.empty()) {
+            mangledName = node.typeName + "_" + node.traitName + "_" + method->name;
+        } else {
+            mangledName = node.typeName + "_" + method->name;
+        }
+        
+        // Store original name, generate with mangled name
+        std::string originalName = method->name;
+        method->name = mangledName;
         method->accept(*this);
+        method->name = originalName;  // Restore
+        
+        info.methodLabels[originalName] = mangledName;
+    }
+    
+    impls_[implKey] = info;
+    
+    // If this is a trait impl, generate vtable
+    if (!node.traitName.empty() && traits_.count(node.traitName)) {
+        auto& trait = traits_[node.traitName];
+        
+        // Build vtable: array of function pointers
+        std::vector<uint8_t> vtableData;
+        for (auto& methodName : trait.methodNames) {
+            // We'll need to patch these addresses later
+            // For now, store placeholder (will be resolved by linker)
+            for (int i = 0; i < 8; i++) {
+                vtableData.push_back(0);
+            }
+        }
+        
+        // Add vtable to data section
+        if (!vtableData.empty()) {
+            uint32_t vtableRVA = pe_.addData(vtableData.data(), vtableData.size());
+            vtables_[implKey] = vtableRVA;
+        }
     }
 }
 

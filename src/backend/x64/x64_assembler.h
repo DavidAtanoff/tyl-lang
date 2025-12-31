@@ -46,12 +46,15 @@ public:
     void mov_mem_rbp_rdx(int32_t offset);
     void mov_rax_mem_rax();
     void mov_mem_rcx_rax();
+    void mov_mem_rax_rcx();
+    void mov_rcx_mem_rax();
     
     // LEA
     void lea_rcx_rip_fixup(uint32_t targetRVA);
     void lea_rax_rip_fixup(uint32_t targetRVA);
     void lea_rax_rbp(int32_t offset);
     void lea_rcx_rbp(int32_t offset);
+    void lea_rdx_rbp_offset(int32_t offset);
     
     // Stack
     void push_rbp();
@@ -79,10 +82,12 @@ public:
     void idiv_rcx();
     void neg_rax();
     void inc_rax();
+    void inc_rcx();
     void dec_rax();
     
     // Comparison
     void cmp_rax_rcx();
+    void cmp_rax_imm32(int32_t val);
     void cmp_rax_mem_rbp(int32_t offset);
     void test_rax_rax();
     void sete_al();
