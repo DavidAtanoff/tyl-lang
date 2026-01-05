@@ -1,0 +1,12 @@
+// Simple join test
+
+fn main -> int:
+    print("Testing join...\n")
+    let words = ["a", "b"]
+    print("List created\n")
+    let result = join(words, "-")
+    print("Join done\n")
+    print("Result: ")
+    print(result)
+    print("\n")
+    return 0

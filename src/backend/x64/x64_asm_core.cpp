@@ -1,9 +1,9 @@
-// Flex Compiler - x86-64 Assembler Core Instructions
+// Tyl Compiler - x86-64 Assembler Core Instructions
 // Handles: basic mov, push, pop, arithmetic, comparison
 
 #include "x64_assembler.h"
 
-namespace flex {
+namespace tyl {
 
 void X64Assembler::emit8(uint8_t b) { code.push_back(b); }
 
@@ -154,4 +154,4 @@ void X64Assembler::ret() { emit8(0xC3); }
 void X64Assembler::nop() { emit8(0x90); }
 void X64Assembler::int3() { emit8(0xCC); }
 
-} // namespace flex
+} // namespace tyl

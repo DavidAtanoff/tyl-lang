@@ -1,4 +1,4 @@
-// Flex Compiler - Parser Core Implementation
+// Tyl Compiler - Parser Core Implementation
 // Token navigation, error recovery, and main parse entry point
 
 #include "parser_base.h"
@@ -6,7 +6,7 @@
 #include "common/errors.h"
 #include <unordered_set>
 
-namespace flex {
+namespace tyl {
 
 Parser::Parser(std::vector<Token> toks) : tokens(std::move(toks)) {}
 
@@ -45,7 +45,7 @@ bool Parser::match(std::initializer_list<TokenType> types) {
 Token& Parser::consume(TokenType type, const std::string& message) {
     if (check(type)) return advance();
     auto diag = errors::expectedToken(message, tokenTypeToString(peek().type), peek().location);
-    throw FlexDiagnosticError(diag);
+    throw TylDiagnosticError(diag);
 }
 
 void Parser::skipNewlines() {
@@ -123,10 +123,10 @@ std::unique_ptr<Program> Parser::parse() {
             if (stmt) {
                 program->statements.push_back(std::move(stmt));
             }
-        } catch (const FlexDiagnosticError& e) {
+        } catch (const TylDiagnosticError& e) {
             e.render();
             synchronize();
-        } catch (const FlexError& e) {
+        } catch (const TylError& e) {
             std::cerr << "Parse error: " << e.what() << "\n";
             synchronize();
         }
@@ -136,4 +136,4 @@ std::unique_ptr<Program> Parser::parse() {
     return program;
 }
 
-} // namespace flex
+} // namespace tyl

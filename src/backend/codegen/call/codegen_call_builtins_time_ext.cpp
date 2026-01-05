@@ -1,9 +1,9 @@
-// Flex Compiler - Extended Time Builtins for Native Code Generation
+// Tyl Compiler - Extended Time Builtins for Native Code Generation
 // Additional time functions ported from stdlib/time/time.cpp
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // now_us() -> int - Current Unix timestamp in microseconds
 void NativeCodeGen::emitTimeNowUs(CallExpr& node) {
@@ -153,4 +153,4 @@ void NativeCodeGen::emitTimeIsLeapYear(CallExpr& node) {
     asm_.label(doneLabel);
 }
 
-} // namespace flex
+} // namespace tyl

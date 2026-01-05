@@ -1,0 +1,7 @@
+// Minimal split test
+
+fn main -> int:
+    let x = split("a,b", ",")
+    print(len(x))
+    print("\n")
+    return 0

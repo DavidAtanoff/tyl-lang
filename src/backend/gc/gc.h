@@ -1,14 +1,14 @@
-// Flex Compiler - Garbage Collector
+// Tyl Compiler - Garbage Collector
 // Mark-and-sweep garbage collector for automatic memory management
-#ifndef FLEX_GC_H
-#define FLEX_GC_H
+#ifndef TYL_GC_H
+#define TYL_GC_H
 
 #include <cstdint>
 #include <cstddef>
 #include <vector>
 #include <unordered_set>
 
-namespace flex {
+namespace tyl {
 
 // Object header for GC-managed allocations
 // Placed immediately before the user data
@@ -136,50 +136,50 @@ extern GarbageCollector* g_gc;
 // Runtime GC functions (called from generated code)
 extern "C" {
     // Allocate GC-managed memory
-    void* flex_gc_alloc(size_t size, uint16_t type);
+    void* TYL_gc_alloc(size_t size, uint16_t type);
     
     // Allocate a string
-    void* flex_gc_alloc_string(size_t len);
+    void* TYL_gc_alloc_string(size_t len);
     
     // Allocate a list with initial capacity
-    void* flex_gc_alloc_list(size_t capacity);
+    void* TYL_gc_alloc_list(size_t capacity);
     
     // Allocate a record with field count
-    void* flex_gc_alloc_record(size_t fieldCount);
+    void* TYL_gc_alloc_record(size_t fieldCount);
     
     // Allocate a closure with capture count
-    void* flex_gc_alloc_closure(size_t captureCount);
+    void* TYL_gc_alloc_closure(size_t captureCount);
     
     // Push a stack frame (for conservative stack scanning)
-    void flex_gc_push_frame(void** frameBase);
-    void flex_gc_pop_frame();
+    void TYL_gc_push_frame(void** frameBase);
+    void TYL_gc_pop_frame();
     
     // Trigger collection
-    void flex_gc_collect();
+    void TYL_gc_collect();
     
     // Initialize GC (called at program start)
-    void flex_gc_init();
+    void TYL_gc_init();
     
     // Shutdown GC (called at program end)
-    void flex_gc_shutdown();
+    void TYL_gc_shutdown();
     
     // Write barrier (for generational GC - future)
-    void flex_gc_write_barrier(void* obj, void* field, void* newValue);
+    void TYL_gc_write_barrier(void* obj, void* field, void* newValue);
     
     // Custom allocator support
     // Set custom allocator functions for GC to use
     // alloc: function to allocate memory (size, alignment) -> ptr
     // free: function to free memory (ptr, size)
     // userData: optional user data passed to allocator
-    void flex_gc_set_allocator(void* (*alloc)(size_t, size_t), void (*free)(void*, size_t), void* userData);
+    void TYL_gc_set_allocator(void* (*alloc)(size_t, size_t), void (*free)(void*, size_t), void* userData);
     
     // Reset to default system allocator
-    void flex_gc_reset_allocator();
+    void TYL_gc_reset_allocator();
     
     // Get the user data passed to set_allocator
-    void* flex_gc_get_allocator_userdata();
+    void* TYL_gc_get_allocator_userdata();
 }
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_GC_H
+#endif // TYL_GC_H

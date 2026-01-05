@@ -1,7 +1,7 @@
-// Flex Compiler - SSA (Static Single Assignment) Form
+// Tyl Compiler - SSA (Static Single Assignment) Form
 // Converts AST to SSA form for advanced optimizations
-#ifndef FLEX_SSA_H
-#define FLEX_SSA_H
+#ifndef TYL_SSA_H
+#define TYL_SSA_H
 
 #include "frontend/ast/ast.h"
 #include <map>
@@ -11,7 +11,7 @@
 #include <memory>
 #include <optional>
 
-namespace flex {
+namespace tyl {
 
 // Forward declarations
 struct SSAValue;
@@ -270,6 +270,6 @@ private:
     ExprPtr convertValue(SSAValuePtr value);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_SSA_H
+#endif // TYL_SSA_H

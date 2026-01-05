@@ -1,0 +1,19 @@
+// Channel timeout only test
+
+fn test_channel_timeout:
+    print("--- Test Channel Timeout ---\n")
+    
+    let ch = chan[int, 1]
+    print("Buffered channel created\n")
+    
+    ch <- 100
+    print("Sent value 100 to channel\n")
+    
+    let value = chan_recv_timeout(ch, 1000)
+    print("Received value: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel_timeout()
+    return 0

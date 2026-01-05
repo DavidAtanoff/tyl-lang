@@ -1,9 +1,9 @@
-// Flex Compiler - Constant Propagation Implementation
+// Tyl Compiler - Constant Propagation Implementation
 // Tracks variable values and eliminates redundant comparisons
 #include "constant_propagation.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 void ConstantPropagationPass::run(Program& ast) {
     transformations_ = 0;
@@ -784,4 +784,4 @@ void ConstantPropagationPass::invalidateModifiedVars(Statement* stmt) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

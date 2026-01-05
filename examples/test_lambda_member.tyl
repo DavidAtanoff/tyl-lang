@@ -1,0 +1,16 @@
+// Test lambda with member access
+
+record Point:
+    x: int
+    y: int
+
+fn main():
+    let p = Point(x: 42, y: 10)
+    print("p.x = " + str(p.x))
+    
+    // Test explicit lambda with member access
+    let getX = |pt| pt.x
+    let val = getX(p)
+    print("getX(p) = " + str(val))
+    
+    print("Done!")

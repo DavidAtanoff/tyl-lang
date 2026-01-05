@@ -1,11 +1,11 @@
-// Flex Compiler - Error Codes and Common Diagnostics
-#ifndef FLEX_ERRORS_H
-#define FLEX_ERRORS_H
+// Tyl Compiler - Error Codes and Common Diagnostics
+#ifndef TYL_ERRORS_H
+#define TYL_ERRORS_H
 
 #include "diagnostics.h"
 #include "common/common.h"
 
-namespace flex {
+namespace tyl {
 
 // Error code prefixes:
 // E0xxx - Lexer errors
@@ -336,12 +336,12 @@ inline Diagnostic cannotWriteFile(const std::string& path) {
 
 } // namespace errors
 
-// Enhanced FlexError that can carry a Diagnostic
-class FlexDiagnosticError : public std::runtime_error {
+// Enhanced TylError that can carry a Diagnostic
+class TylDiagnosticError : public std::runtime_error {
 public:
     Diagnostic diagnostic;
     
-    FlexDiagnosticError(Diagnostic d)
+    TylDiagnosticError(Diagnostic d)
         : std::runtime_error(d.message), diagnostic(std::move(d)) {}
     
     void render(std::ostream& out = std::cerr) const {
@@ -350,6 +350,6 @@ public:
     }
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_ERRORS_H
+#endif // TYL_ERRORS_H

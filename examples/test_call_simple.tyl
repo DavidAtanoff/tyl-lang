@@ -1,0 +1,11 @@
+// Test simple function call
+
+fn get_value -> int:
+    return 42
+
+fn main -> int:
+    print("Before call")
+    let x = get_value()
+    print("After call, x =")
+    print(x)
+    return 0

@@ -1,10 +1,10 @@
-// Flex Compiler - Monomorphization Implementation
+// Tyl Compiler - Monomorphization Implementation
 #include "monomorphizer.h"
 #include "ast_cloner.h"
 #include <sstream>
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 bool GenericInstantiation::operator==(const GenericInstantiation& other) const {
     if (baseName != other.baseName) return false;
@@ -412,6 +412,10 @@ void GenericCollector::visit(AddressOfExpr& node) {
     node.operand->accept(*this);
 }
 
+void GenericCollector::visit(BorrowExpr& node) {
+    node.operand->accept(*this);
+}
+
 void GenericCollector::visit(DerefExpr& node) {
     node.operand->accept(*this);
 }
@@ -590,4 +594,76 @@ void GenericCollector::visit(DeleteStmt& node) {
     node.expr->accept(*this);
 }
 
-} // namespace flex
+// Syntax Redesign - New Expression Visitors
+void GenericCollector::visit(InclusiveRangeExpr& node) {
+    node.start->accept(*this);
+    node.end->accept(*this);
+    if (node.step) node.step->accept(*this);
+}
+
+void GenericCollector::visit(SafeNavExpr& node) {
+    node.object->accept(*this);
+}
+
+void GenericCollector::visit(TypeCheckExpr& node) {
+    node.value->accept(*this);
+}
+
+// Syntax Redesign - New Statement Visitors
+void GenericCollector::visit(LoopStmt& node) {
+    if (node.body) node.body->accept(*this);
+}
+
+void GenericCollector::visit(WithStmt& node) {
+    node.resource->accept(*this);
+    if (node.body) node.body->accept(*this);
+}
+
+void GenericCollector::visit(ScopeStmt& node) {
+    if (node.timeout) node.timeout->accept(*this);
+    if (node.body) node.body->accept(*this);
+}
+
+void GenericCollector::visit(RequireStmt& node) {
+    node.condition->accept(*this);
+}
+
+void GenericCollector::visit(EnsureStmt& node) {
+    node.condition->accept(*this);
+}
+
+void GenericCollector::visit(InvariantStmt& node) {
+    node.condition->accept(*this);
+}
+
+void GenericCollector::visit(ComptimeBlock& node) {
+    if (node.body) node.body->accept(*this);
+}
+
+void GenericCollector::visit(EffectDecl& node) {
+    // Effect declarations don't contain generic expressions to collect
+    (void)node;
+}
+
+void GenericCollector::visit(PerformEffectExpr& node) {
+    for (auto& arg : node.args) {
+        arg->accept(*this);
+    }
+}
+
+void GenericCollector::visit(HandleExpr& node) {
+    node.expr->accept(*this);
+    for (auto& handler : node.handlers) {
+        if (handler.body) {
+            handler.body->accept(*this);
+        }
+    }
+}
+
+void GenericCollector::visit(ResumeExpr& node) {
+    if (node.value) {
+        node.value->accept(*this);
+    }
+}
+
+} // namespace tyl

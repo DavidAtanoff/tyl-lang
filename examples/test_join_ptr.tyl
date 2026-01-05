@@ -1,0 +1,20 @@
+// Test to see what's in the list
+
+fn main -> int:
+    let words = ["test"]
+    print("len = ")
+    print(len(words))
+    print("\n")
+    
+    // Print element directly (should work)
+    print("Direct: ")
+    print(words[1])
+    print("\n")
+    
+    // Now try join
+    print("Join result: '")
+    print(join(words, ","))
+    print("'\n")
+    
+    print("Done\n")
+    return 0

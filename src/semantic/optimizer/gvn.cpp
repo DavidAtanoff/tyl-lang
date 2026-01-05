@@ -1,8 +1,8 @@
-// Flex Compiler - Global Value Numbering Implementation
+// Tyl Compiler - Global Value Numbering Implementation
 #include "gvn.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // Global Value Numbering Pass
@@ -578,4 +578,4 @@ ExprPtr CopyPropagationPass::processExpression(ExprPtr& expr) {
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,7 +1,7 @@
-// Flex Compiler - Global Value Numbering (GVN)
+// Tyl Compiler - Global Value Numbering (GVN)
 // Assigns unique numbers to values and eliminates redundant computations
-#ifndef FLEX_GVN_H
-#define FLEX_GVN_H
+#ifndef TYL_GVN_H
+#define TYL_GVN_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Value number representation
 using ValueNumber = uint32_t;
@@ -103,6 +103,6 @@ private:
     void invalidateCopies(const std::string& var);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_GVN_H
+#endif // TYL_GVN_H

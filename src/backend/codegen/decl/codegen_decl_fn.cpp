@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Function Declarations
+// Tyl Compiler - Native Code Generator Function Declarations
 // Handles: FnDecl, register allocation helpers
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Check if an expression contains any function calls
 bool NativeCodeGen::expressionHasCall(Expression* expr) {
@@ -163,7 +163,7 @@ void NativeCodeGen::emitMoveParamToVar(int paramIndex, const std::string& name, 
     auto it = varRegisters_.find(name);
     VarRegister targetReg = (it != varRegisters_.end()) ? it->second : VarRegister::NONE;
     
-    bool isFloat = (type == "float");
+    bool isFloat = isFloatTypeName(type);
     
     if (targetReg != VarRegister::NONE) {
         if (isFloat) {
@@ -337,6 +337,8 @@ void NativeCodeGen::visit(FnDecl& node) {
     std::map<std::string, VarRegister> savedVarRegisters = varRegisters_;
     bool savedIsLeaf = isLeafFunction_;
     bool savedStdoutCached = stdoutHandleCached_;
+    std::map<std::string, std::string> savedBorrowParams = borrowParams_;
+    std::string savedReturnType = currentFnReturnType_;
     
     std::vector<FnDecl*> nestedFunctions;
     if (auto* block = dynamic_cast<Block*>(node.body.get())) {
@@ -352,6 +354,8 @@ void NativeCodeGen::visit(FnDecl& node) {
     inFunction = true;
     locals.clear();
     varRecordTypes_.clear();
+    borrowParams_.clear();
+    currentFnReturnType_ = node.returnType;
     stackOffset = 0;
     stackAllocated_ = false;
     varRegisters_.clear();
@@ -360,6 +364,13 @@ void NativeCodeGen::visit(FnDecl& node) {
     
     // Track calling convention for this function
     fnCallingConvs_[node.name] = node.callingConv;
+    
+    // Track export/visibility attributes
+    FnAttributes attrs;
+    attrs.isExport = node.isExport;
+    attrs.isHidden = node.isHidden;
+    attrs.isWeak = node.isWeak;
+    fnAttributes_[node.name] = attrs;
     
     if (useRegisterAllocation_) {
         regAlloc_.analyze(node);
@@ -371,7 +382,8 @@ void NativeCodeGen::visit(FnDecl& node) {
         }
     }
     
-    int32_t baseStack = 0x80;
+    // Increased base stack for builtin internal locals
+    int32_t baseStack = 0x200;
     int32_t callStack = calculateFunctionStackSize(node.body.get());
     
     if (isLeafFunction_) {
@@ -420,12 +432,26 @@ void NativeCodeGen::visit(FnDecl& node) {
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
             constStrVars[node.params[i].first] = "";
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
-            if (node.params[i].second == "float") {
+            if (isFloatTypeName(node.params[i].second)) {
                 floatVars.insert(node.params[i].first);
             }
             // Track record type for parameters
             if (recordTypes_.find(node.params[i].second) != recordTypes_.end()) {
                 varRecordTypes_[node.params[i].first] = node.params[i].second;
+            }
+            // Track borrow parameters for auto-dereference on return
+            const std::string& paramType = node.params[i].second;
+            if (!paramType.empty() && paramType[0] == '&') {
+                // Extract base type: "&int" -> "int", "&mut int" -> "int"
+                std::string baseType = paramType.substr(1);
+                if (baseType.substr(0, 4) == "mut ") {
+                    baseType = baseType.substr(4);
+                }
+                // Trim leading whitespace
+                while (!baseType.empty() && (baseType[0] == ' ' || baseType[0] == '\t')) {
+                    baseType = baseType.substr(1);
+                }
+                borrowParams_[node.params[i].first] = baseType;
             }
         }
         
@@ -442,12 +468,26 @@ void NativeCodeGen::visit(FnDecl& node) {
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
             constStrVars[node.params[i].first] = "";
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
-            if (node.params[i].second == "float") {
+            if (isFloatTypeName(node.params[i].second)) {
                 floatVars.insert(node.params[i].first);
             }
             // Track record type for parameters
             if (recordTypes_.find(node.params[i].second) != recordTypes_.end()) {
                 varRecordTypes_[node.params[i].first] = node.params[i].second;
+            }
+            // Track borrow parameters for auto-dereference on return
+            const std::string& paramType = node.params[i].second;
+            if (!paramType.empty() && paramType[0] == '&') {
+                // Extract base type: "&int" -> "int", "&mut int" -> "int"
+                std::string baseType = paramType.substr(1);
+                if (baseType.substr(0, 4) == "mut ") {
+                    baseType = baseType.substr(4);
+                }
+                // Trim leading whitespace
+                while (!baseType.empty() && (baseType[0] == ' ' || baseType[0] == '\t')) {
+                    baseType = baseType.substr(1);
+                }
+                borrowParams_[node.params[i].first] = baseType;
             }
         }
     }
@@ -478,10 +518,12 @@ void NativeCodeGen::visit(FnDecl& node) {
     varRegisters_ = savedVarRegisters;
     isLeafFunction_ = savedIsLeaf;
     stdoutHandleCached_ = savedStdoutCached;
+    borrowParams_ = savedBorrowParams;
+    currentFnReturnType_ = savedReturnType;
     
     for (auto* nested : nestedFunctions) {
         nested->accept(*this);
     }
 }
 
-} // namespace flex
+} // namespace tyl

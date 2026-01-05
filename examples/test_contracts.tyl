@@ -1,0 +1,14 @@
+// Test contracts (require/ensure)
+fn divide(a: int, b: int) -> int:
+    require b != 0  // Precondition
+    return a / b
+
+fn main:
+    // Test require passes
+    result = divide(10, 2)
+    println(result)  // Expected: 5
+    
+    result = divide(20, 4)
+    println(result)  // Expected: 5
+    
+    println("contracts work")

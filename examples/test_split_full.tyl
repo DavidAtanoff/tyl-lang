@@ -1,0 +1,44 @@
+// Full test for split and join
+
+fn main -> int:
+    print("=== Split Test ===\n")
+    
+    // Test split
+    let parts = split("hello,world,foo", ",")
+    print("Split 'hello,world,foo' by ',':\n")
+    print("  Length: ")
+    print(len(parts))
+    print("\n")
+    print("  parts[1]: ")
+    print(parts[1])
+    print("\n")
+    print("  parts[2]: ")
+    print(parts[2])
+    print("\n")
+    print("  parts[3]: ")
+    print(parts[3])
+    print("\n")
+    
+    // Test join
+    print("\n=== Join Test ===\n")
+    let words = ["one", "two", "three"]
+    let joined = join(words, "-")
+    print("Join ['one','two','three'] with '-':\n")
+    print("  Result: ")
+    print(joined)
+    print("\n")
+    
+    // Test round-trip
+    print("\n=== Round-trip Test ===\n")
+    let original = "a:b:c"
+    print("Original: ")
+    print(original)
+    print("\n")
+    let split_parts = split(original, ":")
+    let rejoined = join(split_parts, ":")
+    print("After split and join: ")
+    print(rejoined)
+    print("\n")
+    
+    print("\n=== All Tests Complete ===\n")
+    return 0

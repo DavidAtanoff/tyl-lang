@@ -1,0 +1,20 @@
+// Simple test for split function
+
+fn main -> int:
+    print("Testing split...\n")
+    
+    // Test with constant strings (compile-time)
+    let parts = split("a,b,c", ",")
+    
+    print("Split result:\n")
+    print("Length: ")
+    print(len(parts))
+    print("\n")
+    
+    if len(parts) > 0:
+        print("First: ")
+        print(parts[1])
+        print("\n")
+    
+    print("Done\n")
+    return 0

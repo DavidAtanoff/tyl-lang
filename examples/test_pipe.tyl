@@ -1,0 +1,21 @@
+// Test pipe operator
+fn double(x: int) -> int:
+    return x * 2
+
+fn add_ten(x: int) -> int:
+    return x + 10
+
+fn main:
+    // Test basic pipe
+    result = 5 |> double
+    println(result)  // Expected: 10
+    
+    // Test chained pipes
+    result2 = 5 |> double |> add_ten
+    println(result2)  // Expected: 20
+    
+    // Test pipe with expression
+    result3 = 3 |> double |> double
+    println(result3)  // Expected: 12
+    
+    println("done")

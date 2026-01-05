@@ -1,0 +1,20 @@
+// Channel timeout test in function
+
+fn test_timeout:
+    print("Creating channel...\n")
+    let ch = chan[int, 1]
+    print("Channel created\n")
+    
+    print("Sending 42...\n")
+    ch <- 42
+    print("Sent\n")
+    
+    print("Receiving with timeout...\n")
+    let v = chan_recv_timeout(ch, 1000)
+    print("Received: ")
+    print(v)
+    print("\n")
+
+fn main -> int:
+    test_timeout()
+    return 0

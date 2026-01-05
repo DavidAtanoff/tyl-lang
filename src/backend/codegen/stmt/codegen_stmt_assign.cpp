@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Assignment Statements
+// Tyl Compiler - Native Code Generator Assignment Statements
 // Handles: AssignStmt, DestructuringDecl, ExprStmt
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(ExprStmt& node) {
     node.expr->accept(*this);
@@ -476,4 +476,4 @@ void NativeCodeGen::emitMemberAssign(MemberExpr* member, AssignStmt& node) {
     asm_.mov_mem_rcx_rax();
 }
 
-} // namespace flex
+} // namespace tyl

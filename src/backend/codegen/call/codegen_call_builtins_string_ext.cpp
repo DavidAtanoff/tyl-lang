@@ -1,9 +1,9 @@
-// Flex Compiler - Extended String Builtins for Native Code Generation
+// Tyl Compiler - Extended String Builtins for Native Code Generation
 // Additional string functions ported from stdlib/string/string.cpp
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // ltrim(str) -> str - Remove leading whitespace
 void NativeCodeGen::emitStringLtrim(CallExpr& node) {
@@ -403,4 +403,4 @@ void NativeCodeGen::emitStringLastIndexOf(CallExpr& node) {
     asm_.mov_rax_imm64(-1);
 }
 
-} // namespace flex
+} // namespace tyl

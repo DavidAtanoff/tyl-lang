@@ -1,9 +1,9 @@
-// Flex Compiler - x86-64 Assembler Callee-Saved Register Operations
+// Tyl Compiler - x86-64 Assembler Callee-Saved Register Operations
 // Handles: RBX, R12, R13, R14, R15 operations
 
 #include "x64_assembler.h"
 
-namespace flex {
+namespace tyl {
 
 // RBX operations
 void X64Assembler::push_rbx() { emit8(0x53); }
@@ -73,4 +73,4 @@ void X64Assembler::mov_rcx_r13() { emit8(0x4C); emit8(0x89); emit8(0xE9); }
 void X64Assembler::mov_rcx_r14() { emit8(0x4C); emit8(0x89); emit8(0xF1); }
 void X64Assembler::mov_rcx_r15() { emit8(0x4C); emit8(0x89); emit8(0xF9); }
 
-} // namespace flex
+} // namespace tyl

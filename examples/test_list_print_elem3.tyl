@@ -1,0 +1,7 @@
+// Test list element printing with 1-based indexing
+
+fn main -> int:
+    let a = ["hello", "world"]
+    print(a[1])
+    print("\n")
+    return 0

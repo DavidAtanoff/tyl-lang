@@ -1,0 +1,10 @@
+// Channel test in main only
+
+fn main -> int:
+    let ch = chan[int, 1]
+    ch <- 100
+    let v = <- ch
+    print("Value: ")
+    print(v)
+    print("\n")
+    return 0

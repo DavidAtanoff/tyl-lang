@@ -1,10 +1,10 @@
-// Flex Compiler - Native Code Generator GC Support
+// Tyl Compiler - Native Code Generator GC Support
 // Full mark-and-sweep garbage collection with automatic collection by default
 // Manual control available via gc_disable(), gc_enable(), gc_collect()
 
 #include "codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // GC Data Section Layout (offsets from gcDataRVA_):
 // Offset 0:   gc_alloc_head (8 bytes)     - Head of allocation linked list
@@ -432,10 +432,11 @@ void NativeCodeGen::emitGCAllocList(size_t capacity) {
 
 // Emit record allocation via GC
 // fieldCount: number of fields
+// typeId: unique type identifier for RTTI (0 = anonymous/unknown)
 // Result: pointer to record data in RAX
-// Record layout: [fieldCount:8][fields:fieldCount*8]
-void NativeCodeGen::emitGCAllocRecord(size_t fieldCount) {
-    size_t size = 8 + fieldCount * 8;
+// Record layout: [fieldCount:8][typeId:8][fields:fieldCount*8]
+void NativeCodeGen::emitGCAllocRecord(size_t fieldCount, uint64_t typeId) {
+    size_t size = 16 + fieldCount * 8;  // fieldCount + typeId + fields
     emitGCAlloc(size, GCObjectType::RECORD);
     
     asm_.push_rax();
@@ -448,6 +449,13 @@ void NativeCodeGen::emitGCAllocRecord(size_t fieldCount) {
     asm_.code.push_back((fieldCount >> 8) & 0xFF);
     asm_.code.push_back((fieldCount >> 16) & 0xFF);
     asm_.code.push_back((fieldCount >> 24) & 0xFF);
+    
+    // [rax+8] = typeId
+    asm_.mov_rcx_imm64(static_cast<int64_t>(typeId));
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x89);
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x08);  // mov [rax+8], rcx
     
     asm_.pop_rax();
 }
@@ -533,4 +541,228 @@ void NativeCodeGen::emitGCPopFrame() {
     // No-op for conservative scanning
 }
 
-} // namespace flex
+// ============================================================================
+// Ownership System - Clone Helpers
+// ============================================================================
+
+// Deep copy a list
+// Input: RAX = source list pointer
+// Output: RAX = new list pointer (deep copy)
+// List layout: [count:8][capacity:8][elements:capacity*8]
+void NativeCodeGen::emitListClone() {
+    // Save source pointer
+    allocLocal("$clone_src");
+    asm_.mov_mem_rbp_rax(locals["$clone_src"]);
+    
+    // Get count from source: [rax+0]
+    asm_.mov_rcx_mem_rax();  // rcx = count
+    allocLocal("$clone_count");
+    asm_.mov_rax_rcx();
+    asm_.mov_mem_rbp_rax(locals["$clone_count"]);
+    
+    // Get capacity from source: [src+8]
+    asm_.mov_rax_mem_rbp(locals["$clone_src"]);
+    asm_.add_rax_imm32(8);
+    asm_.mov_rax_mem_rax();  // rax = capacity
+    allocLocal("$clone_cap");
+    asm_.mov_mem_rbp_rax(locals["$clone_cap"]);
+    
+    // Calculate allocation size: 16 + 16 + capacity * 8 (GC header + list header + elements)
+    // GC header is 16 bytes, list header is 16 bytes (count + capacity)
+    asm_.code.push_back(0x48); asm_.code.push_back(0xC1);
+    asm_.code.push_back(0xE0); asm_.code.push_back(0x03);  // shl rax, 3 (multiply by 8)
+    asm_.add_rax_imm32(32);  // add GC header (16) + list header (16)
+    
+    // Align to 8 bytes
+    asm_.add_rax_imm32(7);
+    asm_.code.push_back(0x48); asm_.code.push_back(0x83);
+    asm_.code.push_back(0xE0); asm_.code.push_back(0xF8);  // and rax, -8
+    
+    // Save total size
+    allocLocal("$clone_size");
+    asm_.mov_mem_rbp_rax(locals["$clone_size"]);
+    
+    // Call HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size)
+    if (!stackAllocated_) asm_.sub_rsp_imm32(0x20);
+    asm_.call_mem_rip(pe_.getImportRVA("GetProcessHeap"));
+    if (!stackAllocated_) asm_.add_rsp_imm32(0x20);
+    
+    asm_.mov_rcx_rax();  // heap handle
+    asm_.mov_rdx_imm64(0x08);  // HEAP_ZERO_MEMORY
+    // Load size into r8: mov r8, [rbp + offset]
+    asm_.mov_rax_mem_rbp(locals["$clone_size"]);
+    asm_.mov_r8_rax();  // r8 = size
+    
+    if (!stackAllocated_) asm_.sub_rsp_imm32(0x20);
+    asm_.call_mem_rip(pe_.getImportRVA("HeapAlloc"));
+    if (!stackAllocated_) asm_.add_rsp_imm32(0x20);
+    
+    // RAX now has allocated memory pointer
+    // Skip GC header (16 bytes) to get user data pointer
+    asm_.add_rax_imm32(16);
+    
+    // Save new list pointer
+    allocLocal("$clone_dst");
+    asm_.mov_mem_rbp_rax(locals["$clone_dst"]);
+    
+    // Initialize new list header
+    // Set count: [dst+0] = count
+    asm_.mov_rcx_mem_rbp(locals["$clone_count"]);
+    asm_.mov_mem_rax_rcx();
+    
+    // Set capacity: [dst+8] = capacity
+    asm_.mov_rax_mem_rbp(locals["$clone_dst"]);
+    asm_.add_rax_imm32(8);
+    asm_.mov_rcx_mem_rbp(locals["$clone_cap"]);
+    asm_.mov_mem_rax_rcx();
+    
+    // Copy elements: loop from 0 to count-1
+    asm_.mov_rax_mem_rbp(locals["$clone_count"]);
+    asm_.test_rax_rax();
+    std::string endLabel = newLabel("clone_end");
+    asm_.jz_rel32(endLabel);  // Skip if count == 0
+    
+    // Initialize loop counter
+    allocLocal("$clone_i");
+    asm_.xor_rax_rax();
+    asm_.mov_mem_rbp_rax(locals["$clone_i"]);
+    
+    std::string loopLabel = newLabel("clone_loop");
+    asm_.label(loopLabel);
+    
+    // Load element from source: src[16 + i*8]
+    asm_.mov_rax_mem_rbp(locals["$clone_src"]);
+    asm_.mov_rcx_mem_rbp(locals["$clone_i"]);
+    asm_.code.push_back(0x48); asm_.code.push_back(0xC1);
+    asm_.code.push_back(0xE1); asm_.code.push_back(0x03);  // shl rcx, 3
+    asm_.add_rcx_imm32(16);  // offset = 16 + i*8
+    asm_.code.push_back(0x48); asm_.code.push_back(0x01); asm_.code.push_back(0xC8);  // add rax, rcx
+    asm_.mov_rax_mem_rax();  // rax = src[i]
+    asm_.push_rax();  // Save element value
+    
+    // Store element to dest: dst[16 + i*8]
+    asm_.mov_rax_mem_rbp(locals["$clone_dst"]);
+    asm_.mov_rcx_mem_rbp(locals["$clone_i"]);
+    asm_.code.push_back(0x48); asm_.code.push_back(0xC1);
+    asm_.code.push_back(0xE1); asm_.code.push_back(0x03);  // shl rcx, 3
+    asm_.add_rcx_imm32(16);
+    asm_.code.push_back(0x48); asm_.code.push_back(0x01); asm_.code.push_back(0xC8);  // add rax, rcx
+    asm_.pop_rcx();  // Restore element value
+    asm_.mov_mem_rax_rcx();  // dst[i] = element
+    
+    // Increment counter
+    asm_.mov_rax_mem_rbp(locals["$clone_i"]);
+    asm_.inc_rax();
+    asm_.mov_mem_rbp_rax(locals["$clone_i"]);
+    
+    // Check if done: i < count
+    asm_.mov_rcx_mem_rbp(locals["$clone_count"]);
+    asm_.cmp_rax_rcx();
+    asm_.jl_rel32(loopLabel);
+    
+    asm_.label(endLabel);
+    
+    // Return new list pointer
+    asm_.mov_rax_mem_rbp(locals["$clone_dst"]);
+}
+
+// Deep copy a constant list (stored as raw data without header)
+// Input: RAX = source data pointer (just elements, no count/capacity header)
+// Input: count = number of elements
+// Output: RAX = new GC-allocated list pointer (with proper header)
+void NativeCodeGen::emitConstListClone(size_t count) {
+    // Save source pointer
+    allocLocal("$cclone_src");
+    asm_.mov_mem_rbp_rax(locals["$cclone_src"]);
+    
+    // Allocate a proper GC list with header
+    size_t capacity = count < 4 ? 4 : count;
+    emitGCAllocList(capacity);
+    
+    // Save new list pointer
+    allocLocal("$cclone_dst");
+    asm_.mov_mem_rbp_rax(locals["$cclone_dst"]);
+    
+    // Set count: [dst+0] = count
+    asm_.mov_rcx_imm64(static_cast<int64_t>(count));
+    asm_.mov_mem_rax_rcx();
+    
+    // Copy elements from source (now has 16-byte header) to dest (also has 16-byte header)
+    for (size_t i = 0; i < count; i++) {
+        // Load element from source: src[16 + i*8] (skip header)
+        asm_.mov_rax_mem_rbp(locals["$cclone_src"]);
+        asm_.add_rax_imm32(16 + static_cast<int32_t>(i * 8));
+        asm_.mov_rax_mem_rax();  // rax = src[16 + i*8]
+        
+        // Store to dest: dst[16 + i*8]
+        asm_.mov_rcx_mem_rbp(locals["$cclone_dst"]);
+        asm_.add_rcx_imm32(16 + static_cast<int32_t>(i * 8));
+        asm_.mov_mem_rcx_rax();
+    }
+    
+    // Return new list pointer
+    asm_.mov_rax_mem_rbp(locals["$cclone_dst"]);
+}
+
+// Deep copy a record
+// Input: RAX = source record pointer
+// Output: RAX = new record pointer (deep copy)
+void NativeCodeGen::emitRecordClone(const std::string& typeName) {
+    auto typeIt = recordTypes_.find(typeName);
+    if (typeIt == recordTypes_.end()) {
+        // Unknown record type - just return the same pointer (shallow copy)
+        return;
+    }
+    
+    const RecordTypeInfo& typeInfo = typeIt->second;
+    size_t fieldCount = typeInfo.fieldNames.size();
+    
+    // Save source pointer
+    allocLocal("$rec_clone_src");
+    asm_.mov_mem_rbp_rax(locals["$rec_clone_src"]);
+    
+    // Allocate new record
+    size_t recordSize = 16 + fieldCount * 8;  // fieldCount + typeId + fields
+    emitGCAllocRaw(recordSize);
+    
+    // Save new record pointer
+    allocLocal("$rec_clone_dst");
+    asm_.mov_mem_rbp_rax(locals["$rec_clone_dst"]);
+    
+    // Copy header (fieldCount and typeId)
+    // Copy fieldCount: [dst+0] = [src+0]
+    asm_.mov_rcx_mem_rbp(locals["$rec_clone_src"]);
+    asm_.mov_rax_mem_rcx();  // rax = [rcx] = fieldCount
+    asm_.mov_rcx_rax();      // rcx = fieldCount
+    asm_.mov_rax_mem_rbp(locals["$rec_clone_dst"]);
+    asm_.mov_mem_rax_rcx();
+    
+    // Copy typeId: [dst+8] = [src+8]
+    asm_.mov_rax_mem_rbp(locals["$rec_clone_src"]);
+    asm_.add_rax_imm32(8);
+    asm_.mov_rax_mem_rax();  // rax = [src+8] = typeId
+    asm_.mov_rcx_rax();      // rcx = typeId
+    asm_.mov_rax_mem_rbp(locals["$rec_clone_dst"]);
+    asm_.add_rax_imm32(8);
+    asm_.mov_mem_rax_rcx();
+    
+    // Copy each field
+    for (size_t i = 0; i < fieldCount; i++) {
+        int32_t offset = 16 + static_cast<int32_t>(i * 8);
+        
+        // Load field from source
+        asm_.mov_rax_mem_rbp(locals["$rec_clone_src"]);
+        asm_.add_rax_imm32(offset);
+        asm_.mov_rax_mem_rax();  // rax = src field value
+        
+        // Store to destination
+        asm_.mov_rcx_mem_rbp(locals["$rec_clone_dst"]);
+        asm_.add_rcx_imm32(offset);
+        asm_.mov_mem_rcx_rax();
+    }
+    
+    // Return new record pointer
+    asm_.mov_rax_mem_rbp(locals["$rec_clone_dst"]);
+}
+
+} // namespace tyl

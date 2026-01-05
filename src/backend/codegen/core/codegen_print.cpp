@@ -1,11 +1,11 @@
-// Flex Compiler - Native Code Generator Print Helpers
+// Tyl Compiler - Native Code Generator Print Helpers
 // Console output, itoa, ftoa, and print expression helpers
 
 #include "backend/codegen/codegen_base.h"
 #include <sstream>
 #include <iomanip>
 
-namespace flex {
+namespace tyl {
 
 // Emit WriteConsoleA call with cached stdout handle (in RDI)
 void NativeCodeGen::emitWriteConsole(uint32_t strRVA, size_t len) {
@@ -99,6 +99,21 @@ void NativeCodeGen::emitPrintStringPtr() {
     
     asm_.pop_rdx();
     
+    emitWriteConsoleBuffer();
+}
+
+// Print str_view from pointer in rax (ptr at [rax], len at [rax+8])
+void NativeCodeGen::emitPrintStrView() {
+    // str_view layout: { ptr: *u8 at offset 0, len: i64 at offset 8 }
+    // Load length first (at [rax+8])
+    asm_.push_rax();  // Save str_view pointer
+    asm_.mov_r8_mem_rax(8);  // r8 = length at [rax+8]
+    
+    // Load string pointer (at [rax])
+    asm_.pop_rax();
+    asm_.mov_rdx_mem_rax();  // rdx = string pointer at [rax]
+    
+    // Call WriteConsoleBuffer with rdx=buffer, r8=length
     emitWriteConsoleBuffer();
 }
 
@@ -245,6 +260,41 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
         asm_.mov_r8_rcx();
         emitWriteConsoleBuffer();
         return;
+    }
+    
+    // Handle index expression (list[i]) - check if indexing into a string list
+    if (auto* indexExpr = dynamic_cast<IndexExpr*>(expr)) {
+        if (auto* ident = dynamic_cast<Identifier*>(indexExpr->object.get())) {
+            // Check if this is a constant list with integer elements
+            auto constListIt = constListVars.find(ident->name);
+            if (constListIt != constListVars.end()) {
+                // Constant list of integers - try to constant fold
+                int64_t indexVal;
+                if (tryEvalConstant(indexExpr->index.get(), indexVal)) {
+                    int64_t zeroBasedIndex = indexVal - 1;
+                    if (zeroBasedIndex >= 0 && (size_t)zeroBasedIndex < constListIt->second.size()) {
+                        // Print the constant integer value
+                        std::string numStr = std::to_string(constListIt->second[zeroBasedIndex]);
+                        uint32_t strRVA = addString(numStr);
+                        emitWriteConsole(strRVA, numStr.length());
+                        return;
+                    }
+                }
+                // Runtime index into constant integer list - evaluate and print as int
+                expr->accept(*this);
+                emitPrintIntCall();
+                return;
+            }
+            
+            // Check if this is a list variable (from split, etc.) - these are string lists
+            if (listVars.count(ident->name) && !constListVars.count(ident->name)) {
+                // Assume list of strings - evaluate and print as string
+                expr->accept(*this);
+                emitPrintStringPtr();
+                return;
+            }
+        }
+        // Fall through to default handling
     }
     
     // Handle identifier (variable)
@@ -601,4 +651,4 @@ void NativeCodeGen::dumpAssembly(std::ostream& out) const {
     out << "\n=== End Assembly ===\n";
 }
 
-} // namespace flex
+} // namespace tyl

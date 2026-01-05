@@ -1,0 +1,15 @@
+// Test with more variables to avoid register collision
+
+fn main:
+    let a: int = 1
+    let b: int = 2
+    let c: int = 3
+    let d: int = 4
+    let e: int = 5
+    let counter: Atomic[int] = Atomic[int](42)
+    let val: int = counter.load()
+    let s: str = str(val)
+    println(s)
+    return 0
+
+main()

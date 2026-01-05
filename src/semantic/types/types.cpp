@@ -1,8 +1,8 @@
-// Flex Compiler - Type System Implementation
+// Tyl Compiler - Type System Implementation
 #include "semantic/types/types.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 std::string Type::toString() const {
     switch (kind) {
@@ -11,8 +11,17 @@ std::string Type::toString() const {
         case TypeKind::INT32: return "i32"; case TypeKind::INT64: return "i64";
         case TypeKind::UINT8: return "u8"; case TypeKind::UINT16: return "u16";
         case TypeKind::UINT32: return "u32"; case TypeKind::UINT64: return "u64";
-        case TypeKind::FLOAT: return "float"; case TypeKind::FLOAT32: return "f32"; case TypeKind::FLOAT64: return "f64";
-        case TypeKind::STRING: return "str"; case TypeKind::ANY: return "any";
+        case TypeKind::FLOAT: return "float"; case TypeKind::FLOAT16: return "f16"; case TypeKind::FLOAT32: return "f32"; 
+        case TypeKind::FLOAT64: return "f64"; case TypeKind::FLOAT128: return "f128";
+        case TypeKind::COMPLEX64: return "c64"; case TypeKind::COMPLEX128: return "c128";
+        case TypeKind::BIGINT: return "BigInt"; case TypeKind::BIGFLOAT: return "BigFloat";
+        case TypeKind::DECIMAL: return "Decimal"; case TypeKind::RATIONAL: return "Rational";
+        case TypeKind::FIXED: return "Fixed";
+        case TypeKind::VEC2: return "Vec2"; case TypeKind::VEC3: return "Vec3"; case TypeKind::VEC4: return "Vec4";
+        case TypeKind::MAT2: return "Mat2"; case TypeKind::MAT3: return "Mat3"; case TypeKind::MAT4: return "Mat4";
+        case TypeKind::STRING: return "str"; case TypeKind::CHAR: return "char";
+        case TypeKind::STR_VIEW: return "str_view"; case TypeKind::BYTE_ARRAY: return "[u8]";
+        case TypeKind::ANY: return "any";
         case TypeKind::NEVER: return "never"; case TypeKind::UNKNOWN: return "?"; case TypeKind::ERROR: return "<error>";
         case TypeKind::TYPE_PARAM: return "<type_param>";
         case TypeKind::GENERIC: return "<generic>";
@@ -25,7 +34,7 @@ std::string Type::toString() const {
 
 bool Type::equals(const Type* other) const { return other && kind == other->kind; }
 TypePtr Type::clone() const { return std::make_shared<Type>(kind); }
-bool Type::isNumeric() const { return isInteger() || isFloat(); }
+bool Type::isNumeric() const { return isInteger() || isFloat() || isComplex(); }
 bool Type::isInteger() const {
     switch (kind) {
         case TypeKind::INT: case TypeKind::INT8: case TypeKind::INT16: case TypeKind::INT32: case TypeKind::INT64:
@@ -33,12 +42,19 @@ bool Type::isInteger() const {
         default: return false;
     }
 }
-bool Type::isFloat() const { return kind == TypeKind::FLOAT || kind == TypeKind::FLOAT32 || kind == TypeKind::FLOAT64; }
+bool Type::isFloat() const { 
+    return kind == TypeKind::FLOAT || kind == TypeKind::FLOAT16 || kind == TypeKind::FLOAT32 || 
+           kind == TypeKind::FLOAT64 || kind == TypeKind::FLOAT128; 
+}
+bool Type::isComplex() const {
+    return kind == TypeKind::COMPLEX64 || kind == TypeKind::COMPLEX128;
+}
 bool Type::isPrimitive() const {
     switch (kind) {
         case TypeKind::VOID: case TypeKind::BOOL: case TypeKind::INT: case TypeKind::INT8: case TypeKind::INT16:
         case TypeKind::INT32: case TypeKind::INT64: case TypeKind::UINT8: case TypeKind::UINT16: case TypeKind::UINT32:
-        case TypeKind::UINT64: case TypeKind::FLOAT: case TypeKind::FLOAT32: case TypeKind::FLOAT64: return true;
+        case TypeKind::UINT64: case TypeKind::FLOAT: case TypeKind::FLOAT16: case TypeKind::FLOAT32: 
+        case TypeKind::FLOAT64: case TypeKind::FLOAT128: case TypeKind::COMPLEX64: case TypeKind::COMPLEX128: return true;
         default: return false;
     }
 }
@@ -54,9 +70,11 @@ size_t Type::size() const {
     switch (kind) {
         case TypeKind::VOID: return 0; case TypeKind::BOOL: return 1;
         case TypeKind::INT8: case TypeKind::UINT8: return 1;
-        case TypeKind::INT16: case TypeKind::UINT16: return 2;
+        case TypeKind::INT16: case TypeKind::UINT16: case TypeKind::FLOAT16: return 2;
         case TypeKind::INT32: case TypeKind::UINT32: case TypeKind::FLOAT32: return 4;
         case TypeKind::INT: case TypeKind::INT64: case TypeKind::UINT64: case TypeKind::FLOAT: case TypeKind::FLOAT64: return 8;
+        case TypeKind::COMPLEX64: return 8;   // 2x f32
+        case TypeKind::FLOAT128: case TypeKind::COMPLEX128: return 16;  // f128 or 2x f64
         case TypeKind::PTR: case TypeKind::REF: return 8;
         default: return 8;
     }
@@ -66,7 +84,14 @@ size_t Type::alignment() const { return size(); }
 std::string PrimitiveType::toString() const { return Type::toString(); }
 size_t PrimitiveType::size() const { return Type::size(); }
 
-std::string PtrType::toString() const { return (isRaw ? "ptr<" : "ref<") + pointee->toString() + ">"; }
+std::string PtrType::toString() const { 
+    if (isRaw) {
+        return "*" + pointee->toString();
+    } else {
+        // Reference type: &T or &mut T
+        return isMutable ? "&mut " + pointee->toString() : "&" + pointee->toString();
+    }
+}
 bool PtrType::equals(const Type* other) const {
     if (auto* p = dynamic_cast<const PtrType*>(other)) return isRaw == p->isRaw && pointee->equals(p->pointee.get());
     return false;
@@ -362,6 +387,184 @@ TypePtr SemaphoreType::clone() const {
     return std::make_shared<SemaphoreType>();
 }
 
+// AtomicType implementation
+std::string AtomicType::toString() const {
+    return "Atomic[" + element->toString() + "]";
+}
+bool AtomicType::equals(const Type* other) const {
+    if (auto* a = dynamic_cast<const AtomicType*>(other)) {
+        return element->equals(a->element.get());
+    }
+    return false;
+}
+TypePtr AtomicType::clone() const {
+    return std::make_shared<AtomicType>(element->clone());
+}
+
+// FutureType implementation
+std::string FutureType::toString() const {
+    return "Future[" + element->toString() + "]";
+}
+bool FutureType::equals(const Type* other) const {
+    if (auto* f = dynamic_cast<const FutureType*>(other)) {
+        return element->equals(f->element.get());
+    }
+    return false;
+}
+TypePtr FutureType::clone() const {
+    return std::make_shared<FutureType>(element->clone());
+}
+
+// ThreadPoolType implementation
+std::string ThreadPoolType::toString() const {
+    return "ThreadPool";
+}
+bool ThreadPoolType::equals(const Type* other) const {
+    return dynamic_cast<const ThreadPoolType*>(other) != nullptr;
+}
+TypePtr ThreadPoolType::clone() const {
+    return std::make_shared<ThreadPoolType>();
+}
+
+// CancelTokenType implementation
+std::string CancelTokenType::toString() const {
+    return "CancelToken";
+}
+bool CancelTokenType::equals(const Type* other) const {
+    return dynamic_cast<const CancelTokenType*>(other) != nullptr;
+}
+TypePtr CancelTokenType::clone() const {
+    return std::make_shared<CancelTokenType>();
+}
+
+// BoxType implementation
+std::string BoxType::toString() const {
+    return "Box[" + element->toString() + "]";
+}
+bool BoxType::equals(const Type* other) const {
+    if (auto* b = dynamic_cast<const BoxType*>(other)) {
+        return element->equals(b->element.get());
+    }
+    return false;
+}
+TypePtr BoxType::clone() const {
+    return std::make_shared<BoxType>(element->clone());
+}
+
+// RcType implementation
+std::string RcType::toString() const {
+    return "Rc[" + element->toString() + "]";
+}
+bool RcType::equals(const Type* other) const {
+    if (auto* r = dynamic_cast<const RcType*>(other)) {
+        return element->equals(r->element.get());
+    }
+    return false;
+}
+TypePtr RcType::clone() const {
+    return std::make_shared<RcType>(element->clone());
+}
+
+// ArcType implementation
+std::string ArcType::toString() const {
+    return "Arc[" + element->toString() + "]";
+}
+bool ArcType::equals(const Type* other) const {
+    if (auto* a = dynamic_cast<const ArcType*>(other)) {
+        return element->equals(a->element.get());
+    }
+    return false;
+}
+TypePtr ArcType::clone() const {
+    return std::make_shared<ArcType>(element->clone());
+}
+
+// WeakType implementation
+std::string WeakType::toString() const {
+    return "Weak[" + element->toString() + "]";
+}
+bool WeakType::equals(const Type* other) const {
+    if (auto* w = dynamic_cast<const WeakType*>(other)) {
+        return isAtomic == w->isAtomic && element->equals(w->element.get());
+    }
+    return false;
+}
+TypePtr WeakType::clone() const {
+    return std::make_shared<WeakType>(element->clone(), isAtomic);
+}
+
+// CellType implementation
+std::string CellType::toString() const {
+    return "Cell[" + element->toString() + "]";
+}
+bool CellType::equals(const Type* other) const {
+    if (auto* c = dynamic_cast<const CellType*>(other)) {
+        return element->equals(c->element.get());
+    }
+    return false;
+}
+TypePtr CellType::clone() const {
+    return std::make_shared<CellType>(element->clone());
+}
+
+// RefCellType implementation
+std::string RefCellType::toString() const {
+    return "RefCell[" + element->toString() + "]";
+}
+bool RefCellType::equals(const Type* other) const {
+    if (auto* r = dynamic_cast<const RefCellType*>(other)) {
+        return element->equals(r->element.get());
+    }
+    return false;
+}
+TypePtr RefCellType::clone() const {
+    return std::make_shared<RefCellType>(element->clone());
+}
+
+// BigIntType implementation
+std::string BigIntType::toString() const { return "BigInt"; }
+bool BigIntType::equals(const Type* other) const { return dynamic_cast<const BigIntType*>(other) != nullptr; }
+TypePtr BigIntType::clone() const { return std::make_shared<BigIntType>(); }
+
+// BigFloatType implementation
+std::string BigFloatType::toString() const { return "BigFloat"; }
+bool BigFloatType::equals(const Type* other) const { return dynamic_cast<const BigFloatType*>(other) != nullptr; }
+TypePtr BigFloatType::clone() const { return std::make_shared<BigFloatType>(); }
+
+// DecimalType implementation
+std::string DecimalType::toString() const { return "Decimal"; }
+bool DecimalType::equals(const Type* other) const { return dynamic_cast<const DecimalType*>(other) != nullptr; }
+TypePtr DecimalType::clone() const { return std::make_shared<DecimalType>(); }
+
+// RationalType implementation
+std::string RationalType::toString() const { return "Rational"; }
+bool RationalType::equals(const Type* other) const { return dynamic_cast<const RationalType*>(other) != nullptr; }
+TypePtr RationalType::clone() const { return std::make_shared<RationalType>(); }
+
+// FixedPointType implementation
+std::string FixedPointType::toString() const { return "Fixed[" + std::to_string(totalBits) + ", " + std::to_string(fracBits) + "]"; }
+bool FixedPointType::equals(const Type* other) const {
+    auto* o = dynamic_cast<const FixedPointType*>(other);
+    return o && o->totalBits == totalBits && o->fracBits == fracBits;
+}
+TypePtr FixedPointType::clone() const { return std::make_shared<FixedPointType>(totalBits, fracBits); }
+
+// VecType implementation
+std::string VecType::toString() const { return "Vec" + std::to_string(size) + "[" + element->toString() + "]"; }
+bool VecType::equals(const Type* other) const {
+    auto* o = dynamic_cast<const VecType*>(other);
+    return o && o->size == size && element->equals(o->element.get());
+}
+TypePtr VecType::clone() const { return std::make_shared<VecType>(kind, element->clone(), size); }
+
+// MatType implementation
+std::string MatType::toString() const { return "Mat" + std::to_string(size) + "[" + element->toString() + "]"; }
+bool MatType::equals(const Type* other) const {
+    auto* o = dynamic_cast<const MatType*>(other);
+    return o && o->size == size && element->equals(o->element.get());
+}
+TypePtr MatType::clone() const { return std::make_shared<MatType>(kind, element->clone(), size); }
+
 
 TypeRegistry& TypeRegistry::instance() { static TypeRegistry reg; return reg; }
 
@@ -378,9 +581,20 @@ TypeRegistry::TypeRegistry() {
     uint32_ = std::make_shared<PrimitiveType>(TypeKind::UINT32);
     uint64_ = std::make_shared<PrimitiveType>(TypeKind::UINT64);
     float_ = std::make_shared<PrimitiveType>(TypeKind::FLOAT);
+    float16_ = std::make_shared<PrimitiveType>(TypeKind::FLOAT16);
     float32_ = std::make_shared<PrimitiveType>(TypeKind::FLOAT32);
     float64_ = std::make_shared<PrimitiveType>(TypeKind::FLOAT64);
+    float128_ = std::make_shared<PrimitiveType>(TypeKind::FLOAT128);
+    complex64_ = std::make_shared<PrimitiveType>(TypeKind::COMPLEX64);
+    complex128_ = std::make_shared<PrimitiveType>(TypeKind::COMPLEX128);
+    bigint_ = std::make_shared<BigIntType>();
+    bigfloat_ = std::make_shared<BigFloatType>();
+    decimal_ = std::make_shared<DecimalType>();
+    rational_ = std::make_shared<RationalType>();
     string_ = std::make_shared<PrimitiveType>(TypeKind::STRING);
+    char_ = std::make_shared<PrimitiveType>(TypeKind::CHAR);
+    str_view_ = std::make_shared<PrimitiveType>(TypeKind::STR_VIEW);
+    byte_array_ = std::make_shared<PrimitiveType>(TypeKind::BYTE_ARRAY);
     any_ = std::make_shared<PrimitiveType>(TypeKind::ANY);
     never_ = std::make_shared<PrimitiveType>(TypeKind::NEVER);
     unknown_ = std::make_shared<PrimitiveType>(TypeKind::UNKNOWN);
@@ -389,8 +603,25 @@ TypeRegistry::TypeRegistry() {
     namedTypes_["void"] = void_; namedTypes_["bool"] = bool_; namedTypes_["int"] = int_;
     namedTypes_["i8"] = int8_; namedTypes_["i16"] = int16_; namedTypes_["i32"] = int32_; namedTypes_["i64"] = int64_;
     namedTypes_["u8"] = uint8_; namedTypes_["u16"] = uint16_; namedTypes_["u32"] = uint32_; namedTypes_["u64"] = uint64_;
-    namedTypes_["float"] = float_; namedTypes_["f32"] = float32_; namedTypes_["f64"] = float64_;
-    namedTypes_["str"] = string_; namedTypes_["string"] = string_; namedTypes_["any"] = any_;
+    namedTypes_["float"] = float_; namedTypes_["f16"] = float16_; namedTypes_["f32"] = float32_; namedTypes_["f64"] = float64_; namedTypes_["f128"] = float128_;
+    namedTypes_["c64"] = complex64_; namedTypes_["c128"] = complex128_;
+    namedTypes_["BigInt"] = bigint_; namedTypes_["BigFloat"] = bigfloat_;
+    namedTypes_["Decimal"] = decimal_; namedTypes_["Rational"] = rational_;
+    namedTypes_["str"] = string_; namedTypes_["string"] = string_;
+    namedTypes_["char"] = char_; namedTypes_["str_view"] = str_view_; namedTypes_["[u8]"] = byte_array_;
+    namedTypes_["any"] = any_;
+    
+    // Register built-in traits
+    auto dropTrait = std::make_shared<TraitType>("Drop");
+    dropTrait->methods.push_back({"drop", std::make_shared<FunctionType>(), true});
+    traits_["Drop"] = dropTrait;
+    
+    auto cloneTrait = std::make_shared<TraitType>("Clone");
+    cloneTrait->methods.push_back({"clone", std::make_shared<FunctionType>(), true});
+    traits_["Clone"] = cloneTrait;
+    
+    auto copyTrait = std::make_shared<TraitType>("Copy");
+    traits_["Copy"] = copyTrait;
 }
 
 TypePtr TypeRegistry::voidType() { return void_; }
@@ -405,9 +636,27 @@ TypePtr TypeRegistry::uint16Type() { return uint16_; }
 TypePtr TypeRegistry::uint32Type() { return uint32_; }
 TypePtr TypeRegistry::uint64Type() { return uint64_; }
 TypePtr TypeRegistry::floatType() { return float_; }
+TypePtr TypeRegistry::float16Type() { return float16_; }
 TypePtr TypeRegistry::float32Type() { return float32_; }
 TypePtr TypeRegistry::float64Type() { return float64_; }
+TypePtr TypeRegistry::float128Type() { return float128_; }
+TypePtr TypeRegistry::complex64Type() { return complex64_; }
+TypePtr TypeRegistry::complex128Type() { return complex128_; }
+TypePtr TypeRegistry::bigIntType() { return bigint_; }
+TypePtr TypeRegistry::bigFloatType() { return bigfloat_; }
+TypePtr TypeRegistry::decimalType() { return decimal_; }
+TypePtr TypeRegistry::rationalType() { return rational_; }
+TypePtr TypeRegistry::fixedPointType(size_t totalBits, size_t fracBits) { return std::make_shared<FixedPointType>(totalBits, fracBits); }
+TypePtr TypeRegistry::vec2Type(TypePtr element) { return std::make_shared<VecType>(TypeKind::VEC2, std::move(element), 2); }
+TypePtr TypeRegistry::vec3Type(TypePtr element) { return std::make_shared<VecType>(TypeKind::VEC3, std::move(element), 3); }
+TypePtr TypeRegistry::vec4Type(TypePtr element) { return std::make_shared<VecType>(TypeKind::VEC4, std::move(element), 4); }
+TypePtr TypeRegistry::mat2Type(TypePtr element) { return std::make_shared<MatType>(TypeKind::MAT2, std::move(element), 2); }
+TypePtr TypeRegistry::mat3Type(TypePtr element) { return std::make_shared<MatType>(TypeKind::MAT3, std::move(element), 3); }
+TypePtr TypeRegistry::mat4Type(TypePtr element) { return std::make_shared<MatType>(TypeKind::MAT4, std::move(element), 4); }
 TypePtr TypeRegistry::stringType() { return string_; }
+TypePtr TypeRegistry::charType() { return char_; }
+TypePtr TypeRegistry::strViewType() { return str_view_; }
+TypePtr TypeRegistry::byteArrayType() { return byte_array_; }
 TypePtr TypeRegistry::anyType() { return any_; }
 TypePtr TypeRegistry::neverType() { return never_; }
 TypePtr TypeRegistry::unknownType() { return unknown_; }
@@ -515,6 +764,72 @@ TypePtr TypeRegistry::fromString(const std::string& str) {
         return semaphoreType();
     }
     
+    // Handle Atomic types: Atomic[T]
+    if (str.size() > 7 && str.substr(0, 7) == "Atomic[" && str.back() == ']') {
+        std::string inner = str.substr(7, str.size() - 8);
+        TypePtr elem = fromString(inner);
+        return atomicType(elem);
+    }
+    
+    // Handle Future types: Future[T]
+    if (str.size() > 7 && str.substr(0, 7) == "Future[" && str.back() == ']') {
+        std::string inner = str.substr(7, str.size() - 8);
+        TypePtr elem = fromString(inner);
+        return futureType(elem);
+    }
+    
+    // Handle ThreadPool type
+    if (str == "ThreadPool") {
+        return threadPoolType();
+    }
+    
+    // Handle CancelToken type
+    if (str == "CancelToken") {
+        return cancelTokenType();
+    }
+    
+    // Handle Box types: Box[T]
+    if (str.size() > 4 && str.substr(0, 4) == "Box[" && str.back() == ']') {
+        std::string inner = str.substr(4, str.size() - 5);
+        TypePtr elem = fromString(inner);
+        return boxType(elem);
+    }
+    
+    // Handle Rc types: Rc[T]
+    if (str.size() > 3 && str.substr(0, 3) == "Rc[" && str.back() == ']') {
+        std::string inner = str.substr(3, str.size() - 4);
+        TypePtr elem = fromString(inner);
+        return rcType(elem);
+    }
+    
+    // Handle Arc types: Arc[T]
+    if (str.size() > 4 && str.substr(0, 4) == "Arc[" && str.back() == ']') {
+        std::string inner = str.substr(4, str.size() - 5);
+        TypePtr elem = fromString(inner);
+        return arcType(elem);
+    }
+    
+    // Handle Weak types: Weak[T]
+    if (str.size() > 5 && str.substr(0, 5) == "Weak[" && str.back() == ']') {
+        std::string inner = str.substr(5, str.size() - 6);
+        TypePtr elem = fromString(inner);
+        return weakType(elem, false);  // Default to non-atomic
+    }
+    
+    // Handle Cell types: Cell[T]
+    if (str.size() > 5 && str.substr(0, 5) == "Cell[" && str.back() == ']') {
+        std::string inner = str.substr(5, str.size() - 6);
+        TypePtr elem = fromString(inner);
+        return cellType(elem);
+    }
+    
+    // Handle RefCell types: RefCell[T]
+    if (str.size() > 8 && str.substr(0, 8) == "RefCell[" && str.back() == ']') {
+        std::string inner = str.substr(8, str.size() - 9);
+        TypePtr elem = fromString(inner);
+        return refCellType(elem);
+    }
+    
     // Handle list types: [T] or fixed-size arrays: [T; N]
     if (str.size() > 2 && str[0] == '[' && str.back() == ']') {
         std::string inner = str.substr(1, str.size() - 2);
@@ -533,7 +848,7 @@ TypePtr TypeRegistry::fromString(const std::string& str) {
         }
         
         if (semicolonPos != std::string::npos) {
-            // Fixed-size array: [T; N]
+            // Fixed-size array: [T; N] or [T; ParamName]
             std::string elemStr = inner.substr(0, semicolonPos);
             std::string sizeStr = inner.substr(semicolonPos + 1);
             // Trim whitespace from sizeStr
@@ -541,8 +856,18 @@ TypePtr TypeRegistry::fromString(const std::string& str) {
             while (!sizeStr.empty() && (sizeStr.back() == ' ' || sizeStr.back() == '\t')) sizeStr.pop_back();
             
             TypePtr elem = fromString(elemStr);
-            size_t arraySize = std::stoull(sizeStr);
-            return fixedArrayType(elem, arraySize);
+            
+            // Check if sizeStr is a number or a type parameter name
+            bool isNumber = !sizeStr.empty() && std::all_of(sizeStr.begin(), sizeStr.end(), ::isdigit);
+            if (isNumber) {
+                size_t arraySize = std::stoull(sizeStr);
+                return fixedArrayType(elem, arraySize);
+            } else {
+                // This is a dependent type with a value parameter
+                // Return a fixed array with size 0 as a placeholder
+                // The actual size will be resolved during instantiation
+                return fixedArrayType(elem, 0);
+            }
         }
         
         // Regular list type: [T]
@@ -677,6 +1002,47 @@ TypePtr TypeRegistry::condType() {
 
 TypePtr TypeRegistry::semaphoreType() {
     return std::make_shared<SemaphoreType>();
+}
+
+TypePtr TypeRegistry::atomicType(TypePtr element) {
+    return std::make_shared<AtomicType>(std::move(element));
+}
+
+TypePtr TypeRegistry::futureType(TypePtr element) {
+    return std::make_shared<FutureType>(std::move(element));
+}
+
+TypePtr TypeRegistry::threadPoolType() {
+    return std::make_shared<ThreadPoolType>();
+}
+
+TypePtr TypeRegistry::cancelTokenType() {
+    return std::make_shared<CancelTokenType>();
+}
+
+// Smart pointer type factory methods
+TypePtr TypeRegistry::boxType(TypePtr element) {
+    return std::make_shared<BoxType>(std::move(element));
+}
+
+TypePtr TypeRegistry::rcType(TypePtr element) {
+    return std::make_shared<RcType>(std::move(element));
+}
+
+TypePtr TypeRegistry::arcType(TypePtr element) {
+    return std::make_shared<ArcType>(std::move(element));
+}
+
+TypePtr TypeRegistry::weakType(TypePtr element, bool isAtomic) {
+    return std::make_shared<WeakType>(std::move(element), isAtomic);
+}
+
+TypePtr TypeRegistry::cellType(TypePtr element) {
+    return std::make_shared<CellType>(std::move(element));
+}
+
+TypePtr TypeRegistry::refCellType(TypePtr element) {
+    return std::make_shared<RefCellType>(std::move(element));
 }
 
 void TypeRegistry::registerTrait(const std::string& name, TraitPtr trait) {
@@ -832,4 +1198,279 @@ bool TypeRegistry::checkTraitBounds(TypePtr type, const std::vector<std::string>
     return true;
 }
 
-} // namespace flex
+// ValueParamType implementation
+std::string ValueParamType::toString() const {
+    return name + ": " + (valueType ? valueType->toString() : "?");
+}
+bool ValueParamType::equals(const Type* other) const {
+    if (auto* vp = dynamic_cast<const ValueParamType*>(other)) {
+        if (name != vp->name) return false;
+        if (value.has_value() && vp->value.has_value()) {
+            return value.value() == vp->value.value();
+        }
+        return true;
+    }
+    return false;
+}
+TypePtr ValueParamType::clone() const {
+    auto vp = std::make_shared<ValueParamType>(name, valueType ? valueType->clone() : nullptr);
+    vp->value = value;
+    return vp;
+}
+
+// DependentType implementation
+std::string DependentType::toString() const {
+    std::string s = name + "[";
+    for (size_t i = 0; i < params.size(); i++) {
+        if (i > 0) s += ", ";
+        s += params[i].first;
+        if (params[i].second) {
+            s += ": " + params[i].second->toString();
+        }
+    }
+    s += "]";
+    return s;
+}
+bool DependentType::equals(const Type* other) const {
+    if (auto* dt = dynamic_cast<const DependentType*>(other)) {
+        if (name != dt->name || params.size() != dt->params.size()) return false;
+        for (size_t i = 0; i < params.size(); i++) {
+            if (params[i].first != dt->params[i].first) return false;
+        }
+        return true;
+    }
+    return false;
+}
+TypePtr DependentType::clone() const {
+    auto dt = std::make_shared<DependentType>(name);
+    for (const auto& p : params) {
+        dt->params.push_back({p.first, p.second ? p.second->clone() : nullptr});
+    }
+    if (baseType) dt->baseType = baseType->clone();
+    return dt;
+}
+
+// RefinedType implementation
+std::string RefinedType::toString() const {
+    std::string s = name;
+    if (baseType) s += " = " + baseType->toString();
+    if (!constraint.empty()) s += " where " + constraint;
+    return s;
+}
+bool RefinedType::equals(const Type* other) const {
+    if (auto* rt = dynamic_cast<const RefinedType*>(other)) {
+        return name == rt->name && constraint == rt->constraint;
+    }
+    return false;
+}
+TypePtr RefinedType::clone() const {
+    return std::make_shared<RefinedType>(name, baseType ? baseType->clone() : nullptr, constraint);
+}
+
+// Dependent type support in TypeRegistry
+TypePtr TypeRegistry::valueParamType(const std::string& name, TypePtr valueType) {
+    return std::make_shared<ValueParamType>(name, std::move(valueType));
+}
+
+TypePtr TypeRegistry::dependentType(const std::string& name) {
+    return std::make_shared<DependentType>(name);
+}
+
+TypePtr TypeRegistry::refinedType(const std::string& name, TypePtr baseType, const std::string& constraint) {
+    return std::make_shared<RefinedType>(name, std::move(baseType), constraint);
+}
+
+void TypeRegistry::registerDependentType(const std::string& name, TypePtr type) {
+    dependentTypes_[name] = std::move(type);
+}
+
+TypePtr TypeRegistry::lookupDependentType(const std::string& name) {
+    auto it = dependentTypes_.find(name);
+    return it != dependentTypes_.end() ? it->second : nullptr;
+}
+
+TypePtr TypeRegistry::instantiateDependentType(const std::string& name, 
+    const std::vector<std::pair<std::string, int64_t>>& valueArgs, 
+    const std::vector<TypePtr>& typeArgs) {
+    
+    auto depType = lookupDependentType(name);
+    if (!depType) return nullptr;
+    
+    auto* dt = dynamic_cast<DependentType*>(depType.get());
+    if (!dt || !dt->baseType) return nullptr;
+    
+    // Build substitution maps
+    std::unordered_map<std::string, TypePtr> typeSubst;
+    std::unordered_map<std::string, int64_t> valueSubst;
+    
+    size_t typeIdx = 0;
+    size_t valueIdx = 0;
+    
+    for (const auto& param : dt->params) {
+        if (param.second && param.second->kind != TypeKind::TYPE_PARAM) {
+            // This is a value parameter
+            if (valueIdx < valueArgs.size()) {
+                valueSubst[param.first] = valueArgs[valueIdx].second;
+                valueIdx++;
+            }
+        } else {
+            // This is a type parameter
+            if (typeIdx < typeArgs.size()) {
+                typeSubst[param.first] = typeArgs[typeIdx];
+                typeIdx++;
+            }
+        }
+    }
+    
+    // Substitute in the base type
+    TypePtr result = substituteTypeParams(dt->baseType, typeSubst);
+    
+    // Handle fixed array size substitution: [T; N] where N is a value param
+    if (auto* fa = dynamic_cast<FixedArrayType*>(result.get())) {
+        // Check if the size needs substitution (this is a simplified approach)
+        // In a full implementation, we'd track which value params are used where
+        for (const auto& vs : valueSubst) {
+            // If the base type string contains the value param name, substitute
+            // For now, we create a new fixed array with the concrete size
+            if (fa->size == 0) {  // Placeholder size
+                return fixedArrayType(fa->element->clone(), valueSubst.begin()->second);
+            }
+        }
+    }
+    
+    return result;
+}
+
+bool TypeRegistry::checkRefinementConstraint(TypePtr type, const std::string& constraint) {
+    // This is a simplified implementation
+    // A full implementation would evaluate the constraint expression at compile time
+    // For now, we just return true (constraint checking happens at runtime)
+    
+    if (constraint.empty()) return true;
+    
+    // Check for common constraints
+    if (constraint.find("len(_) > 0") != std::string::npos) {
+        // NonEmpty constraint - can only be verified at runtime for dynamic lists
+        // For fixed arrays, we can check at compile time
+        if (auto* fa = dynamic_cast<FixedArrayType*>(type.get())) {
+            return fa->size > 0;
+        }
+    }
+    
+    // For other constraints, defer to runtime checking
+    return true;
+}
+
+// EffectType implementation
+std::string EffectType::toString() const {
+    std::string s = name;
+    if (!typeArgs.empty()) {
+        s += "[";
+        for (size_t i = 0; i < typeArgs.size(); i++) {
+            if (i > 0) s += ", ";
+            s += typeArgs[i] ? typeArgs[i]->toString() : "?";
+        }
+        s += "]";
+    }
+    return s;
+}
+
+bool EffectType::equals(const Type* other) const {
+    if (auto* et = dynamic_cast<const EffectType*>(other)) {
+        if (name != et->name || typeArgs.size() != et->typeArgs.size()) return false;
+        for (size_t i = 0; i < typeArgs.size(); i++) {
+            if (typeArgs[i] && et->typeArgs[i]) {
+                if (!typeArgs[i]->equals(et->typeArgs[i].get())) return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+TypePtr EffectType::clone() const {
+    auto et = std::make_shared<EffectType>(name);
+    for (const auto& arg : typeArgs) {
+        et->typeArgs.push_back(arg ? arg->clone() : nullptr);
+    }
+    for (const auto& op : operations) {
+        EffectOperation newOp;
+        newOp.name = op.name;
+        for (const auto& p : op.params) {
+            newOp.params.push_back({p.first, p.second ? p.second->clone() : nullptr});
+        }
+        newOp.returnType = op.returnType ? op.returnType->clone() : nullptr;
+        et->operations.push_back(newOp);
+    }
+    return et;
+}
+
+const EffectOperation* EffectType::getOperation(const std::string& opName) const {
+    for (const auto& op : operations) {
+        if (op.name == opName) return &op;
+    }
+    return nullptr;
+}
+
+// EffectfulType implementation
+std::string EffectfulType::toString() const {
+    std::string s = baseType ? baseType->toString() : "fn()";
+    if (!effects.empty()) {
+        s += " with ";
+        for (size_t i = 0; i < effects.size(); i++) {
+            if (i > 0) s += ", ";
+            s += effects[i] ? effects[i]->toString() : "?";
+        }
+    }
+    return s;
+}
+
+bool EffectfulType::equals(const Type* other) const {
+    if (auto* ef = dynamic_cast<const EffectfulType*>(other)) {
+        if (effects.size() != ef->effects.size()) return false;
+        if (baseType && ef->baseType && !baseType->equals(ef->baseType.get())) return false;
+        for (size_t i = 0; i < effects.size(); i++) {
+            if (effects[i] && ef->effects[i]) {
+                if (!effects[i]->equals(ef->effects[i].get())) return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+TypePtr EffectfulType::clone() const {
+    auto ef = std::make_shared<EffectfulType>(baseType ? baseType->clone() : nullptr);
+    for (const auto& e : effects) {
+        ef->effects.push_back(e ? std::dynamic_pointer_cast<EffectType>(e->clone()) : nullptr);
+    }
+    return ef;
+}
+
+// Effect type factory methods in TypeRegistry
+std::shared_ptr<EffectType> TypeRegistry::effectType(const std::string& name) {
+    // Check if already registered
+    auto it = effects_.find(name);
+    if (it != effects_.end()) {
+        return it->second;
+    }
+    // Create new effect type
+    return std::make_shared<EffectType>(name);
+}
+
+TypePtr TypeRegistry::effectfulType(TypePtr baseType, const std::vector<std::shared_ptr<EffectType>>& effects) {
+    auto ef = std::make_shared<EffectfulType>(std::move(baseType));
+    ef->effects = effects;
+    return ef;
+}
+
+void TypeRegistry::registerEffect(const std::string& name, std::shared_ptr<EffectType> effect) {
+    effects_[name] = std::move(effect);
+}
+
+std::shared_ptr<EffectType> TypeRegistry::lookupEffect(const std::string& name) {
+    auto it = effects_.find(name);
+    return it != effects_.end() ? it->second : nullptr;
+}
+
+} // namespace tyl

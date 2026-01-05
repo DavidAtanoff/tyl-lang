@@ -1,0 +1,36 @@
+// Test Ownership System: Move semantics and use-after-move detection
+
+fn main():
+    print("=== Ownership System Tests ===")
+    
+    // Test 1: Copy types (primitives) - should work fine
+    print("\n--- Test 1: Copy types ---")
+    let x = 42
+    let y = x       // Copy, not move (int is Copy)
+    print("x = {x}")  // OK: x is still valid
+    print("y = {y}")
+    
+    // Test 2: Move semantics with lists
+    print("\n--- Test 2: Move semantics ---")
+    let a = [1, 2, 3]
+    let b = a       // Move: a is now invalid
+    // print("a = {a}")  // ERROR: use of moved value 'a'
+    print("b[1] = {b[1]}")  // OK: b owns the list
+    
+    // Test 3: Explicit clone to avoid move
+    print("\n--- Test 3: Clone ---")
+    let c = [4, 5, 6]
+    print("Before clone: c[1] = {c[1]}, c[2] = {c[2]}, c[3] = {c[3]}")
+    let d = c.clone()  // Deep copy, c is still valid
+    print("After clone: c[1] = {c[1]}, c[2] = {c[2]}, c[3] = {c[3]}")
+    print("Clone result: d[1] = {d[1]}, d[2] = {d[2]}, d[3] = {d[3]}")
+    
+    // Test 4: Reassignment restores ownership
+    print("\n--- Test 4: Reassignment ---")
+    mut e = [7, 8, 9]
+    let f = e       // Move: e is now invalid
+    e = [10, 11, 12]  // Reassign: e is valid again
+    print("e[1] = {e[1]}")  // OK: e has new value
+    print("f[1] = {f[1]}")  // OK: f owns original
+    
+    print("\n=== All ownership tests passed! ===")

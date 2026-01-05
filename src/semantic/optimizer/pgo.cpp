@@ -1,4 +1,4 @@
-// Flex Compiler - Profile-Guided Optimization Implementation
+// Tyl Compiler - Profile-Guided Optimization Implementation
 // Uses runtime profile data to make better optimization decisions
 
 #include "pgo.h"
@@ -8,7 +8,7 @@
 #include <fstream>
 #include <cstring>
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // ProgramProfile Implementation
@@ -651,14 +651,14 @@ bool ProfileWriter::writeBinary(const ProgramProfile& profile, const std::string
 std::string ProfileWriter::generateCounterCode(int numCounters) {
     std::ostringstream ss;
     ss << "// Auto-generated profile counters\n";
-    ss << "static uint64_t __flex_profile_counters[" << numCounters << "] = {0};\n\n";
-    ss << "void __flex_profile_increment(int idx) {\n";
-    ss << "    __flex_profile_counters[idx]++;\n";
+    ss << "static uint64_t __TYL_profile_counters[" << numCounters << "] = {0};\n\n";
+    ss << "void __TYL_profile_increment(int idx) {\n";
+    ss << "    __TYL_profile_counters[idx]++;\n";
     ss << "}\n\n";
-    ss << "void __flex_profile_dump(const char* filename) {\n";
+    ss << "void __TYL_profile_dump(const char* filename) {\n";
     ss << "    FILE* f = fopen(filename, \"wb\");\n";
     ss << "    if (f) {\n";
-    ss << "        fwrite(__flex_profile_counters, sizeof(uint64_t), " << numCounters << ", f);\n";
+    ss << "        fwrite(__TYL_profile_counters, sizeof(uint64_t), " << numCounters << ", f);\n";
     ss << "        fclose(f);\n";
     ss << "    }\n";
     ss << "}\n";
@@ -679,4 +679,4 @@ std::unique_ptr<PGOPass> createPGOPass(const std::string& profileFile) {
     return pass;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,0 +1,9 @@
+// Test with println(str(val))
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](42)
+    let val: int = counter.load()
+    println(str(val))
+    return 0
+
+main()

@@ -1,6 +1,6 @@
-// Flex Compiler - Runtime Values
-#ifndef FLEX_VALUE_H
-#define FLEX_VALUE_H
+// Tyl Compiler - Runtime Values
+#ifndef TYL_VALUE_H
+#define TYL_VALUE_H
 
 #include <string>
 #include <vector>
@@ -14,7 +14,7 @@
 
 #include "common/common.h"
 
-namespace flex {
+namespace tyl {
 
 enum class ValueType { NIL, BOOL, INT, FLOAT, STRING, LIST, RECORD, FUNCTION, NATIVE_FN, RANGE };
 
@@ -95,6 +95,6 @@ inline bool operator==(const Value& a, const Value& b) {
     }
 }
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_VALUE_H
+#endif // TYL_VALUE_H

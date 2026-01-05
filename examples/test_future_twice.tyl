@@ -1,0 +1,7 @@
+// Twice Test - call future_is_ready twice
+
+fn main -> int:
+    let f = make_future[int]()
+    let ready1 = future_is_ready(f)
+    let ready2 = future_is_ready(f)
+    return 0

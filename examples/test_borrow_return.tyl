@@ -1,0 +1,13 @@
+// Test borrow auto-dereference on return
+
+fn get_val(x: &int) -> int:
+    return x
+
+fn main:
+    a = 42
+    b = get_val(&a)
+    println(b)
+    
+    c = 100
+    d = get_val(&c)
+    println(d)

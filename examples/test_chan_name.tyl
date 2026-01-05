@@ -1,0 +1,20 @@
+// Channel test with different name
+
+fn test_channel:
+    print("Creating channel...\n")
+    let ch = chan[int, 1]
+    print("Channel created\n")
+    
+    print("Sending 100...\n")
+    ch <- 100
+    print("Sent\n")
+    
+    print("Receiving...\n")
+    let v = <- ch
+    print("Received: ")
+    print(v)
+    print("\n")
+
+fn main -> int:
+    test_channel()
+    return 0

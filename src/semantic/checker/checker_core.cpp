@@ -1,11 +1,11 @@
-// Flex Compiler - Type Checker Core
+// Tyl Compiler - Type Checker Core
 // Core methods, type utilities, diagnostics
 
 #include "checker_base.h"
 #include <regex>
 #include <functional>
 
-namespace flex {
+namespace tyl {
 
 TypeChecker::TypeChecker() : currentType_(nullptr), expectedReturn_(nullptr) {
     // Register built-in functions
@@ -811,6 +811,130 @@ void TypeChecker::registerBuiltins() {
     systemFn->params.push_back({"command", reg.stringType()});
     systemFn->returnType = reg.intType();
     symbols_.define(Symbol("system", SymbolKind::FUNCTION, systemFn));
+    
+    // ===== Complex Number Builtins =====
+    // complex(real, imag) -> c128 - Create complex number
+    auto complexFn = std::make_shared<FunctionType>();
+    complexFn->params.push_back({"real", reg.floatType()});
+    complexFn->params.push_back({"imag", reg.floatType()});
+    complexFn->returnType = reg.complex128Type();
+    symbols_.define(Symbol("complex", SymbolKind::FUNCTION, complexFn));
+    
+    // real(z) -> float - Get real part of complex number
+    auto realFn = std::make_shared<FunctionType>();
+    realFn->params.push_back({"z", reg.complex128Type()});
+    realFn->returnType = reg.floatType();
+    symbols_.define(Symbol("real", SymbolKind::FUNCTION, realFn));
+    
+    // imag(z) -> float - Get imaginary part of complex number
+    auto imagFn = std::make_shared<FunctionType>();
+    imagFn->params.push_back({"z", reg.complex128Type()});
+    imagFn->returnType = reg.floatType();
+    symbols_.define(Symbol("imag", SymbolKind::FUNCTION, imagFn));
+    
+    // ===== BigInt Builtins =====
+    // bigint(value) -> BigInt - Create BigInt from int
+    auto bigintFn = std::make_shared<FunctionType>();
+    bigintFn->params.push_back({"value", reg.intType()});
+    bigintFn->returnType = reg.bigIntType();
+    symbols_.define(Symbol("bigint", SymbolKind::FUNCTION, bigintFn));
+    
+    // bigint_add(a, b) -> BigInt
+    auto bigintAddFn = std::make_shared<FunctionType>();
+    bigintAddFn->params.push_back({"a", reg.bigIntType()});
+    bigintAddFn->params.push_back({"b", reg.bigIntType()});
+    bigintAddFn->returnType = reg.bigIntType();
+    symbols_.define(Symbol("bigint_add", SymbolKind::FUNCTION, bigintAddFn));
+    
+    // bigint_to_int(b) -> int
+    auto bigintToIntFn = std::make_shared<FunctionType>();
+    bigintToIntFn->params.push_back({"b", reg.bigIntType()});
+    bigintToIntFn->returnType = reg.intType();
+    symbols_.define(Symbol("bigint_to_int", SymbolKind::FUNCTION, bigintToIntFn));
+    
+    // ===== Rational Builtins =====
+    // rational(num, denom) -> Rational
+    auto rationalFn = std::make_shared<FunctionType>();
+    rationalFn->params.push_back({"num", reg.intType()});
+    rationalFn->params.push_back({"denom", reg.intType()});
+    rationalFn->returnType = reg.rationalType();
+    symbols_.define(Symbol("rational", SymbolKind::FUNCTION, rationalFn));
+    
+    // rational_add(a, b) -> Rational
+    auto rationalAddFn = std::make_shared<FunctionType>();
+    rationalAddFn->params.push_back({"a", reg.rationalType()});
+    rationalAddFn->params.push_back({"b", reg.rationalType()});
+    rationalAddFn->returnType = reg.rationalType();
+    symbols_.define(Symbol("rational_add", SymbolKind::FUNCTION, rationalAddFn));
+    
+    // rational_to_float(r) -> float
+    auto rationalToFloatFn = std::make_shared<FunctionType>();
+    rationalToFloatFn->params.push_back({"r", reg.rationalType()});
+    rationalToFloatFn->returnType = reg.floatType();
+    symbols_.define(Symbol("rational_to_float", SymbolKind::FUNCTION, rationalToFloatFn));
+    
+    // ===== Fixed-Point Builtins =====
+    // fixed(value) -> Fixed - Create fixed-point from float/int
+    auto fixedFn = std::make_shared<FunctionType>();
+    fixedFn->params.push_back({"value", reg.anyType()});
+    fixedFn->returnType = reg.intType();  // Fixed is stored as int64
+    symbols_.define(Symbol("fixed", SymbolKind::FUNCTION, fixedFn));
+    
+    // fixed_add(a, b) -> Fixed
+    auto fixedAddFn = std::make_shared<FunctionType>();
+    fixedAddFn->params.push_back({"a", reg.intType()});
+    fixedAddFn->params.push_back({"b", reg.intType()});
+    fixedAddFn->returnType = reg.intType();
+    symbols_.define(Symbol("fixed_add", SymbolKind::FUNCTION, fixedAddFn));
+    
+    // fixed_sub(a, b) -> Fixed
+    auto fixedSubFn = std::make_shared<FunctionType>();
+    fixedSubFn->params.push_back({"a", reg.intType()});
+    fixedSubFn->params.push_back({"b", reg.intType()});
+    fixedSubFn->returnType = reg.intType();
+    symbols_.define(Symbol("fixed_sub", SymbolKind::FUNCTION, fixedSubFn));
+    
+    // fixed_mul(a, b) -> Fixed
+    auto fixedMulFn = std::make_shared<FunctionType>();
+    fixedMulFn->params.push_back({"a", reg.intType()});
+    fixedMulFn->params.push_back({"b", reg.intType()});
+    fixedMulFn->returnType = reg.intType();
+    symbols_.define(Symbol("fixed_mul", SymbolKind::FUNCTION, fixedMulFn));
+    
+    // fixed_to_float(f) -> float
+    auto fixedToFloatFn = std::make_shared<FunctionType>();
+    fixedToFloatFn->params.push_back({"f", reg.intType()});
+    fixedToFloatFn->returnType = reg.floatType();
+    symbols_.define(Symbol("fixed_to_float", SymbolKind::FUNCTION, fixedToFloatFn));
+    
+    // ===== Vec3 Builtins =====
+    // vec3(x, y, z) -> Vec3
+    auto vec3Fn = std::make_shared<FunctionType>();
+    vec3Fn->params.push_back({"x", reg.floatType()});
+    vec3Fn->params.push_back({"y", reg.floatType()});
+    vec3Fn->params.push_back({"z", reg.floatType()});
+    vec3Fn->returnType = reg.anyType();  // Returns pointer to Vec3
+    symbols_.define(Symbol("vec3", SymbolKind::FUNCTION, vec3Fn));
+    
+    // vec3_add(a, b) -> Vec3
+    auto vec3AddFn = std::make_shared<FunctionType>();
+    vec3AddFn->params.push_back({"a", reg.anyType()});
+    vec3AddFn->params.push_back({"b", reg.anyType()});
+    vec3AddFn->returnType = reg.anyType();
+    symbols_.define(Symbol("vec3_add", SymbolKind::FUNCTION, vec3AddFn));
+    
+    // vec3_dot(a, b) -> float
+    auto vec3DotFn = std::make_shared<FunctionType>();
+    vec3DotFn->params.push_back({"a", reg.anyType()});
+    vec3DotFn->params.push_back({"b", reg.anyType()});
+    vec3DotFn->returnType = reg.floatType();
+    symbols_.define(Symbol("vec3_dot", SymbolKind::FUNCTION, vec3DotFn));
+    
+    // vec3_length(v) -> float
+    auto vec3LengthFn = std::make_shared<FunctionType>();
+    vec3LengthFn->params.push_back({"v", reg.anyType()});
+    vec3LengthFn->returnType = reg.floatType();
+    symbols_.define(Symbol("vec3_length", SymbolKind::FUNCTION, vec3LengthFn));
 }
 
 bool TypeChecker::check(Program& program) {
@@ -874,6 +998,15 @@ TypePtr TypeChecker::parseGenericType(const std::string& str) {
     if (bracketPos == std::string::npos) return nullptr;
     
     std::string baseName = str.substr(0, bracketPos);
+    
+    // If baseName is empty, this is list syntax [T] not generic syntax Name[T]
+    // Let TypeRegistry::fromString handle it
+    if (baseName.empty()) return nullptr;
+    
+    // If baseName starts with & or *, this is a reference/pointer to a list/generic
+    // Let TypeRegistry::fromString handle it (e.g., &[int], *[int])
+    if (!baseName.empty() && (baseName[0] == '&' || baseName[0] == '*')) return nullptr;
+    
     size_t endBracket = str.rfind(']');
     if (endBracket == std::string::npos || endBracket <= bracketPos) return nullptr;
     
@@ -927,6 +1060,10 @@ TypePtr TypeChecker::parseGenericType(const std::string& str) {
     } else if (baseName == "RWLock") {
         if (typeArgs.size() == 1) {
             return reg.rwlockType(typeArgs[0]);
+        }
+    } else if (baseName == "Atomic") {
+        if (typeArgs.size() == 1) {
+            return reg.atomicType(typeArgs[0]);
         }
     }
     
@@ -1144,4 +1281,71 @@ void TypeChecker::checkUnusedVariables(Scope* scope) {
     }
 }
 
-} // namespace flex
+// ===== Ownership and Borrow Checking =====
+
+void TypeChecker::checkOwnership(Expression* expr, bool isMove) {
+    if (!borrowCheckEnabled_) return;
+    
+    if (auto* id = dynamic_cast<Identifier*>(expr)) {
+        if (isMove) {
+            auto err = ownership_.recordMove(id->name, id->location);
+            if (err) {
+                emitOwnershipError(*err, id->location);
+            }
+        } else {
+            auto err = ownership_.checkUsable(id->name, id->location);
+            if (err) {
+                emitOwnershipError(*err, id->location);
+            }
+        }
+    }
+}
+
+void TypeChecker::checkBorrow(Expression* expr, bool isMutable) {
+    if (!borrowCheckEnabled_) return;
+    
+    if (auto* id = dynamic_cast<Identifier*>(expr)) {
+        auto err = ownership_.checkCanBorrow(id->name, isMutable, id->location);
+        if (err) {
+            emitOwnershipError(*err, id->location);
+        }
+    }
+}
+
+ParamMode TypeChecker::parseParamMode(const std::string& typeName) {
+    if (typeName.empty()) return ParamMode::OWNED;
+    
+    // Check for borrow prefixes
+    if (typeName.size() >= 5 && typeName.substr(0, 5) == "&mut ") {
+        return ParamMode::BORROW_MUT;
+    }
+    if (typeName.size() >= 1 && typeName[0] == '&') {
+        return ParamMode::BORROW;
+    }
+    
+    // Check if it's a Copy type
+    std::string baseType = stripBorrowPrefix(typeName);
+    if (isCopyType(baseType)) {
+        return ParamMode::COPY;
+    }
+    
+    return ParamMode::OWNED;
+}
+
+std::string TypeChecker::stripBorrowPrefix(const std::string& typeName) {
+    if (typeName.size() >= 5 && typeName.substr(0, 5) == "&mut ") {
+        return typeName.substr(5);
+    }
+    if (typeName.size() >= 1 && typeName[0] == '&') {
+        size_t start = 1;
+        while (start < typeName.size() && typeName[start] == ' ') start++;
+        return typeName.substr(start);
+    }
+    return typeName;
+}
+
+void TypeChecker::emitOwnershipError(const std::string& msg, const SourceLocation& loc) {
+    error(msg, loc);
+}
+
+} // namespace tyl

@@ -1,0 +1,15 @@
+// Minimal test - just perform without function call
+
+effect Reader:
+    fn ask -> int
+
+fn main -> int:
+    print("Step 1")
+    
+    let result = handle perform Reader.ask():
+        Reader.ask() => 42
+    
+    print("Step 2, result =")
+    print(result)
+    
+    return 0

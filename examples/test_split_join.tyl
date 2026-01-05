@@ -1,0 +1,62 @@
+// Test split and join string functions
+
+fn main -> int:
+    print("=== Testing split() and join() ===\n\n")
+    
+    // Test split with constant strings
+    print("Test 1: split(\"hello,world,foo,bar\", \",\")\n")
+    let parts = split("hello,world,foo,bar", ",")
+    print("Number of parts: ")
+    print(len(parts))
+    print("\n")
+    
+    // Print each part (1-based indexing)
+    print("Parts:\n")
+    mut i = 1
+    while i <= len(parts):
+        print("  [")
+        print(i)
+        print("] = ")
+        print(parts[i])
+        print("\n")
+        i = i + 1
+    
+    print("\n")
+    
+    // Test split with spaces
+    print("Test 2: split(\"one two three\", \" \")\n")
+    let words = split("one two three", " ")
+    print("Number of words: ")
+    print(len(words))
+    print("\n")
+    
+    // Test join
+    print("\nTest 3: join([\"a\", \"b\", \"c\"], \"-\")\n")
+    let list1 = ["a", "b", "c"]
+    let joined = join(list1, "-")
+    print("Joined: ")
+    print(joined)
+    print("\n")
+    
+    // Test join with comma
+    print("\nTest 4: join([\"hello\", \"world\"], \", \")\n")
+    let list2 = ["hello", "world"]
+    let joined2 = join(list2, ", ")
+    print("Joined: ")
+    print(joined2)
+    print("\n")
+    
+    // Test round-trip: split then join
+    print("\nTest 5: Round-trip - split then join\n")
+    let original = "apple:banana:cherry"
+    print("Original: ")
+    print(original)
+    print("\n")
+    let split_parts = split(original, ":")
+    let rejoined = join(split_parts, ":")
+    print("After split and join: ")
+    print(rejoined)
+    print("\n")
+    
+    print("\n=== All Tests Complete ===\n")
+    return 0

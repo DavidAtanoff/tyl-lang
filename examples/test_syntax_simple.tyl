@@ -1,0 +1,14 @@
+// Simple test for new syntax features
+
+fn main:
+    print("Testing new syntax")
+    
+    // Test loop
+    mut x = 0
+    loop:
+        x = x + 1
+        print(x)
+        if x >= 3:
+            break
+    
+    print("Done!")

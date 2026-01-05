@@ -1,0 +1,15 @@
+// Test Lifetime Annotations
+
+// Function with lifetime parameter
+fn longest['a](a: &'a str, b: &'a str) -> &'a str:
+    if len(a) > len(b):
+        return a
+    return b
+
+fn main():
+    let s1 = "hello"
+    let s2 = "world!"
+    
+    let result = longest(&s1, &s2)
+    print("Longest: ")
+    print(result)

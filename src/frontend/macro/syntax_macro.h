@@ -1,6 +1,6 @@
-// Flex Compiler - Syntax Macro System
-#ifndef FLEX_SYNTAX_MACRO_H
-#define FLEX_SYNTAX_MACRO_H
+// Tyl Compiler - Syntax Macro System
+#ifndef TYL_SYNTAX_MACRO_H
+#define TYL_SYNTAX_MACRO_H
 
 #include "frontend/token/token.h"
 #include "frontend/ast/ast.h"
@@ -8,7 +8,7 @@
 #include <regex>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 struct PatternElement {
     enum class Kind { LITERAL, IDENT, EXPR, BLOCK, TOKENS, OPTIONAL, REPEAT, REPEAT_ONE };
@@ -86,6 +86,6 @@ namespace dsl {
     StmtPtr parseRegex(const std::vector<Token>& tokens);
 }
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_SYNTAX_MACRO_H
+#endif // TYL_SYNTAX_MACRO_H

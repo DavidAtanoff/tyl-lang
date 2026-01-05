@@ -1,7 +1,7 @@
-// Flex Compiler - Loop Optimizer
+// Tyl Compiler - Loop Optimizer
 // Loop unrolling, loop invariant code motion (LICM), and strength reduction
-#ifndef FLEX_LOOP_OPTIMIZER_H
-#define FLEX_LOOP_OPTIMIZER_H
+#ifndef TYL_LOOP_OPTIMIZER_H
+#define TYL_LOOP_OPTIMIZER_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -9,7 +9,7 @@
 #include <map>
 #include <vector>
 
-namespace flex {
+namespace tyl {
 
 // Information about a loop for optimization
 struct LoopInfo {
@@ -21,6 +21,7 @@ struct LoopInfo {
     int64_t stepValue = 1;
     bool boundsKnown = false;
     int64_t tripCount = 0;
+    bool isInclusive = false;  // True for RangeExpr (..), false for range() function
     
     // Variables modified in the loop
     std::set<std::string> modifiedVars;
@@ -127,6 +128,6 @@ private:
     bool strengthReductionEnabled_ = true;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_LOOP_OPTIMIZER_H
+#endif // TYL_LOOP_OPTIMIZER_H

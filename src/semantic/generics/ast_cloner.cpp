@@ -1,10 +1,10 @@
-// Flex Compiler - AST Cloner Implementation
+// Tyl Compiler - AST Cloner Implementation
 // Deep clones AST nodes with type parameter substitution for monomorphization
 
 #include "ast_cloner.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 ASTCloner::ASTCloner(const std::vector<std::string>& typeParams,
                      const std::vector<TypePtr>& typeArgs) {
@@ -455,4 +455,4 @@ StmtPtr ASTCloner::cloneStmt(DeleteStmt* node) {
     );
 }
 
-} // namespace flex
+} // namespace tyl

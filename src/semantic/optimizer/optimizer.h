@@ -1,14 +1,14 @@
-// Flex Compiler - Optimizer Infrastructure
+// Tyl Compiler - Optimizer Infrastructure
 // Tier 2-5 Optimization Passes: Constant Folding, DCE, Inlining, TCO, SSA, Loop Opts, Scheduling
-#ifndef FLEX_OPTIMIZER_H
-#define FLEX_OPTIMIZER_H
+#ifndef TYL_OPTIMIZER_H
+#define TYL_OPTIMIZER_H
 
 #include "frontend/ast/ast.h"
 #include <memory>
 #include <vector>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Forward declarations
 struct SSAModule;
@@ -133,6 +133,6 @@ std::unique_ptr<Optimizer> createOptimizer(OptLevel level);
 // Enable/disable CTFE
 void enableCTFE(bool enable = true);
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_OPTIMIZER_H
+#endif // TYL_OPTIMIZER_H

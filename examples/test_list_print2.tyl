@@ -1,0 +1,20 @@
+// Test list element printing - matching debug3 structure
+
+fn main -> int:
+    print("1. Creating list\n")
+    let words = ["aa", "bb"]
+    print("2. List created\n")
+    
+    print("3. Checking len\n")
+    let n = len(words)
+    print("4. Len = ")
+    print(n)
+    print("\n")
+    
+    print("5. Checking element 1\n")
+    let e1 = words[1]
+    print("6. Element 1 = ")
+    print(e1)
+    print("\n")
+    
+    return 0

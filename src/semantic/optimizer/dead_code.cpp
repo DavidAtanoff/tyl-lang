@@ -1,8 +1,8 @@
-// Flex Compiler - Dead Code Elimination Implementation
+// Tyl Compiler - Dead Code Elimination Implementation
 #include "dead_code.h"
 #include <queue>
 
-namespace flex {
+namespace tyl {
 
 void DeadCodeEliminationPass::run(Program& ast) {
     transformations_ = 0;
@@ -113,6 +113,9 @@ void DeadCodeEliminationPass::collectCallsFromExpression(Expression* expr, std::
                 // Track as "module.function" format
                 calls.insert(moduleId->name + "." + member->member);
             }
+            // UFCS: x.f() where x is not an identifier (e.g., 5.double())
+            // Also track the member name as a potential function call
+            calls.insert(member->member);
         }
         collectCallsFromExpression(call->callee.get(), calls);
         for (auto& arg : call->args) {
@@ -201,6 +204,26 @@ void DeadCodeEliminationPass::collectCallsFromExpression(Expression* expr, std::
     }
     else if (auto* deref = dynamic_cast<DerefExpr*>(expr)) {
         collectCallsFromExpression(deref->operand.get(), calls);
+    }
+    else if (auto* handle = dynamic_cast<HandleExpr*>(expr)) {
+        // Handle algebraic effects - collect calls from the expression being handled
+        collectCallsFromExpression(handle->expr.get(), calls);
+        // Also collect calls from handler bodies
+        for (auto& handler : handle->handlers) {
+            if (handler.body) {
+                collectCallsFromStatement(handler.body.get(), calls);
+            }
+        }
+    }
+    else if (auto* perform = dynamic_cast<PerformEffectExpr*>(expr)) {
+        // Collect calls from perform arguments
+        for (auto& arg : perform->args) {
+            collectCallsFromExpression(arg.get(), calls);
+        }
+    }
+    else if (auto* resume = dynamic_cast<ResumeExpr*>(expr)) {
+        // Collect calls from resume value
+        collectCallsFromExpression(resume->value.get(), calls);
     }
 }
 
@@ -424,6 +447,26 @@ void DeadCodeEliminationPass::collectFromExpression(Expression* expr) {
     }
     else if (auto* deref = dynamic_cast<DerefExpr*>(expr)) {
         collectFromExpression(deref->operand.get());
+    }
+    else if (auto* handle = dynamic_cast<HandleExpr*>(expr)) {
+        // Handle algebraic effects - collect from the expression being handled
+        collectFromExpression(handle->expr.get());
+        // Also collect from handler bodies
+        for (auto& handler : handle->handlers) {
+            if (handler.body) {
+                collectFromStatement(handler.body.get());
+            }
+        }
+    }
+    else if (auto* perform = dynamic_cast<PerformEffectExpr*>(expr)) {
+        // Collect from perform arguments
+        for (auto& arg : perform->args) {
+            collectFromExpression(arg.get());
+        }
+    }
+    else if (auto* resume = dynamic_cast<ResumeExpr*>(expr)) {
+        // Collect from resume value
+        collectFromExpression(resume->value.get());
     }
 }
 
@@ -671,4 +714,4 @@ bool DeadCodeEliminationPass::hasSideEffects(Expression* expr) {
     return false;
 }
 
-} // namespace flex
+} // namespace tyl

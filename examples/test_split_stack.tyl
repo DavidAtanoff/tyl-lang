@@ -1,0 +1,7 @@
+// Test split with mutable variable (forces stack allocation)
+
+fn main -> int:
+    mut x = split("a,b", ",")
+    print(len(x))
+    print("\n")
+    return 0

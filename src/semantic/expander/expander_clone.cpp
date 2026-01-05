@@ -1,9 +1,9 @@
-// Flex Compiler - Macro Expander Clone Functions
+// Tyl Compiler - Macro Expander Clone Functions
 // Expression and statement cloning with parameter substitution
 
 #include "expander_base.h"
 
-namespace flex {
+namespace tyl {
 
 ExprPtr MacroExpander::cloneExpr(Expression* expr, const std::unordered_map<std::string, Expression*>& params) {
     if (!expr) return nullptr;
@@ -383,4 +383,4 @@ ExprPtr MacroExpander::convertIfToTernary(IfStmt* ifStmt,
     return std::make_unique<TernaryExpr>(std::move(condition), std::move(thenValue), std::move(elseValue), loc);
 }
 
-} // namespace flex
+} // namespace tyl

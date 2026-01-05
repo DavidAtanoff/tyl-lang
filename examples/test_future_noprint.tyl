@@ -1,0 +1,7 @@
+// No Print Test
+
+fn main -> int:
+    let f = make_future[int]()
+    let ready = future_is_ready(f)
+    future_set(f, 42)
+    return 0

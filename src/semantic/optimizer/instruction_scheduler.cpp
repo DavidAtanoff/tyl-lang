@@ -1,10 +1,10 @@
-// Flex Compiler - Instruction Scheduler Implementation
+// Tyl Compiler - Instruction Scheduler Implementation
 // Reorders instructions to hide latencies and improve pipeline utilization
 #include "instruction_scheduler.h"
 #include <algorithm>
 #include <queue>
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // Instruction Scheduler Pass
@@ -488,4 +488,4 @@ InstructionLatency MachineCodeScheduler::getInstructionLatency(uint8_t opcode) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

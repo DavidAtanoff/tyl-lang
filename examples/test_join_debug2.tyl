@@ -1,0 +1,27 @@
+// Debug join test - minimal
+
+fn main -> int:
+    print("Creating list...\n")
+    let words = ["hello", "world"]
+    print("List created\n")
+    
+    print("Len: ")
+    print(len(words))
+    print("\n")
+    
+    print("words[1]: ")
+    print(words[1])
+    print("\n")
+    
+    print("words[2]: ")
+    print(words[2])
+    print("\n")
+    
+    print("Calling join...\n")
+    let result = join(words, ",")
+    print("After join\n")
+    print("Result: '")
+    print(result)
+    print("'\n")
+    
+    return 0

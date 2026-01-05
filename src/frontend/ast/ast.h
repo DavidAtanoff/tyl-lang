@@ -1,11 +1,11 @@
-// Flex Compiler - Abstract Syntax Tree
-#ifndef FLEX_AST_H
-#define FLEX_AST_H
+// Tyl Compiler - Abstract Syntax Tree
+#ifndef TYL_AST_H
+#define TYL_AST_H
 
 #include "common/common.h"
 #include "frontend/token/token.h"
 
-namespace flex {
+namespace tyl {
 
 struct ASTVisitor;
 struct ASTNode { SourceLocation location; virtual ~ASTNode() = default; virtual void accept(ASTVisitor& visitor) = 0; };
@@ -14,9 +14,11 @@ using ASTPtr = std::unique_ptr<ASTNode>;
 struct Expression : ASTNode {};
 using ExprPtr = std::unique_ptr<Expression>;
 
-struct IntegerLiteral : Expression { int64_t value; IntegerLiteral(int64_t v, SourceLocation loc) : value(v) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct FloatLiteral : Expression { double value; FloatLiteral(double v, SourceLocation loc) : value(v) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct IntegerLiteral : Expression { int64_t value; std::string suffix; IntegerLiteral(int64_t v, SourceLocation loc, const std::string& suf = "") : value(v), suffix(suf) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct FloatLiteral : Expression { double value; std::string suffix; FloatLiteral(double v, SourceLocation loc, const std::string& suf = "") : value(v), suffix(suf) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct StringLiteral : Expression { std::string value; StringLiteral(std::string v, SourceLocation loc) : value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct CharLiteral : Expression { uint32_t value; CharLiteral(uint32_t v, SourceLocation loc) : value(v) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ByteStringLiteral : Expression { std::vector<uint8_t> value; bool isRaw; ByteStringLiteral(std::vector<uint8_t> v, bool raw, SourceLocation loc) : value(std::move(v)), isRaw(raw) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct InterpolatedString : Expression { std::vector<std::variant<std::string, ExprPtr>> parts; InterpolatedString(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct BoolLiteral : Expression { bool value; BoolLiteral(bool v, SourceLocation loc) : value(v) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct NilLiteral : Expression { NilLiteral(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -34,6 +36,7 @@ struct LambdaExpr : Expression { std::vector<std::pair<std::string, std::string>
 struct TernaryExpr : Expression { ExprPtr condition; ExprPtr thenExpr; ExprPtr elseExpr; TernaryExpr(ExprPtr c, ExprPtr t, ExprPtr e, SourceLocation loc) : condition(std::move(c)), thenExpr(std::move(t)), elseExpr(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ListCompExpr : Expression { ExprPtr expr; std::string var; ExprPtr iterable; ExprPtr condition; ListCompExpr(ExprPtr e, std::string v, ExprPtr it, ExprPtr cond, SourceLocation loc) : expr(std::move(e)), var(std::move(v)), iterable(std::move(it)), condition(std::move(cond)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct AddressOfExpr : Expression { ExprPtr operand; AddressOfExpr(ExprPtr e, SourceLocation loc) : operand(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct BorrowExpr : Expression { ExprPtr operand; bool isMutable; BorrowExpr(ExprPtr e, bool mut, SourceLocation loc) : operand(std::move(e)), isMutable(mut) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct DerefExpr : Expression { ExprPtr operand; DerefExpr(ExprPtr e, SourceLocation loc) : operand(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct NewExpr : Expression { std::string typeName; std::vector<ExprPtr> args; NewExpr(std::string t, SourceLocation loc) : typeName(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct CastExpr : Expression { ExprPtr expr; std::string targetType; CastExpr(ExprPtr e, std::string t, SourceLocation loc) : expr(std::move(e)), targetType(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -65,8 +68,77 @@ struct SemAcquireExpr : Expression { ExprPtr sem; SemAcquireExpr(ExprPtr s, Sour
 struct SemReleaseExpr : Expression { ExprPtr sem; SemReleaseExpr(ExprPtr s, SourceLocation loc) : sem(std::move(s)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct SemTryAcquireExpr : Expression { ExprPtr sem; SemTryAcquireExpr(ExprPtr s, SourceLocation loc) : sem(std::move(s)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 
+// Memory ordering for atomic operations
+enum class MemoryOrder { Relaxed, Acquire, Release, AcqRel, SeqCst };
+
+// Atomic integer expressions
+struct MakeAtomicExpr : Expression { std::string elementType; ExprPtr initialValue; MakeAtomicExpr(std::string t, ExprPtr init, SourceLocation loc) : elementType(std::move(t)), initialValue(std::move(init)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicLoadExpr : Expression { ExprPtr atomic; MemoryOrder order = MemoryOrder::SeqCst; AtomicLoadExpr(ExprPtr a, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicStoreExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicStoreExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicSwapExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicSwapExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicCasExpr : Expression { ExprPtr atomic; ExprPtr expected; ExprPtr desired; MemoryOrder successOrder = MemoryOrder::SeqCst; MemoryOrder failureOrder = MemoryOrder::SeqCst; AtomicCasExpr(ExprPtr a, ExprPtr e, ExprPtr d, SourceLocation loc, MemoryOrder so = MemoryOrder::SeqCst, MemoryOrder fo = MemoryOrder::SeqCst) : atomic(std::move(a)), expected(std::move(e)), desired(std::move(d)), successOrder(so), failureOrder(fo) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicAddExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicAddExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicSubExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicSubExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicAndExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicAndExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicOrExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicOrExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AtomicXorExpr : Expression { ExprPtr atomic; ExprPtr value; MemoryOrder order = MemoryOrder::SeqCst; AtomicXorExpr(ExprPtr a, ExprPtr v, SourceLocation loc, MemoryOrder o = MemoryOrder::SeqCst) : atomic(std::move(a)), value(std::move(v)), order(o) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Smart Pointer expressions - Box, Rc, Arc, Weak, Cell, RefCell
+struct MakeBoxExpr : Expression { std::string elementType; ExprPtr value; MakeBoxExpr(std::string t, ExprPtr v, SourceLocation loc) : elementType(std::move(t)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct MakeRcExpr : Expression { std::string elementType; ExprPtr value; MakeRcExpr(std::string t, ExprPtr v, SourceLocation loc) : elementType(std::move(t)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct MakeArcExpr : Expression { std::string elementType; ExprPtr value; MakeArcExpr(std::string t, ExprPtr v, SourceLocation loc) : elementType(std::move(t)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct MakeWeakExpr : Expression { ExprPtr source; bool isAtomic; MakeWeakExpr(ExprPtr s, bool atomic, SourceLocation loc) : source(std::move(s)), isAtomic(atomic) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct MakeCellExpr : Expression { std::string elementType; ExprPtr value; MakeCellExpr(std::string t, ExprPtr v, SourceLocation loc) : elementType(std::move(t)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct MakeRefCellExpr : Expression { std::string elementType; ExprPtr value; MakeRefCellExpr(std::string t, ExprPtr v, SourceLocation loc) : elementType(std::move(t)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Advanced Concurrency - Future/Promise
+struct MakeFutureExpr : Expression { std::string elementType; MakeFutureExpr(std::string t, SourceLocation loc) : elementType(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct FutureGetExpr : Expression { ExprPtr future; FutureGetExpr(ExprPtr f, SourceLocation loc) : future(std::move(f)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct FutureSetExpr : Expression { ExprPtr future; ExprPtr value; FutureSetExpr(ExprPtr f, ExprPtr v, SourceLocation loc) : future(std::move(f)), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct FutureIsReadyExpr : Expression { ExprPtr future; FutureIsReadyExpr(ExprPtr f, SourceLocation loc) : future(std::move(f)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Advanced Concurrency - Thread Pool
+struct MakeThreadPoolExpr : Expression { ExprPtr numWorkers; MakeThreadPoolExpr(ExprPtr n, SourceLocation loc) : numWorkers(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ThreadPoolSubmitExpr : Expression { ExprPtr pool; ExprPtr task; ThreadPoolSubmitExpr(ExprPtr p, ExprPtr t, SourceLocation loc) : pool(std::move(p)), task(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ThreadPoolShutdownExpr : Expression { ExprPtr pool; ThreadPoolShutdownExpr(ExprPtr p, SourceLocation loc) : pool(std::move(p)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Advanced Concurrency - Timeout operations
+struct TimeoutExpr : Expression { ExprPtr operation; ExprPtr timeoutMs; TimeoutExpr(ExprPtr op, ExprPtr ms, SourceLocation loc) : operation(std::move(op)), timeoutMs(std::move(ms)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ChanRecvTimeoutExpr : Expression { ExprPtr channel; ExprPtr timeoutMs; ChanRecvTimeoutExpr(ExprPtr ch, ExprPtr ms, SourceLocation loc) : channel(std::move(ch)), timeoutMs(std::move(ms)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ChanSendTimeoutExpr : Expression { ExprPtr channel; ExprPtr value; ExprPtr timeoutMs; ChanSendTimeoutExpr(ExprPtr ch, ExprPtr v, ExprPtr ms, SourceLocation loc) : channel(std::move(ch)), value(std::move(v)), timeoutMs(std::move(ms)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Advanced Concurrency - Cancellation
+struct MakeCancelTokenExpr : Expression { MakeCancelTokenExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct CancelExpr : Expression { ExprPtr token; CancelExpr(ExprPtr t, SourceLocation loc) : token(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct IsCancelledExpr : Expression { ExprPtr token; IsCancelledExpr(ExprPtr t, SourceLocation loc) : token(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Async Runtime - Event Loop and Task Management
+struct AsyncRuntimeInitExpr : Expression { ExprPtr numWorkers; AsyncRuntimeInitExpr(ExprPtr n, SourceLocation loc) : numWorkers(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AsyncRuntimeRunExpr : Expression { AsyncRuntimeRunExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AsyncRuntimeShutdownExpr : Expression { AsyncRuntimeShutdownExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AsyncSpawnExpr : Expression { ExprPtr task; AsyncSpawnExpr(ExprPtr t, SourceLocation loc) : task(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AsyncSleepExpr : Expression { ExprPtr durationMs; AsyncSleepExpr(ExprPtr d, SourceLocation loc) : durationMs(std::move(d)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct AsyncYieldExpr : Expression { AsyncYieldExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Syntax Redesign - New Expression Types
+// Placeholder expression for _ in lambdas (e.g., _ * 2 becomes x => x * 2)
+struct PlaceholderExpr : Expression { PlaceholderExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Inclusive range expression (..=)
+struct InclusiveRangeExpr : Expression { ExprPtr start; ExprPtr end; ExprPtr step; InclusiveRangeExpr(ExprPtr s, ExprPtr e, ExprPtr st, SourceLocation loc) : start(std::move(s)), end(std::move(e)), step(std::move(st)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Safe navigation expression (?.)
+struct SafeNavExpr : Expression { ExprPtr object; std::string member; SafeNavExpr(ExprPtr obj, std::string m, SourceLocation loc) : object(std::move(obj)), member(std::move(m)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Type check expression (is)
+struct TypeCheckExpr : Expression { ExprPtr value; std::string typeName; TypeCheckExpr(ExprPtr v, std::string t, SourceLocation loc) : value(std::move(v)), typeName(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
 struct Statement : ASTNode {};
 using StmtPtr = std::unique_ptr<Statement>;
+
+// Advanced Concurrency - Select (wait on multiple channels) - must be after StmtPtr
+struct SelectCase { ExprPtr channel; bool isSend; ExprPtr value; StmtPtr body; SelectCase(ExprPtr ch, bool send, ExprPtr v, StmtPtr b) : channel(std::move(ch)), isSend(send), value(std::move(v)), body(std::move(b)) {} };
+struct SelectExpr : Expression { std::vector<SelectCase> cases; StmtPtr defaultCase; SelectExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 
 struct ExprStmt : Statement { ExprPtr expr; ExprStmt(ExprPtr e, SourceLocation loc) : expr(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct VarDecl : Statement { std::string name; std::string typeName; ExprPtr initializer; bool isMutable = true; bool isConst = false; VarDecl(std::string n, std::string t, ExprPtr init, SourceLocation loc) : name(std::move(n)), typeName(std::move(t)), initializer(std::move(init)) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -74,13 +146,13 @@ struct DestructuringDecl : Statement { enum class Kind { TUPLE, RECORD }; Kind k
 struct AssignStmt : Statement { ExprPtr target; TokenType op; ExprPtr value; AssignStmt(ExprPtr t, TokenType o, ExprPtr v, SourceLocation loc) : target(std::move(t)), op(o), value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct Block : Statement { std::vector<StmtPtr> statements; Block(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct IfStmt : Statement { ExprPtr condition; StmtPtr thenBranch; std::vector<std::pair<ExprPtr, StmtPtr>> elifBranches; StmtPtr elseBranch; IfStmt(ExprPtr c, StmtPtr t, SourceLocation loc) : condition(std::move(c)), thenBranch(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct WhileStmt : Statement { ExprPtr condition; StmtPtr body; WhileStmt(ExprPtr c, StmtPtr b, SourceLocation loc) : condition(std::move(c)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct ForStmt : Statement { std::string var; ExprPtr iterable; StmtPtr body; int unrollHint = 0; ForStmt(std::string v, ExprPtr it, StmtPtr b, SourceLocation loc) : var(std::move(v)), iterable(std::move(it)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct WhileStmt : Statement { std::string label; ExprPtr condition; StmtPtr body; WhileStmt(ExprPtr c, StmtPtr b, SourceLocation loc) : condition(std::move(c)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ForStmt : Statement { std::string label; std::string var; ExprPtr iterable; StmtPtr body; int unrollHint = 0; ForStmt(std::string v, ExprPtr it, StmtPtr b, SourceLocation loc) : var(std::move(v)), iterable(std::move(it)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct MatchCase { ExprPtr pattern; ExprPtr guard; StmtPtr body; MatchCase(ExprPtr p, ExprPtr g, StmtPtr b) : pattern(std::move(p)), guard(std::move(g)), body(std::move(b)) {} };
 struct MatchStmt : Statement { ExprPtr value; std::vector<MatchCase> cases; StmtPtr defaultCase; MatchStmt(ExprPtr v, SourceLocation loc) : value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ReturnStmt : Statement { ExprPtr value; ReturnStmt(ExprPtr v, SourceLocation loc) : value(std::move(v)) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct BreakStmt : Statement { BreakStmt(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct ContinueStmt : Statement { ContinueStmt(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct BreakStmt : Statement { std::string label; BreakStmt(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct ContinueStmt : Statement { std::string label; ContinueStmt(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct TryStmt : Statement { ExprPtr tryExpr; ExprPtr elseExpr; TryStmt(ExprPtr t, ExprPtr e, SourceLocation loc) : tryExpr(std::move(t)), elseExpr(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 // Calling convention for FFI
 enum class CallingConvention {
@@ -91,7 +163,7 @@ enum class CallingConvention {
     Win64       // Windows x64 ABI
 };
 
-struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::pair<std::string, std::string>> params; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
+struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> lifetimeParams; std::vector<std::pair<std::string, std::string>> params; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; bool isExport = false; bool isHidden = false; bool isWeak = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
 // Bitfield specification for a record field
 struct BitfieldSpec {
     int bitWidth = 0;          // Number of bits (0 = not a bitfield)
@@ -123,7 +195,24 @@ struct UnionDecl : Statement {
     void accept(ASTVisitor& visitor) override; 
 };
 struct EnumDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::pair<std::string, std::optional<int64_t>>> variants; EnumDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct TypeAlias : Statement { std::string name; std::string targetType; TypeAlias(std::string n, std::string t, SourceLocation loc) : name(std::move(n)), targetType(std::move(t)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Type parameter for dependent types - can be a type (T) or a value (N: int)
+struct DependentTypeParam {
+    std::string name;           // Parameter name (e.g., "T" or "N")
+    std::string kind;           // "type" for type params, or a type name for value params (e.g., "int")
+    bool isValue = false;       // true if this is a value parameter (N: int)
+    DependentTypeParam(std::string n, std::string k = "type", bool val = false) 
+        : name(std::move(n)), kind(std::move(k)), isValue(val) {}
+};
+
+struct TypeAlias : Statement { 
+    std::string name; 
+    std::string targetType; 
+    ExprPtr constraint;                              // where clause constraint (e.g., len(_) > 0)
+    std::vector<DependentTypeParam> typeParams;     // Type and value parameters [T, N: int]
+    TypeAlias(std::string n, std::string t, SourceLocation loc) : name(std::move(n)), targetType(std::move(t)) { location = loc; } 
+    void accept(ASTVisitor& visitor) override; 
+};
 struct TraitDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> superTraits; std::vector<std::unique_ptr<FnDecl>> methods; TraitDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ImplBlock : Statement { std::string traitName; std::string typeName; std::vector<std::string> typeParams; std::vector<std::unique_ptr<FnDecl>> methods; ImplBlock(std::string trait, std::string type, SourceLocation loc) : traitName(std::move(trait)), typeName(std::move(type)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct UnsafeBlock : Statement { StmtPtr body; UnsafeBlock(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -151,12 +240,91 @@ struct ModuleDecl : Statement {
 struct DeleteStmt : Statement { ExprPtr expr; DeleteStmt(ExprPtr e, SourceLocation loc) : expr(std::move(e)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct LockStmt : Statement { ExprPtr mutex; StmtPtr body; LockStmt(ExprPtr m, StmtPtr b, SourceLocation loc) : mutex(std::move(m)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct AsmStmt : Statement { std::string code; std::vector<std::string> outputs; std::vector<std::string> inputs; std::vector<std::string> clobbers; AsmStmt(std::string c, SourceLocation loc) : code(std::move(c)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Syntax Redesign - New Statement Types
+// Loop statement (infinite loop)
+struct LoopStmt : Statement { std::string label; StmtPtr body; LoopStmt(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// With statement (resource management)
+struct WithStmt : Statement { ExprPtr resource; std::string alias; StmtPtr body; WithStmt(ExprPtr r, std::string a, StmtPtr b, SourceLocation loc) : resource(std::move(r)), alias(std::move(a)), body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Scope statement (structured concurrency)
+struct ScopeStmt : Statement { std::string label; ExprPtr timeout; StmtPtr body; ScopeStmt(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Contract statements
+struct RequireStmt : Statement { ExprPtr condition; std::string message; RequireStmt(ExprPtr c, std::string m, SourceLocation loc) : condition(std::move(c)), message(std::move(m)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct EnsureStmt : Statement { ExprPtr condition; std::string message; EnsureStmt(ExprPtr c, std::string m, SourceLocation loc) : condition(std::move(c)), message(std::move(m)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct InvariantStmt : Statement { ExprPtr condition; std::string message; InvariantStmt(ExprPtr c, std::string m, SourceLocation loc) : condition(std::move(c)), message(std::move(m)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Comptime block (compile-time execution)
+struct ComptimeBlock : Statement { StmtPtr body; ComptimeBlock(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+
+// Algebraic Effects - Effect Declaration
+// effect Error[E]:
+//     fn raise e: E -> never
+struct EffectOpDecl {
+    std::string name;                                    // Operation name (e.g., "raise", "get", "put")
+    std::vector<std::pair<std::string, std::string>> params;  // Parameters
+    std::string returnType;                              // Return type (can be "never" for non-returning ops)
+    EffectOpDecl(std::string n) : name(std::move(n)) {}
+};
+
+struct EffectDecl : Statement {
+    std::string name;                                    // Effect name (e.g., "Error", "State", "Async")
+    std::vector<std::string> typeParams;                 // Type parameters [E], [S], etc.
+    std::vector<EffectOpDecl> operations;                // Effect operations
+    EffectDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
+// Algebraic Effects - Perform Effect Operation
+// raise("division by zero")  or  get()  or  put(n + 1)
+struct PerformEffectExpr : Expression {
+    std::string effectName;                              // Effect name (e.g., "Error", "State")
+    std::string opName;                                  // Operation name (e.g., "raise", "get", "put")
+    std::vector<ExprPtr> args;                           // Arguments to the operation
+    PerformEffectExpr(std::string effect, std::string op, SourceLocation loc) 
+        : effectName(std::move(effect)), opName(std::move(op)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
+// Algebraic Effects - Effect Handler Case
+// Error.raise(e) => println("Error: {e}"); 0
+struct EffectHandlerCase {
+    std::string effectName;                              // Effect name
+    std::string opName;                                  // Operation name
+    std::vector<std::string> paramNames;                 // Bound parameter names
+    std::string resumeParam;                             // Optional resume continuation parameter
+    StmtPtr body;                                        // Handler body
+    EffectHandlerCase(std::string effect, std::string op) 
+        : effectName(std::move(effect)), opName(std::move(op)) {}
+};
+
+// Algebraic Effects - Handle Expression
+// handle divide(10, 0):
+//     Error.raise(e) => println("Error: {e}"); 0
+struct HandleExpr : Expression {
+    ExprPtr expr;                                        // Expression to handle
+    std::vector<EffectHandlerCase> handlers;             // Effect handlers
+    HandleExpr(ExprPtr e, SourceLocation loc) : expr(std::move(e)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
+// Algebraic Effects - Resume Expression (continue from effect handler)
+// resume(value)  - continues the computation with the given value
+struct ResumeExpr : Expression {
+    ExprPtr value;                                       // Value to resume with
+    ResumeExpr(ExprPtr v, SourceLocation loc) : value(std::move(v)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
 struct Program : ASTNode { std::vector<StmtPtr> statements; Program(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 
 struct ASTVisitor {
     virtual ~ASTVisitor() = default;
     virtual void visit(IntegerLiteral& node) = 0; virtual void visit(FloatLiteral& node) = 0;
-    virtual void visit(StringLiteral& node) = 0; virtual void visit(InterpolatedString& node) = 0;
+    virtual void visit(StringLiteral& node) = 0; virtual void visit(CharLiteral& node) = 0;
+    virtual void visit(ByteStringLiteral& node) = 0; virtual void visit(InterpolatedString& node) = 0;
     virtual void visit(BoolLiteral& node) = 0; virtual void visit(NilLiteral& node) = 0;
     virtual void visit(Identifier& node) = 0; virtual void visit(BinaryExpr& node) = 0;
     virtual void visit(UnaryExpr& node) = 0; virtual void visit(CallExpr& node) = 0;
@@ -165,7 +333,7 @@ struct ASTVisitor {
     virtual void visit(MapExpr& node) = 0;
     virtual void visit(RangeExpr& node) = 0; virtual void visit(LambdaExpr& node) = 0;
     virtual void visit(TernaryExpr& node) = 0; virtual void visit(ListCompExpr& node) = 0;
-    virtual void visit(AddressOfExpr& node) = 0; virtual void visit(DerefExpr& node) = 0;
+    virtual void visit(AddressOfExpr& node) = 0; virtual void visit(BorrowExpr& node) = 0; virtual void visit(DerefExpr& node) = 0;
     virtual void visit(NewExpr& node) = 0; virtual void visit(CastExpr& node) = 0;
     virtual void visit(AwaitExpr& node) = 0; virtual void visit(SpawnExpr& node) = 0;
     virtual void visit(DSLBlock& node) = 0; virtual void visit(AssignExpr& node) = 0;
@@ -188,6 +356,49 @@ struct ASTVisitor {
     virtual void visit(SemAcquireExpr& node) = 0;
     virtual void visit(SemReleaseExpr& node) = 0;
     virtual void visit(SemTryAcquireExpr& node) = 0;
+    virtual void visit(MakeAtomicExpr& node) = 0;
+    virtual void visit(AtomicLoadExpr& node) = 0;
+    virtual void visit(AtomicStoreExpr& node) = 0;
+    virtual void visit(AtomicSwapExpr& node) = 0;
+    virtual void visit(AtomicCasExpr& node) = 0;
+    virtual void visit(AtomicAddExpr& node) = 0;
+    virtual void visit(AtomicSubExpr& node) = 0;
+    virtual void visit(AtomicAndExpr& node) = 0;
+    virtual void visit(AtomicOrExpr& node) = 0;
+    virtual void visit(AtomicXorExpr& node) = 0;
+    // Smart Pointer expressions
+    virtual void visit(MakeBoxExpr& node) = 0;
+    virtual void visit(MakeRcExpr& node) = 0;
+    virtual void visit(MakeArcExpr& node) = 0;
+    virtual void visit(MakeWeakExpr& node) = 0;
+    virtual void visit(MakeCellExpr& node) = 0;
+    virtual void visit(MakeRefCellExpr& node) = 0;
+    // Advanced Concurrency - Future/Promise
+    virtual void visit(MakeFutureExpr& node) = 0;
+    virtual void visit(FutureGetExpr& node) = 0;
+    virtual void visit(FutureSetExpr& node) = 0;
+    virtual void visit(FutureIsReadyExpr& node) = 0;
+    // Advanced Concurrency - Thread Pool
+    virtual void visit(MakeThreadPoolExpr& node) = 0;
+    virtual void visit(ThreadPoolSubmitExpr& node) = 0;
+    virtual void visit(ThreadPoolShutdownExpr& node) = 0;
+    // Advanced Concurrency - Select
+    virtual void visit(SelectExpr& node) = 0;
+    // Advanced Concurrency - Timeout
+    virtual void visit(TimeoutExpr& node) = 0;
+    virtual void visit(ChanRecvTimeoutExpr& node) = 0;
+    virtual void visit(ChanSendTimeoutExpr& node) = 0;
+    // Advanced Concurrency - Cancellation
+    virtual void visit(MakeCancelTokenExpr& node) = 0;
+    virtual void visit(CancelExpr& node) = 0;
+    virtual void visit(IsCancelledExpr& node) = 0;
+    // Async Runtime - Event Loop and Task Management
+    virtual void visit(AsyncRuntimeInitExpr& node) = 0;
+    virtual void visit(AsyncRuntimeRunExpr& node) = 0;
+    virtual void visit(AsyncRuntimeShutdownExpr& node) = 0;
+    virtual void visit(AsyncSpawnExpr& node) = 0;
+    virtual void visit(AsyncSleepExpr& node) = 0;
+    virtual void visit(AsyncYieldExpr& node) = 0;
     virtual void visit(ExprStmt& node) = 0;
     virtual void visit(VarDecl& node) = 0; virtual void visit(DestructuringDecl& node) = 0;
     virtual void visit(AssignStmt& node) = 0; virtual void visit(Block& node) = 0;
@@ -207,9 +418,27 @@ struct ASTVisitor {
     virtual void visit(DeleteStmt& node) = 0;
     virtual void visit(LockStmt& node) = 0;
     virtual void visit(AsmStmt& node) = 0;
+    // Syntax Redesign - New Expression Visitors
+    virtual void visit(PlaceholderExpr& node) = 0;
+    virtual void visit(InclusiveRangeExpr& node) = 0;
+    virtual void visit(SafeNavExpr& node) = 0;
+    virtual void visit(TypeCheckExpr& node) = 0;
+    // Syntax Redesign - New Statement Visitors
+    virtual void visit(LoopStmt& node) = 0;
+    virtual void visit(WithStmt& node) = 0;
+    virtual void visit(ScopeStmt& node) = 0;
+    virtual void visit(RequireStmt& node) = 0;
+    virtual void visit(EnsureStmt& node) = 0;
+    virtual void visit(InvariantStmt& node) = 0;
+    virtual void visit(ComptimeBlock& node) = 0;
+    // Algebraic Effects
+    virtual void visit(EffectDecl& node) = 0;
+    virtual void visit(PerformEffectExpr& node) = 0;
+    virtual void visit(HandleExpr& node) = 0;
+    virtual void visit(ResumeExpr& node) = 0;
     virtual void visit(Program& node) = 0;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_AST_H
+#endif // TYL_AST_H

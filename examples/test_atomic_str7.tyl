@@ -1,0 +1,10 @@
+// Test storing str result
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](42)
+    let val: int = counter.load()
+    let s: str = str(val)
+    print(s)
+    return 0
+
+main()

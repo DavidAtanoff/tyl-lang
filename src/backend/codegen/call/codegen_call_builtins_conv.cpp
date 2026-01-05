@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Type Conversion Builtin Calls
+// Tyl Compiler - Native Code Generator Type Conversion Builtin Calls
 // Handles: int, float, str, bool, type conversions
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Type conversion builtin implementations extracted from codegen_call_core.cpp
 
@@ -127,39 +127,18 @@ void NativeCodeGen::emitConvStr(CallExpr& node) {
         return;
     }
     
-    // Runtime conversion - use sprintf
-    allocLocal("$str_buf");
-    int32_t bufOffset = locals["$str_buf"];
-    for (int i = 0; i < 31; i++) allocLocal("$str_pad" + std::to_string(i));
-    
+    // Runtime conversion - use inline itoa/ftoa (same as print)
     node.args[0]->accept(*this);
     
     if (lastExprWasFloat_) {
-        // Float to string
-        asm_.movq_rax_xmm0();
-        asm_.mov_rdx_rax();
-        uint32_t fmtRva = addString("%g");
-        asm_.lea_rcx_rbp(bufOffset);
-        asm_.lea_rax_rip_fixup(fmtRva);
-        asm_.push_rax();
-        asm_.pop_rax();
-        // sprintf(buf, "%g", value)
-        // Note: simplified - actual implementation would need proper sprintf call
+        // Float to string - use ftoa which returns pointer in rax
+        emitFtoa();
     } else {
-        // Int to string
-        asm_.mov_rdx_rax();
-        uint32_t fmtRva = addString("%lld");
-        asm_.lea_rcx_rbp(bufOffset);
-        asm_.push_rdx();
-        asm_.lea_rax_rip_fixup(fmtRva);
-        asm_.mov_rdx_rax();
-        asm_.pop_r8();
-        if (!stackAllocated_) asm_.sub_rsp_imm32(0x28);
-        asm_.call_mem_rip(pe_.getImportRVA("sprintf"));
-        if (!stackAllocated_) asm_.add_rsp_imm32(0x28);
+        // Int to string - use itoa which returns pointer in rax, length in rcx
+        emitItoa();
     }
     
-    asm_.lea_rax_rbp(bufOffset);
+    // Result is already in rax (pointer to string in static buffer)
     lastExprWasFloat_ = false;
 }
 
@@ -272,4 +251,4 @@ void NativeCodeGen::emitConvType(CallExpr& node) {
     asm_.lea_rax_rip_fixup(rva);
 }
 
-} // namespace flex
+} // namespace tyl

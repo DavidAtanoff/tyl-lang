@@ -1,0 +1,28 @@
+// Debug join test - step by step
+
+fn main -> int:
+    print("1. Creating list\n")
+    let words = ["aa", "bb"]
+    print("2. List created\n")
+    
+    print("3. Checking len\n")
+    let n = len(words)
+    print("4. Len = ")
+    print(n)
+    print("\n")
+    
+    print("5. Checking element 1\n")
+    let e1 = words[1]
+    print("6. Element 1 = ")
+    print(e1)
+    print("\n")
+    
+    print("7. About to call join\n")
+    // Try with a simple delimiter
+    let result = join(words, ",")
+    print("8. Join returned\n")
+    print("9. Result = ")
+    print(result)
+    print("\n")
+    
+    return 0

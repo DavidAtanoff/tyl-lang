@@ -1,0 +1,12 @@
+// Minimal test - just handle with a literal
+
+effect Reader:
+    fn ask -> int
+
+fn main -> int:
+    print("Before handle")
+    let x = 42
+    print("x =")
+    print(x)
+    print("Done")
+    return 0

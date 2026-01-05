@@ -1,0 +1,11 @@
+// Test cfg with return type
+@cfg(windows)
+fn get_platform -> str:
+    return "Windows"
+
+@cfg(linux)
+fn get_platform -> str:
+    return "Linux"
+
+fn main:
+    println(get_platform())

@@ -1,11 +1,11 @@
-// Flex Compiler - Native Code Generator Constant Evaluation
+// Tyl Compiler - Native Code Generator Constant Evaluation
 // Handles: tryEvalConstant, tryEvalConstantFloat, tryEvalConstantString
 
 #include "backend/codegen/codegen_base.h"
 #include <cmath>
 #include <sstream>
 
-namespace flex {
+namespace tyl {
 
 bool NativeCodeGen::tryEvalConstant(Expression* expr, int64_t& outValue) {
     if (auto* intLit = dynamic_cast<IntegerLiteral*>(expr)) {
@@ -283,4 +283,4 @@ bool NativeCodeGen::tryEvalConstantString(Expression* expr, std::string& outValu
     return false;
 }
 
-} // namespace flex
+} // namespace tyl

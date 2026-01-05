@@ -1,0 +1,44 @@
+// Test Borrow Checker and Ownership in Function Parameters
+
+// Function that takes ownership (moves the value)
+fn consume_list data: [int]:
+    print("Consumed list with {len(data)} elements")
+
+// Function that borrows immutably
+fn print_list data: &[int]:
+    print("List has {len(data)} elements")
+
+// Function that borrows mutably
+fn modify_list data: &mut [int]:
+    data[1] = 999
+
+fn main():
+    print("=== Borrow Checker Tests ===")
+    
+    // Test 1: Ownership transfer to function
+    print("\n--- Test 1: Ownership transfer ---")
+    let a = [1, 2, 3]
+    consume_list(a)
+    // print("a = {a}")  // ERROR: a was moved
+    print("a was consumed")
+    
+    // Test 2: Immutable borrow
+    print("\n--- Test 2: Immutable borrow ---")
+    let b = [4, 5, 6]
+    print_list(&b)
+    print("b[1] = {b[1]}")  // OK: b still valid after borrow ends
+    
+    // Test 3: Mutable borrow
+    print("\n--- Test 3: Mutable borrow ---")
+    mut c = [7, 8, 9]
+    modify_list(&mut c)
+    print("c[1] = {c[1]}")  // Should be 999
+    
+    // Test 4: Multiple immutable borrows
+    print("\n--- Test 4: Multiple immutable borrows ---")
+    let d = [10, 11, 12]
+    print_list(&d)
+    print_list(&d)  // OK: multiple immutable borrows allowed
+    print("d still valid")
+    
+    print("\n=== All borrow tests passed! ===")

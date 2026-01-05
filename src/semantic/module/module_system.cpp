@@ -1,4 +1,4 @@
-// Flex Compiler - Module System Implementation
+// Tyl Compiler - Module System Implementation
 #include "module_system.h"
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser_base.h"
@@ -7,13 +7,13 @@
 #include <sstream>
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 std::string ModuleSystem::resolveModulePath(const std::string& moduleName, const std::string& fromFile) {
     // If it's already a file path (contains / or \ or ends with .fx/.flex)
     if (moduleName.find('/') != std::string::npos || 
         moduleName.find('\\') != std::string::npos ||
-        strEndsWith(moduleName, ".fx") || 
+        strEndsWith(moduleName, ".tyl") || 
         strEndsWith(moduleName, ".flex")) {
         
         // Resolve relative to fromFile if provided
@@ -63,7 +63,7 @@ std::string ModuleSystem::resolveModulePath(const std::string& moduleName, const
         // Also try without .fx extension (directory with mod.fx)
         fs::path dirCandidate = fs::path(searchPath) / moduleName;
         std::replace(dirCandidate.string().begin(), dirCandidate.string().end(), ':', '/');
-        fs::path modFile = dirCandidate / "mod.fx";
+        fs::path modFile = dirCandidate / "mod.tyl";
         if (fs::exists(modFile)) {
             return modFile.string();
         }
@@ -102,7 +102,7 @@ std::string ModuleSystem::moduleNameToPath(const std::string& name) {
     while ((pos = path.find("::", pos)) != std::string::npos) {
         path.replace(pos, 2, "/");
     }
-    return path + ".fx";
+    return path + ".tyl";
 }
 
 Module* ModuleSystem::loadModule(const std::string& name, const std::string& fromFile) {
@@ -206,7 +206,7 @@ void ModuleSystem::processImports(Program& program, const std::string& currentFi
         if (auto* useStmt = dynamic_cast<UseStmt*>(stmt.get())) {
             std::string moduleName = useStmt->layerName;
             
-            // Handle file imports (use "file.fx")
+            // Handle file imports (use "file.tyl")
             if (useStmt->isFileImport) {
                 std::string importPath = resolveModulePath(moduleName, currentFile);
                 
@@ -291,7 +291,7 @@ void ModuleSystem::processImports(Program& program, const std::string& currentFi
                 Module* mod = loadModule(moduleName, currentFile);
                 if (!mod) {
                     // Try as file with .fx extension
-                    mod = loadModule(moduleName + ".fx", currentFile);
+                    mod = loadModule(moduleName + ".tyl", currentFile);
                 }
                 newStatements.push_back(std::move(stmt));
             }
@@ -384,7 +384,7 @@ void ModuleSystem::extractExports(Module& mod) {
 std::unique_ptr<Program> ModuleSystem::parseFile(const std::string& filename) {
     std::ifstream file(filename);
     if (!file) {
-        throw FlexError("Cannot open file: " + filename);
+        throw TylError("Cannot open file: " + filename);
     }
     
     std::stringstream buffer;
@@ -400,4 +400,4 @@ std::unique_ptr<Program> ModuleSystem::parseFile(const std::string& filename) {
     return parser.parse();
 }
 
-} // namespace flex
+} // namespace tyl

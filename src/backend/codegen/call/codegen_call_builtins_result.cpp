@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Result Type Builtin Calls
+// Tyl Compiler - Native Code Generator Result Type Builtin Calls
 // Handles: Ok, Err, is_ok, is_err, unwrap, unwrap_or
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::emitResultOk(CallExpr& node) {
     node.args[0]->accept(*this);
@@ -63,4 +63,4 @@ void NativeCodeGen::emitResultUnwrapOr(CallExpr& node) {
     asm_.label(endLabel);
 }
 
-} // namespace flex
+} // namespace tyl

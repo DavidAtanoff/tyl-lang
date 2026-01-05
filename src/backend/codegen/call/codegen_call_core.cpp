@@ -1,14 +1,345 @@
-// Flex Compiler - Native Code Generator Call Core
+// Tyl Compiler - Native Code Generator Call Core
 // Main CallExpr visitor - dispatches to modular builtin handlers
 
 #include "backend/codegen/codegen_base.h"
 #include "semantic/types/types.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(CallExpr& node) {
     // Handle module function calls (e.g., math.add)
     if (auto* member = dynamic_cast<MemberExpr*>(node.callee.get())) {
+        // Check for .clone() method call - deep copy for ownership system
+        if (member->member == "clone" && node.args.empty()) {
+            // Check if this is a smart pointer clone first
+            if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+                auto smartIt = varSmartPtrTypes_.find(objId->name);
+                if (smartIt != varSmartPtrTypes_.end()) {
+                    const auto& info = smartIt->second;
+                    if (info.kind == SmartPtrInfo::Kind::Rc) {
+                        member->object->accept(*this);  // Get Rc pointer in RAX
+                        emitRcClone();
+                        return;
+                    }
+                    if (info.kind == SmartPtrInfo::Kind::Arc) {
+                        member->object->accept(*this);  // Get Arc pointer in RAX
+                        emitArcClone();
+                        return;
+                    }
+                }
+            }
+            
+            // Evaluate the object to clone
+            member->object->accept(*this);
+            
+            // Check if this is a list variable
+            if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+                // Check if it's a constant list variable (stored as raw data)
+                auto constListIt = constListVars.find(objId->name);
+                if (constListIt != constListVars.end()) {
+                    // Clone a constant list: allocate new GC list and copy elements
+                    emitConstListClone(constListIt->second.size());
+                    return;
+                }
+                if (listVars.count(objId->name)) {
+                    // Clone a runtime list: allocate new list and copy elements
+                    emitListClone();
+                    return;
+                }
+                // Check if it's a string variable
+                if (constStrVars.count(objId->name)) {
+                    // Strings are immutable, just return the same pointer
+                    // (already in RAX from object evaluation)
+                    return;
+                }
+                // Check if it's a record variable
+                auto varTypeIt = varRecordTypes_.find(objId->name);
+                if (varTypeIt != varRecordTypes_.end()) {
+                    emitRecordClone(varTypeIt->second);
+                    return;
+                }
+            }
+            
+            // For primitives or unknown types, just return the value (copy semantics)
+            // Value is already in RAX from object evaluation
+            return;
+        }
+        
+        // Check for atomic method calls (atomic.load(), atomic.store(v), atomic.swap(v), etc.)
+        // We need to check if the object is an atomic type variable
+        if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+            // Check if this variable is an atomic type
+            auto it = varAtomicTypes_.find(objId->name);
+            if (it != varAtomicTypes_.end()) {
+                if (member->member == "load" && node.args.empty()) {
+                    // atomic.load() - load value atomically
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    emitAtomicLoad();
+                    return;
+                }
+                if (member->member == "store" && node.args.size() == 1) {
+                    // atomic.store(v) - store value atomically
+                    node.args[0]->accept(*this);  // Evaluate value
+                    asm_.push_rax();  // Save value
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    asm_.pop_rcx();  // Restore value to RCX
+                    emitAtomicStore();
+                    return;
+                }
+                if (member->member == "swap" && node.args.size() == 1) {
+                    // atomic.swap(v) - swap value atomically, return old value
+                    node.args[0]->accept(*this);  // Evaluate new value
+                    asm_.push_rax();  // Save new value
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    asm_.pop_rcx();  // Restore new value to RCX
+                    emitAtomicSwap();
+                    return;
+                }
+                if (member->member == "cas" && node.args.size() == 2) {
+                    // atomic.cas(expected, desired) - compare-and-swap, returns 1 if success
+                    node.args[1]->accept(*this);  // Evaluate desired
+                    asm_.push_rax();
+                    node.args[0]->accept(*this);  // Evaluate expected
+                    asm_.push_rax();
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    asm_.pop_rcx();  // expected in RCX
+                    asm_.pop_rdx();  // desired in RDX
+                    emitAtomicCas();
+                    return;
+                }
+                if (member->member == "add" && node.args.size() == 1) {
+                    // atomic.add(v) - fetch-and-add, returns old value
+                    node.args[0]->accept(*this);  // Evaluate value
+                    asm_.push_rax();
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    asm_.pop_rcx();  // value in RCX
+                    emitAtomicAdd();
+                    return;
+                }
+                if (member->member == "sub" && node.args.size() == 1) {
+                    // atomic.sub(v) - fetch-and-sub, returns old value
+                    node.args[0]->accept(*this);  // Evaluate value
+                    asm_.push_rax();
+                    member->object->accept(*this);  // Get atomic pointer in RAX
+                    asm_.pop_rcx();  // value in RCX
+                    emitAtomicSub();
+                    return;
+                }
+                if ((member->member == "and" || member->member == "fetch_and") && node.args.size() == 1) {
+                    // atomic.and(v) or atomic.fetch_and(v) - fetch-and-and, returns old value
+                    node.args[0]->accept(*this);
+                    asm_.push_rax();
+                    member->object->accept(*this);
+                    asm_.pop_rcx();
+                    emitAtomicAnd();
+                    return;
+                }
+                if ((member->member == "or" || member->member == "fetch_or") && node.args.size() == 1) {
+                    // atomic.or(v) or atomic.fetch_or(v) - fetch-and-or, returns old value
+                    node.args[0]->accept(*this);
+                    asm_.push_rax();
+                    member->object->accept(*this);
+                    asm_.pop_rcx();
+                    emitAtomicOr();
+                    return;
+                }
+                if ((member->member == "xor" || member->member == "fetch_xor") && node.args.size() == 1) {
+                    // atomic.xor(v) or atomic.fetch_xor(v) - fetch-and-xor, returns old value
+                    node.args[0]->accept(*this);
+                    asm_.push_rax();
+                    member->object->accept(*this);
+                    asm_.pop_rcx();
+                    emitAtomicXor();
+                    return;
+                }
+            }
+            
+            // Check if this variable is a smart pointer type
+            auto smartIt = varSmartPtrTypes_.find(objId->name);
+            if (smartIt != varSmartPtrTypes_.end()) {
+                const auto& info = smartIt->second;
+                
+                // Box methods
+                if (info.kind == SmartPtrInfo::Kind::Box) {
+                    if ((member->member == "deref" || member->member == "get") && node.args.empty()) {
+                        // box.deref() / box.get() - get the value
+                        member->object->accept(*this);  // Get box pointer in RAX
+                        emitBoxDeref();
+                        return;
+                    }
+                    if (member->member == "into_inner" && node.args.empty()) {
+                        // box.into_inner() - consume box and return value
+                        member->object->accept(*this);  // Get box pointer in RAX
+                        emitBoxDeref();
+                        // Note: Box should be dropped after this, but we don't track that here
+                        return;
+                    }
+                }
+                
+                // Rc methods
+                if (info.kind == SmartPtrInfo::Kind::Rc) {
+                    if ((member->member == "deref" || member->member == "get") && node.args.empty()) {
+                        // rc.deref() / rc.get() - get the value
+                        member->object->accept(*this);  // Get Rc pointer in RAX
+                        emitRcDeref();
+                        return;
+                    }
+                    if (member->member == "clone" && node.args.empty()) {
+                        // rc.clone() - increment refcount and return same pointer
+                        member->object->accept(*this);  // Get Rc pointer in RAX
+                        emitRcClone();
+                        return;
+                    }
+                    if (member->member == "strong_count" && node.args.empty()) {
+                        // rc.strong_count() - get the reference count
+                        member->object->accept(*this);  // Get Rc pointer in RAX
+                        // Refcount is at offset 0
+                        asm_.mov_rax_mem_rax();  // Load refcount
+                        return;
+                    }
+                    if (member->member == "downgrade" && node.args.empty()) {
+                        // rc.downgrade() - create a Weak reference
+                        member->object->accept(*this);  // Get Rc pointer in RAX
+                        emitWeakDowngrade(false);
+                        return;
+                    }
+                }
+                
+                // Arc methods
+                if (info.kind == SmartPtrInfo::Kind::Arc) {
+                    if ((member->member == "deref" || member->member == "get") && node.args.empty()) {
+                        // arc.deref() / arc.get() - get the value
+                        member->object->accept(*this);  // Get Arc pointer in RAX
+                        emitArcDeref();
+                        return;
+                    }
+                    if (member->member == "clone" && node.args.empty()) {
+                        // arc.clone() - atomic increment refcount and return same pointer
+                        member->object->accept(*this);  // Get Arc pointer in RAX
+                        emitArcClone();
+                        return;
+                    }
+                    if (member->member == "strong_count" && node.args.empty()) {
+                        // arc.strong_count() - get the reference count atomically
+                        member->object->accept(*this);  // Get Arc pointer in RAX
+                        // Atomic load of refcount at offset 0
+                        emitAtomicLoad();
+                        return;
+                    }
+                    if (member->member == "downgrade" && node.args.empty()) {
+                        // arc.downgrade() - create a Weak reference
+                        member->object->accept(*this);  // Get Arc pointer in RAX
+                        emitWeakDowngrade(true);
+                        return;
+                    }
+                }
+                
+                // Weak methods
+                if (info.kind == SmartPtrInfo::Kind::Weak) {
+                    if (member->member == "upgrade" && node.args.empty()) {
+                        // weak.upgrade() - try to get Rc/Arc (returns nil if deallocated)
+                        member->object->accept(*this);  // Get Weak pointer in RAX
+                        emitWeakUpgrade();
+                        return;
+                    }
+                    if (member->member == "strong_count" && node.args.empty()) {
+                        // weak.strong_count() - get strong count (0 if deallocated)
+                        member->object->accept(*this);  // Get Weak pointer in RAX
+                        // Load the source Rc/Arc pointer at offset 8
+                        // mov rax, [rax+8]
+                        asm_.code.push_back(0x48); asm_.code.push_back(0x8B);
+                        asm_.code.push_back(0x40); asm_.code.push_back(0x08);
+                        // Check if nil
+                        asm_.test_rax_rax();
+                        std::string nilLabel = newLabel("weak_nil");
+                        std::string endLabel = newLabel("weak_end");
+                        asm_.jz_rel32(nilLabel);
+                        // Not nil - load refcount
+                        asm_.mov_rax_mem_rax();
+                        asm_.jmp_rel32(endLabel);
+                        asm_.label(nilLabel);
+                        asm_.xor_rax_rax();  // Return 0 if nil
+                        asm_.label(endLabel);
+                        return;
+                    }
+                }
+                
+                // Cell methods
+                if (info.kind == SmartPtrInfo::Kind::Cell) {
+                    if (member->member == "get" && node.args.empty()) {
+                        // cell.get() - get a copy of the value
+                        member->object->accept(*this);  // Get Cell pointer in RAX
+                        emitCellGet();
+                        return;
+                    }
+                    if (member->member == "set" && node.args.size() == 1) {
+                        // cell.set(v) - set the value
+                        node.args[0]->accept(*this);  // Evaluate value
+                        asm_.push_rax();  // Save value
+                        member->object->accept(*this);  // Get Cell pointer in RAX
+                        asm_.pop_rcx();  // Restore value to RCX
+                        emitCellSet();
+                        return;
+                    }
+                    if (member->member == "replace" && node.args.size() == 1) {
+                        // cell.replace(v) - set value and return old value
+                        node.args[0]->accept(*this);  // Evaluate new value
+                        asm_.push_rax();  // Save new value
+                        member->object->accept(*this);  // Get Cell pointer in RAX
+                        asm_.mov_rcx_rax();  // Cell pointer in RCX
+                        asm_.mov_rax_mem_rcx();  // Load old value to RAX
+                        asm_.push_rax();  // Save old value
+                        asm_.pop_rax();  // Restore old value
+                        // Now store new value
+                        // pop rdx (new value), mov [rcx], rdx
+                        asm_.code.push_back(0x5A);  // pop rdx
+                        asm_.code.push_back(0x48); asm_.code.push_back(0x89);
+                        asm_.code.push_back(0x11);  // mov [rcx], rdx
+                        // Old value is in RAX
+                        return;
+                    }
+                }
+                
+                // RefCell methods
+                if (info.kind == SmartPtrInfo::Kind::RefCell) {
+                    if (member->member == "borrow" && node.args.empty()) {
+                        // refcell.borrow() - get immutable reference
+                        member->object->accept(*this);  // Get RefCell pointer in RAX
+                        emitRefCellBorrow();
+                        return;
+                    }
+                    if (member->member == "borrow_mut" && node.args.empty()) {
+                        // refcell.borrow_mut() - get mutable reference
+                        member->object->accept(*this);  // Get RefCell pointer in RAX
+                        emitRefCellBorrowMut();
+                        return;
+                    }
+                    if (member->member == "get" && node.args.empty()) {
+                        // refcell.get() - get a copy of the value
+                        member->object->accept(*this);  // Get RefCell pointer in RAX
+                        // Value is at offset 8 (after borrow_state)
+                        // mov rax, [rax+8]
+                        asm_.code.push_back(0x48); asm_.code.push_back(0x8B);
+                        asm_.code.push_back(0x40); asm_.code.push_back(0x08);
+                        return;
+                    }
+                    if (member->member == "set" && node.args.size() == 1) {
+                        // refcell.set(v) - set the value
+                        node.args[0]->accept(*this);  // Evaluate value
+                        asm_.push_rax();  // Save value
+                        member->object->accept(*this);  // Get RefCell pointer in RAX
+                        asm_.mov_rcx_rax();  // RefCell pointer in RCX
+                        asm_.pop_rax();  // Restore value to RAX
+                        // Store value at offset 8
+                        // mov [rcx+8], rax
+                        asm_.code.push_back(0x48); asm_.code.push_back(0x89);
+                        asm_.code.push_back(0x41); asm_.code.push_back(0x08);
+                        return;
+                    }
+                }
+            }
+        }
+        
         if (auto* moduleId = dynamic_cast<Identifier*>(member->object.get())) {
             std::string mangledName = moduleId->name + "." + member->member;
             
@@ -88,6 +419,42 @@ void NativeCodeGen::visit(CallExpr& node) {
                 if (!stackAllocated_) asm_.add_rsp_imm32(0x20);
                 return;
             }
+        }
+        
+        // UFCS: x.f(y) -> f(x, y)
+        // If no impl method found, try calling member->member as a function with object as first arg
+        std::string funcName = member->member;
+        if (allFunctionNames_.count(funcName)) {
+            // Make sure the label is registered (may have been inlined but we need to call it)
+            if (asm_.labels.find(funcName) == asm_.labels.end()) {
+                asm_.labels[funcName] = 0;
+            }
+            
+            // Push arguments in reverse order: last arg first, object last (so object ends up in RCX)
+            for (int i = (int)node.args.size() - 1; i >= 0; i--) {
+                node.args[i]->accept(*this);
+                asm_.push_rax();
+            }
+            
+            // Evaluate object last (will be first argument = RCX)
+            member->object->accept(*this);
+            asm_.push_rax();
+            
+            // Pop arguments into registers (object is first arg)
+            size_t totalArgs = node.args.size() + 1;
+            if (totalArgs >= 1) asm_.pop_rcx();
+            if (totalArgs >= 2) asm_.pop_rdx();
+            if (totalArgs >= 3) {
+                asm_.code.push_back(0x41); asm_.code.push_back(0x58);  // pop r8
+            }
+            if (totalArgs >= 4) {
+                asm_.code.push_back(0x41); asm_.code.push_back(0x59);  // pop r9
+            }
+            
+            if (!stackAllocated_) asm_.sub_rsp_imm32(0x20);
+            asm_.call_rel32(funcName);
+            if (!stackAllocated_) asm_.add_rsp_imm32(0x20);
+            return;
         }
     }
     
@@ -452,6 +819,88 @@ void NativeCodeGen::visit(CallExpr& node) {
         }
         if (id->name == "is_inf" && node.args.size() == 1) {
             emitMathIsInf(node);
+            return;
+        }
+        
+        // ===== Complex number builtins =====
+        if (id->name == "complex" && node.args.size() == 2) {
+            emitComplexCreate(node);
+            return;
+        }
+        if (id->name == "real" && node.args.size() == 1) {
+            emitComplexReal(node);
+            return;
+        }
+        if (id->name == "imag" && node.args.size() == 1) {
+            emitComplexImag(node);
+            return;
+        }
+        
+        // ===== BigInt builtins =====
+        if (id->name == "bigint" && node.args.size() == 1) {
+            emitBigIntNew(node);
+            return;
+        }
+        if (id->name == "bigint_add" && node.args.size() == 2) {
+            emitBigIntAdd(node);
+            return;
+        }
+        if (id->name == "bigint_to_int" && node.args.size() == 1) {
+            emitBigIntToInt(node);
+            return;
+        }
+        
+        // ===== Rational builtins =====
+        if (id->name == "rational" && node.args.size() == 2) {
+            emitRationalNew(node);
+            return;
+        }
+        if (id->name == "rational_add" && node.args.size() == 2) {
+            emitRationalAdd(node);
+            return;
+        }
+        if (id->name == "rational_to_float" && node.args.size() == 1) {
+            emitRationalToFloat(node);
+            return;
+        }
+        
+        // ===== Fixed-point builtins =====
+        if (id->name == "fixed" && node.args.size() == 1) {
+            emitFixedNew(node);
+            return;
+        }
+        if (id->name == "fixed_add" && node.args.size() == 2) {
+            emitFixedAdd(node);
+            return;
+        }
+        if (id->name == "fixed_sub" && node.args.size() == 2) {
+            emitFixedSub(node);
+            return;
+        }
+        if (id->name == "fixed_mul" && node.args.size() == 2) {
+            emitFixedMul(node);
+            return;
+        }
+        if (id->name == "fixed_to_float" && node.args.size() == 1) {
+            emitFixedToFloat(node);
+            return;
+        }
+        
+        // ===== Vec3 builtins =====
+        if (id->name == "vec3" && node.args.size() == 3) {
+            emitVec3New(node);
+            return;
+        }
+        if (id->name == "vec3_add" && node.args.size() == 2) {
+            emitVec3Add(node);
+            return;
+        }
+        if (id->name == "vec3_dot" && node.args.size() == 2) {
+            emitVec3Dot(node);
+            return;
+        }
+        if (id->name == "vec3_length" && node.args.size() == 1) {
+            emitVec3Length(node);
             return;
         }
         
@@ -821,6 +1270,23 @@ void NativeCodeGen::visit(CallExpr& node) {
             return;
         }
         
+        // Fallback: check allFunctionNames_ in case label wasn't registered yet
+        // This can happen when calling functions from within handle blocks
+        if (allFunctionNames_.count(id->name)) {
+            // Register the label if not already present
+            if (asm_.labels.find(id->name) == asm_.labels.end()) {
+                asm_.labels[id->name] = 0;
+            }
+            emitStandardFunctionCall(node, id->name);
+            return;
+        }
+        
+        // Check if this is a closure variable (lambda)
+        if (closureVars_.count(id->name) > 0) {
+            emitClosureCall(node);
+            return;
+        }
+        
         // Function pointer call
         bool isFnPtrCall = fnPtrVars_.count(id->name) > 0;
         if (!isFnPtrCall && !asm_.labels.count(id->name)) {
@@ -839,4 +1305,4 @@ void NativeCodeGen::visit(CallExpr& node) {
     emitClosureCall(node);
 }
 
-} // namespace flex
+} // namespace tyl

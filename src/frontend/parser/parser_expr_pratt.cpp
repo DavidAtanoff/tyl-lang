@@ -1,4 +1,4 @@
-// Flex Compiler - Pratt Parser Core
+// Tyl Compiler - Pratt Parser Core
 // Core Pratt parsing implementation for expressions
 
 #include "parser_base.h"
@@ -6,7 +6,7 @@
 #include "frontend/lexer/lexer.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 static Parser::Precedence getInfixPrecedence(TokenType type) {
     switch (type) {
@@ -14,7 +14,8 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::PLUS_ASSIGN:
         case TokenType::MINUS_ASSIGN:
         case TokenType::STAR_ASSIGN:
-        case TokenType::SLASH_ASSIGN: return Parser::Precedence::ASSIGNMENT;
+        case TokenType::SLASH_ASSIGN:
+        case TokenType::PERCENT_ASSIGN: return Parser::Precedence::ASSIGNMENT;
         case TokenType::CHAN_SEND: return Parser::Precedence::ASSIGNMENT;  // ch <- value has low precedence
         case TokenType::QUESTION_QUESTION: return Parser::Precedence::NULL_COALESCE;
         case TokenType::OR:
@@ -30,8 +31,10 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::GT:
         case TokenType::LE:
         case TokenType::GE:
-        case TokenType::SPACESHIP: return Parser::Precedence::COMPARISON;
-        case TokenType::DOTDOT: return Parser::Precedence::RANGE;
+        case TokenType::SPACESHIP:
+        case TokenType::IS: return Parser::Precedence::COMPARISON;  // is for type checking
+        case TokenType::DOTDOT:
+        case TokenType::DOTDOT_EQ: return Parser::Precedence::RANGE;  // ..= inclusive range
         case TokenType::PLUS:
         case TokenType::MINUS: return Parser::Precedence::TERM;
         case TokenType::STAR:
@@ -40,7 +43,9 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::CUSTOM_OP: return Parser::Precedence::FACTOR;
         case TokenType::PIPE_GT: return Parser::Precedence::PIPE;
         case TokenType::QUESTION: return Parser::Precedence::TERNARY;
+        case TokenType::DOUBLE_ARROW: return Parser::Precedence::ASSIGNMENT;  // => for arrow lambdas
         case TokenType::DOT:
+        case TokenType::QUESTION_DOT:  // ?. safe navigation
         case TokenType::LBRACKET:
         case TokenType::LPAREN:
         case TokenType::LBRACE: return Parser::Precedence::POSTFIX;
@@ -93,8 +98,9 @@ ExprPtr Parser::parsePrefix() {
     }
     
     if (match(TokenType::AMP)) {
+        bool isMut = match(TokenType::MUT);
         auto operand = parsePrecedence(Precedence::UNARY);
-        return std::make_unique<AddressOfExpr>(std::move(operand), loc);
+        return std::make_unique<BorrowExpr>(std::move(operand), isMut, loc);
     }
     
     if (match(TokenType::STAR)) {
@@ -183,4 +189,4 @@ ExprPtr Parser::factor() { return parsePrecedence(Precedence::FACTOR); }
 ExprPtr Parser::unary() { return parsePrefix(); }
 ExprPtr Parser::postfix() { return parsePrecedence(Precedence::POSTFIX); }
 
-} // namespace flex
+} // namespace tyl

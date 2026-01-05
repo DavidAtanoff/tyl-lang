@@ -1,0 +1,67 @@
+// Test dependent types - types that depend on compile-time values
+
+// 1. Simple type alias
+type IntList = [int]
+
+// 2. Generic type alias (type parameter)
+type List[T] = [T]
+
+// 3. Dependent type with value parameter
+// Vector[T, N: int] creates a fixed-size array of N elements of type T
+type Vector[T, N: int] = [T; N]
+
+// 4. Matrix type - 2D array with compile-time dimensions
+type Matrix[T, Rows: int, Cols: int] = [[T; Cols]; Rows]
+
+// 5. Refined type with constraint - NonEmpty list
+type NonEmpty[T] = [T] where len(_) > 0
+
+// 6. Opaque type for FFI
+type Handle = opaque
+
+// 7. Concrete fixed-size array alias
+type Vec3 = [int; 3]
+type Vec4 = [int; 4]
+
+fn main():
+    // Test simple type alias
+    nums = [10, 20, 30, 40, 50]
+    print("IntList: ")
+    for i in 0..5:
+        print(nums[i])
+        print(" ")
+    print("\n")
+    
+    // Test Vec3 type alias
+    v = [1, 2, 3]
+    print("Vec3: ")
+    print(v[0])
+    print(", ")
+    print(v[1])
+    print(", ")
+    print(v[2])
+    print("\n")
+    
+    // Test Vec4 type alias
+    v4 = [10, 20, 30, 40]
+    print("Vec4: ")
+    print(v4[0])
+    print(", ")
+    print(v4[1])
+    print(", ")
+    print(v4[2])
+    print(", ")
+    print(v4[3])
+    print("\n")
+    
+    // Test fixed array operations
+    arr = [5, 4, 3, 2, 1]
+    print("Fixed array sum: ")
+    mut sum = 0
+    for i in 0..5:
+        sum = sum + arr[i]
+    print(sum)
+    print("\n")
+    
+    print("Dependent types test passed!\n")
+    return 0

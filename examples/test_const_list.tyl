@@ -1,0 +1,8 @@
+// Constant list test
+
+fn main:
+    println("Start")
+    x = [10, 11, 12]
+    println("Created")
+    println(x[1])
+    println("Done")

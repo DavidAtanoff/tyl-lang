@@ -1,12 +1,12 @@
-// Flex Compiler - Parser Base Header
+// Tyl Compiler - Parser Base Header
 // This header contains the Parser class declaration and is included by all parser modules
-#ifndef FLEX_PARSER_BASE_H
-#define FLEX_PARSER_BASE_H
+#ifndef TYL_PARSER_BASE_H
+#define TYL_PARSER_BASE_H
 
 #include "frontend/ast/ast.h"
 #include "frontend/token/token.h"
 
-namespace flex {
+namespace tyl {
 
 class Parser {
 public:
@@ -38,6 +38,7 @@ public:
 private:
     std::vector<Token> tokens;
     size_t current = 0;
+    bool inConstraintContext_ = false;  // Don't transform placeholders in constraint expressions
     
     // Token navigation (parser_core.cpp)
     Token& peek();
@@ -78,8 +79,8 @@ private:
     StmtPtr statement();
     StmtPtr expressionStatement();
     StmtPtr ifStatement();
-    StmtPtr whileStatement();
-    StmtPtr forStatement();
+    StmtPtr whileStatement(const std::string& label = "");
+    StmtPtr forStatement(const std::string& label = "");
     StmtPtr matchStatement();
     StmtPtr returnStatement();
     StmtPtr breakStatement();
@@ -87,6 +88,16 @@ private:
     StmtPtr deleteStatement();
     StmtPtr lockStatement();
     StmtPtr block();
+    StmtPtr braceBlock();  // Brace-delimited block { ... }
+    // New syntax redesign statements
+    StmtPtr unlessStatement();
+    StmtPtr loopStatement(const std::string& label = "");
+    StmtPtr withStatement();
+    StmtPtr scopeStatement();
+    StmtPtr requireStatement();
+    StmtPtr ensureStatement();
+    StmtPtr comptimeBlock();
+    StmtPtr effectDeclaration();
     
     // Pratt parser expression parsing (parser_expressions.cpp)
     ExprPtr expression();
@@ -104,6 +115,7 @@ private:
     ExprPtr listLiteral();
     ExprPtr recordLiteral();
     ExprPtr lambda();
+    ExprPtr parseArrowLambda(const std::string& firstParam, SourceLocation loc);
     
     // Legacy compatibility (redirect to Pratt parser)
     ExprPtr assignment();
@@ -132,6 +144,6 @@ private:
     std::string captureRawBlock();
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_PARSER_BASE_H
+#endif // TYL_PARSER_BASE_H

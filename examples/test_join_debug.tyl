@@ -1,0 +1,29 @@
+// Debug join test
+
+fn main -> int:
+    print("Test 1: Direct join with literal list\n")
+    let r1 = join(["x", "y"], "-")
+    print("Result: ")
+    print(r1)
+    print("\n")
+    
+    print("\nTest 2: Join with variable list\n")
+    let words = ["a", "b"]
+    print("List created, checking count...\n")
+    print("Count: ")
+    print(len(words))
+    print("\n")
+    print("Element 1: ")
+    print(words[1])
+    print("\n")
+    print("Element 2: ")
+    print(words[2])
+    print("\n")
+    print("Now calling join...\n")
+    let r2 = join(words, "-")
+    print("Join returned\n")
+    print("Result: ")
+    print(r2)
+    print("\n")
+    
+    return 0

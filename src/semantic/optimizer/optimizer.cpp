@@ -1,4 +1,4 @@
-// Flex Compiler - Optimizer Implementation
+// Tyl Compiler - Optimizer Implementation
 // Complete Tier 2-5 Optimization Pipeline
 #include "optimizer.h"
 #include "constant_folding.h"
@@ -16,7 +16,7 @@
 #include "pgo.h"
 #include <iostream>
 
-namespace flex {
+namespace tyl {
 
 Optimizer::Optimizer() {
     // Default: enable all Tier 2 passes at O2 level
@@ -384,4 +384,4 @@ std::unique_ptr<Optimizer> createOptimizer(OptLevel level) {
     return opt;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,0 +1,18 @@
+// Test list element printing
+
+fn main -> int:
+    // Test 1: split result (should work)
+    print("Test 1: split result\n")
+    let parts = split("a,b", ",")
+    print("parts[1] = ")
+    print(parts[1])
+    print("\n")
+    
+    // Test 2: literal list
+    print("\nTest 2: literal list\n")
+    let words = ["hello", "world"]
+    print("words[1] = ")
+    print(words[1])
+    print("\n")
+    
+    return 0

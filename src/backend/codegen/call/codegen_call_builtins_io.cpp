@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator I/O Builtin Calls
+// Tyl Compiler - Native Code Generator I/O Builtin Calls
 // Handles: print, println, open, read, write, close, file_size
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // I/O builtin implementations - uses emitPrintExpr for consistency with original
 
@@ -303,4 +303,4 @@ void NativeCodeGen::emitRead(CallExpr& node) {
     asm_.lea_rax_rbp(bufOffset);
 }
 
-} // namespace flex
+} // namespace tyl

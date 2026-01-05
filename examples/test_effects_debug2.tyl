@@ -1,0 +1,22 @@
+// Debug test for effect perform with function call
+
+effect Reader:
+    fn ask -> int
+
+fn get_value -> int:
+    print("In get_value, about to perform")
+    let x = perform Reader.ask()
+    print("After perform, x =")
+    print(x)
+    return x
+
+fn main -> int:
+    print("Step 1: Before handle")
+    
+    let result = handle get_value():
+        Reader.ask() => 100
+    
+    print("Step 2: After handle, result =")
+    print(result)
+    
+    return 0

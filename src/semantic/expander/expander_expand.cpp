@@ -1,8 +1,8 @@
-// Flex Compiler - Macro Expander Statement/Expression Expansion
+// Tyl Compiler - Macro Expander Statement/Expression Expansion
 
 #include "expander_base.h"
 
-namespace flex {
+namespace tyl {
 
 void MacroExpander::expandStatements(std::vector<StmtPtr>& statements) {
     for (auto& stmt : statements) {
@@ -313,4 +313,4 @@ ExprPtr MacroExpander::transformDSLBlock(const std::string& dslName, const std::
     return std::make_unique<StringLiteral>(content, loc);
 }
 
-} // namespace flex
+} // namespace tyl

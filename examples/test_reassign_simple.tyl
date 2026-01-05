@@ -1,0 +1,13 @@
+// Simple reassignment test
+
+fn main:
+    println("Start")
+    mut e = [7, 8, 9]
+    println("Created e")
+    println(e[1])
+    println(e[2])
+    e = [10, 11, 12]
+    println("Reassigned e")
+    println(e[1])
+    println(e[2])
+    println("Done")

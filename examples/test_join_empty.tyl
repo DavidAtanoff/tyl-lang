@@ -1,0 +1,22 @@
+// Test join with empty list
+
+fn main -> int:
+    print("Test 1: Empty list\n")
+    let empty: [str] = []
+    print("len = ")
+    print(len(empty))
+    print("\n")
+    print("Result: '")
+    print(join(empty, ","))
+    print("'\n")
+    
+    print("\nTest 2: Single element\n")
+    let one = ["x"]
+    print("len = ")
+    print(len(one))
+    print("\n")
+    print("Result: '")
+    print(join(one, ","))
+    print("'\n")
+    
+    return 0

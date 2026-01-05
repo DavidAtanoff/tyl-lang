@@ -1,7 +1,7 @@
-// Flex Compiler - Module System
+// Tyl Compiler - Module System
 // Handles namespaces, imports, exports, and dependency resolution
-#ifndef FLEX_MODULE_SYSTEM_H
-#define FLEX_MODULE_SYSTEM_H
+#ifndef TYL_MODULE_SYSTEM_H
+#define TYL_MODULE_SYSTEM_H
 
 #include "common/common.h"
 #include "frontend/ast/ast.h"
@@ -12,7 +12,7 @@
 
 namespace fs = std::filesystem;
 
-namespace flex {
+namespace tyl {
 
 // Helper for C++17 compatibility (ends_with is C++20)
 inline bool strEndsWith(const std::string& str, const std::string& suffix) {
@@ -112,10 +112,10 @@ private:
     std::unordered_map<std::string, std::string> moduleFiles_;  // module name -> file path
     std::vector<std::string> errors_;
     
-    // Parse module name from path (e.g., "math/calculus.fx" -> "math::calculus")
+    // Parse module name from path (e.g., "math/calculus.tyl" -> "math::calculus")
     std::string pathToModuleName(const std::string& path);
     
-    // Convert module name to path (e.g., "math::calculus" -> "math/calculus.fx")
+    // Convert module name to path (e.g., "math::calculus" -> "math/calculus.tyl")
     std::string moduleNameToPath(const std::string& name);
     
     // Extract exports from a parsed AST
@@ -127,6 +127,6 @@ private:
 
 // ModuleDecl is defined in ast.h
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_MODULE_SYSTEM_H
+#endif // TYL_MODULE_SYSTEM_H

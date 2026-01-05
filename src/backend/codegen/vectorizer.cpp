@@ -1,11 +1,11 @@
-// Flex Compiler - SIMD Vectorizer Implementation
+// Tyl Compiler - SIMD Vectorizer Implementation
 // Auto-vectorization for loops and array operations
 
 #include "vectorizer.h"
 #include "backend/x64/x64_assembler.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 Vectorizer::Vectorizer() {}
 
@@ -492,4 +492,4 @@ void SIMDCodeGen::generateHorizontalReduction(TokenType op, VectorWidth width, X
     // Result is now in the low element of xmm0
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Program Visitor
+// Tyl Compiler - Native Code Generator Program Visitor
 // Handles: Program entry point, _start generation, module/function orchestration
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::collectGenericInstantiations(Program& program) {
     // Clear previous state
@@ -102,7 +102,7 @@ void NativeCodeGen::emitSpecializedFunctions() {
             }
             
             // Track float parameters
-            if (paramType == "float") {
+            if (isFloatTypeName(paramType)) {
                 floatVars.insert(paramName);
             }
             
@@ -110,8 +110,8 @@ void NativeCodeGen::emitSpecializedFunctions() {
             constStrVars[paramName] = "";  // Mark as potentially string
         }
         
-        // Calculate stack size
-        int32_t baseStack = 0x80;
+        // Calculate stack size - increased base for builtin internal locals
+        int32_t baseStack = 0x200;
         int32_t callStack = calculateFunctionStackSize(originalFn->body.get());
         functionStackSize_ = ((baseStack + callStack + 0x28 + 15) / 16) * 16;
         
@@ -141,7 +141,7 @@ void NativeCodeGen::emitSpecializedFunctions() {
             allocLocal(paramName);
             int32_t off = locals[paramName];
             
-            if (paramType == "float") {
+            if (isFloatTypeName(paramType)) {
                 // Float parameters come in XMM0-XMM3
                 // movsd [rbp+off], xmmN
                 switch (i) {
@@ -301,7 +301,8 @@ void NativeCodeGen::visit(Program& node) {
             // Process enum declarations to register constant values
             stmt->accept(*this);
         } else if (dynamic_cast<TypeAlias*>(stmt.get())) {
-            // Skip type aliases
+            // Process type aliases to register refinement type information
+            stmt->accept(*this);
         } else {
             bool isMainCall = false;
             if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt.get())) {
@@ -340,14 +341,16 @@ void NativeCodeGen::visit(Program& node) {
         }
     }
     
-    // Register all function labels
+    // Register all function labels and track all function names for UFCS
     for (auto* fn : functions) {
         asm_.labels[fn->name] = 0;
+        allFunctionNames_.insert(fn->name);
     }
     
     // Register specialized function labels
     for (auto& fn : specializedFunctions_) {
         asm_.labels[fn->name] = 0;
+        allFunctionNames_.insert(fn->name);
     }
     
     // Also register labels from monomorphizer directly
@@ -480,4 +483,4 @@ void NativeCodeGen::visit(Program& node) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

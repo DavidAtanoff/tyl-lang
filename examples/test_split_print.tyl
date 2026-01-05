@@ -1,0 +1,11 @@
+// Test split and print elements
+
+fn main -> int:
+    let parts = split("a,b", ",")
+    print("Count: ")
+    print(len(parts))
+    print("\n")
+    print("First: ")
+    print(parts[1])
+    print("\n")
+    return 0

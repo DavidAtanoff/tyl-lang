@@ -1,0 +1,13 @@
+// Debug join - trace through
+fn main -> int:
+    print("1\n")
+    let a = ["x"]
+    print("2\n")
+    print("len=")
+    print(len(a))
+    print("\n3\n")
+    let r = join(a, ",")
+    print("4\n")
+    print(r)
+    print("\n5\n")
+    return 0

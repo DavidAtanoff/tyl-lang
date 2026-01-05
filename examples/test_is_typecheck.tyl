@@ -1,0 +1,47 @@
+// Test 'is' type check operator
+
+fn main():
+    // Test integer type check
+    let x: int = 42
+    if x is int:
+        print("x is int: PASS")
+    else:
+        print("x is int: FAIL")
+    
+    if x is float:
+        print("x is float: FAIL")
+    else:
+        print("x is float (should be false): PASS")
+    
+    // Test float type check
+    let y: float = 3.14
+    if y is float:
+        print("y is float: PASS")
+    else:
+        print("y is float: FAIL")
+    
+    if y is int:
+        print("y is int: FAIL")
+    else:
+        print("y is int (should be false): PASS")
+    
+    // Test string type check
+    let s: str = "hello"
+    if s is str:
+        print("s is str: PASS")
+    else:
+        print("s is str: FAIL")
+    
+    if s is int:
+        print("s is int: FAIL")
+    else:
+        print("s is int (should be false): PASS")
+    
+    // Test bool type check
+    let b: bool = true
+    if b is bool:
+        print("b is bool: PASS")
+    else:
+        print("b is bool: FAIL")
+    
+    print("Type check tests complete!")

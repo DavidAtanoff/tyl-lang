@@ -1,27 +1,66 @@
-// Flex Compiler - Parser Declaration Implementations
+// Tyl Compiler - Parser Declaration Implementations
 // Handles: fn, record, enum, trait, impl, use, import, extern, macro, syntax, layer, unsafe, var
 
 #include "parser_base.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
+
+// Check if a cfg condition is satisfied
+static bool evaluateCfg(const std::string& condition) {
+    // Platform checks - these should match the TARGET platform, not the host
+    // For now, we assume Windows target since we're generating Windows PE files
+    if (condition == "windows") return true;
+    if (condition == "linux") return false;
+    if (condition == "macos") return false;
+    if (condition == "unix") return false;
+    
+    // Architecture checks - assume x86_64 for now
+    if (condition == "x86_64") return true;
+    if (condition == "x86") return false;
+    
+    // Build mode checks
+    #ifdef NDEBUG
+    if (condition == "debug") return false;
+    if (condition == "release") return true;
+    #else
+    if (condition == "debug") return true;
+    if (condition == "release") return false;
+    #endif
+    
+    // Feature checks - could be extended with compiler flags
+    // For now, return false for unknown conditions
+    return false;
+}
 
 StmtPtr Parser::declaration() {
     skipNewlines();
     
-    // Parse attributes: #[repr(C)], #[repr(packed)], #[repr(align(N))], #[cdecl], #[stdcall], etc.
+    // Parse attributes: #[repr(C)], #[repr(packed)], #[repr(align(N))], #[cdecl], #[stdcall], #[export], #[hidden], #[weak], #[cfg(...)], etc.
     bool reprC = false;
     bool reprPacked = false;
     int reprAlign = 0;
     CallingConvention callingConv = CallingConvention::Default;
     bool isNaked = false;
+    bool isExport = false;
+    bool isHidden = false;
+    bool isWeak = false;
+    bool skipDeclaration = false;  // For cfg that evaluates to false
     
     while (check(TokenType::ATTRIBUTE)) {
         auto attrTok = advance();
         std::string attr = std::get<std::string>(attrTok.literal);
         
+        // Parse cfg(...) for conditional compilation
+        if (attr.find("cfg(") == 0) {
+            std::string condition = attr.substr(4, attr.length() - 5);  // Extract content between cfg( and )
+            bool result = evaluateCfg(condition);
+            if (!result) {
+                skipDeclaration = true;
+            }
+        }
         // Parse repr(...) attributes
-        if (attr.find("repr(") == 0) {
+        else if (attr.find("repr(") == 0) {
             std::string reprArg = attr.substr(5, attr.length() - 6);  // Extract content between repr( and )
             if (reprArg == "C") {
                 reprC = true;
@@ -44,7 +83,87 @@ StmtPtr Parser::declaration() {
         } else if (attr == "naked") {
             isNaked = true;
         }
+        // Parse visibility and linkage attributes
+        else if (attr == "export") {
+            isExport = true;
+        } else if (attr == "hidden") {
+            isHidden = true;
+        } else if (attr == "visible") {
+            isHidden = false;  // Explicitly visible (default)
+        } else if (attr == "weak") {
+            isWeak = true;
+        }
         skipNewlines();
+    }
+    
+    // If cfg evaluated to false, skip this declaration
+    if (skipDeclaration) {
+        // We need to skip the entire declaration that follows
+        // First, skip any pub/priv/async modifiers
+        while (match(TokenType::PUB) || match(TokenType::PRIV) || match(TokenType::ASYNC)) {}
+        
+        // Now skip the declaration based on what keyword we see
+        if (match(TokenType::FN)) {
+            // Skip function: name, params, return type, and body
+            if (check(TokenType::IDENTIFIER)) advance(); // name
+            // Skip until we find the body start (: or { or =>)
+            while (!isAtEnd() && !check(TokenType::COLON) && !check(TokenType::LBRACE) && 
+                   !check(TokenType::DOUBLE_ARROW) && !check(TokenType::ASSIGN)) {
+                advance();
+            }
+            // Skip the body
+            if (match(TokenType::COLON)) {
+                match(TokenType::NEWLINE);
+                if (match(TokenType::INDENT)) {
+                    int depth = 1;
+                    while (!isAtEnd() && depth > 0) {
+                        if (match(TokenType::INDENT)) depth++;
+                        else if (match(TokenType::DEDENT)) depth--;
+                        else advance();
+                    }
+                } else {
+                    // Single line body
+                    while (!isAtEnd() && !check(TokenType::NEWLINE)) advance();
+                    match(TokenType::NEWLINE);
+                }
+            } else if (match(TokenType::LBRACE)) {
+                int depth = 1;
+                while (!isAtEnd() && depth > 0) {
+                    if (match(TokenType::LBRACE)) depth++;
+                    else if (match(TokenType::RBRACE)) depth--;
+                    else advance();
+                }
+            } else if (match(TokenType::DOUBLE_ARROW) || match(TokenType::ASSIGN)) {
+                // Single expression body
+                while (!isAtEnd() && !check(TokenType::NEWLINE)) advance();
+                match(TokenType::NEWLINE);
+            }
+        } else if (match(TokenType::RECORD) || match(TokenType::ENUM) || match(TokenType::TRAIT) || 
+                   match(TokenType::UNION) || match(TokenType::IMPL)) {
+            // Skip struct-like declaration with indented body
+            while (!isAtEnd() && !check(TokenType::COLON)) advance();
+            if (match(TokenType::COLON)) {
+                match(TokenType::NEWLINE);
+                if (match(TokenType::INDENT)) {
+                    int depth = 1;
+                    while (!isAtEnd() && depth > 0) {
+                        if (match(TokenType::INDENT)) depth++;
+                        else if (match(TokenType::DEDENT)) depth--;
+                        else advance();
+                    }
+                }
+            }
+        } else {
+            // Unknown declaration type, skip to next line
+            while (!isAtEnd() && !check(TokenType::NEWLINE)) advance();
+            match(TokenType::NEWLINE);
+        }
+        
+        // Skip any trailing newlines
+        while (match(TokenType::NEWLINE)) {}
+        
+        // Return an empty block as a no-op
+        return std::make_unique<Block>(peek().location);
     }
     
     bool isPublic = match(TokenType::PUB);
@@ -58,6 +177,9 @@ StmtPtr Parser::declaration() {
         fnDecl->isPublic = isPublic;
         fnDecl->callingConv = callingConv;
         fnDecl->isNaked = isNaked;
+        fnDecl->isExport = isExport;
+        fnDecl->isHidden = isHidden;
+        fnDecl->isWeak = isWeak;
         return fn;
     }
     if (match(TokenType::RECORD)) {
@@ -173,10 +295,15 @@ StmtPtr Parser::fnDeclaration() {
     
     auto fn = std::make_unique<FnDecl>(name, loc);
     
-    // Generic type parameters: fn name[T, U]
+    // Generic type parameters and lifetime parameters: fn name[T, U, 'a, 'b]
     if (match(TokenType::LBRACKET)) {
         do {
-            fn->typeParams.push_back(consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme);
+            // Check for lifetime parameter: 'a, 'static, etc.
+            if (check(TokenType::LIFETIME)) {
+                fn->lifetimeParams.push_back(advance().lexeme);
+            } else {
+                fn->typeParams.push_back(consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme);
+            }
         } while (match(TokenType::COMMA));
         consume(TokenType::RBRACKET, "Expected ']' after type parameters");
     }
@@ -187,7 +314,7 @@ StmtPtr Parser::fnDeclaration() {
         fn->returnType = parseType();
     }
     
-    // Support : and => for function body
+    // Support :, =>, =, and { for function body
     if (match(TokenType::DOUBLE_ARROW)) {
         auto expr = expression();
         auto ret = std::make_unique<ReturnStmt>(std::move(expr), loc);
@@ -195,6 +322,9 @@ StmtPtr Parser::fnDeclaration() {
         blk->statements.push_back(std::move(ret));
         fn->body = std::move(blk);
         match(TokenType::NEWLINE);
+    } else if (match(TokenType::LBRACE)) {
+        // Brace block: fn add(a, b) { return a + b }
+        fn->body = braceBlock();
     } else if (match(TokenType::COLON)) {
         match(TokenType::NEWLINE);
         
@@ -217,7 +347,7 @@ StmtPtr Parser::fnDeclaration() {
         match(TokenType::NEWLINE);
     } else {
         auto diag = errors::expectedFunctionBody(peek().location);
-        throw FlexDiagnosticError(diag);
+        throw TylDiagnosticError(diag);
     }
     
     return fn;
@@ -341,18 +471,47 @@ StmtPtr Parser::enumDeclaration() {
 StmtPtr Parser::typeAliasDeclaration() {
     auto loc = previous().location;
     auto name = consume(TokenType::IDENTIFIER, "Expected type name").lexeme;
+    
+    auto alias = std::make_unique<TypeAlias>(name, "", loc);
+    
+    // Parse type parameters: type Vector[T, N: int] = ...
+    if (match(TokenType::LBRACKET)) {
+        do {
+            auto paramName = consume(TokenType::IDENTIFIER, "Expected type parameter name").lexeme;
+            
+            // Check if this is a value parameter: N: int
+            if (match(TokenType::COLON)) {
+                auto paramType = parseType();
+                alias->typeParams.emplace_back(paramName, paramType, true);  // isValue = true
+            } else {
+                alias->typeParams.emplace_back(paramName, "type", false);  // Regular type param
+            }
+        } while (match(TokenType::COMMA));
+        consume(TokenType::RBRACKET, "Expected ']' after type parameters");
+    }
+    
     consume(TokenType::ASSIGN, "Expected '=' after type name");
     
     // Check for opaque type: type Handle = opaque
     if (check(TokenType::IDENTIFIER) && peek().lexeme == "opaque") {
         advance();  // consume 'opaque'
         match(TokenType::NEWLINE);
-        return std::make_unique<TypeAlias>(name, "opaque", loc);
+        alias->targetType = "opaque";
+        return alias;
     }
     
-    auto target = parseType();
+    alias->targetType = parseType();
+    
+    // Parse where clause: type NonEmpty[T] = [T] where len(_) > 0
+    if (check(TokenType::IDENTIFIER) && peek().lexeme == "where") {
+        advance();  // consume 'where'
+        inConstraintContext_ = true;  // Don't transform placeholders in constraints
+        alias->constraint = expression();
+        inConstraintContext_ = false;
+    }
+    
     match(TokenType::NEWLINE);
-    return std::make_unique<TypeAlias>(name, target, loc);
+    return alias;
 }
 
 StmtPtr Parser::traitDeclaration() {
@@ -469,11 +628,11 @@ StmtPtr Parser::useStatement() {
         return stmt;
     }
     
-    // use "file.fx" - file import
+    // use "file.tyl" - file import
     if (check(TokenType::STRING)) {
         auto path = std::get<std::string>(advance().literal);
         
-        // Check for alias: use "file.fx" as name
+        // Check for alias: use "file.tyl" as name
         std::string alias;
         if (check(TokenType::IDENTIFIER) && peek().lexeme == "as") {
             advance();  // consume 'as'
@@ -894,4 +1053,4 @@ StmtPtr Parser::asmStatement() {
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

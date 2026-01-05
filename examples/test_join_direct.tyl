@@ -1,0 +1,14 @@
+// Test join without intermediate variables
+
+fn main -> int:
+    print("Creating list and calling join directly...\n")
+    let words = ["hello", "world"]
+    print("List len: ")
+    print(len(words))
+    print("\n")
+    print("Calling join...\n")
+    print("Result: ")
+    print(join(words, "-"))
+    print("\n")
+    print("Done!\n")
+    return 0

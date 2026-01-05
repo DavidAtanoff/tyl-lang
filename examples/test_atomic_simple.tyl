@@ -1,0 +1,14 @@
+// Simple Atomic[int] test
+
+fn main:
+    // Create an atomic integer with initial value 42
+    let counter: Atomic[int] = Atomic[int](42)
+    
+    // Test atomic load
+    let val: int = counter.load()
+    println("Value: " + str(val))
+    
+    println("Done!")
+    return 0
+
+main()

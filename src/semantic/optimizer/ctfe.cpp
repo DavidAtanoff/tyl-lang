@@ -1,9 +1,9 @@
-// Flex Compiler - Compile-Time Function Execution Implementation
+// Tyl Compiler - Compile-Time Function Execution Implementation
 // Evaluates pure functions with constant arguments at compile time
 #include "ctfe.h"
 #include <cmath>
 
-namespace flex {
+namespace tyl {
 
 void CTFEPass::run(Program& ast) {
     transformations_ = 0;
@@ -754,4 +754,4 @@ ExprPtr CTFEPass::createLiteral(const CTFEValue& value, const SourceLocation& lo
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

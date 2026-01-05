@@ -1,0 +1,27 @@
+// Test export, hidden, and weak attributes
+
+// This function will be exported from DLL
+#[export]
+fn exported_add a: int, b: int -> int:
+    return a + b
+
+// This function will be hidden (not visible outside module)
+#[hidden]
+fn internal_helper x: int -> int:
+    return x * 2
+
+// This function is weak (can be overridden by another definition)
+#[weak]
+fn default_handler -> int:
+    return 0
+
+// Regular function (exported by default in DLL)
+fn multiply a: int, b: int -> int:
+    return a * b
+
+fn main -> int:
+    let result = exported_add(3, 5)
+    let internal = internal_helper(10)
+    let weak_result = default_handler()
+    let prod = multiply(4, 5)
+    return result + internal + weak_result + prod

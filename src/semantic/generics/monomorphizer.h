@@ -1,7 +1,7 @@
-// Flex Compiler - Monomorphization for Generics
+// Tyl Compiler - Monomorphization for Generics
 // Generates specialized code for each concrete type instantiation
-#ifndef FLEX_MONOMORPHIZER_H
-#define FLEX_MONOMORPHIZER_H
+#ifndef TYL_MONOMORPHIZER_H
+#define TYL_MONOMORPHIZER_H
 
 #include "frontend/ast/ast.h"
 #include "semantic/types/types.h"
@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Represents a specific instantiation of a generic function/type
 struct GenericInstantiation {
@@ -113,6 +113,8 @@ public:
     void visit(IntegerLiteral& node) override {}
     void visit(FloatLiteral& node) override {}
     void visit(StringLiteral& node) override {}
+    void visit(CharLiteral& node) override {}
+    void visit(ByteStringLiteral& node) override {}
     void visit(InterpolatedString& node) override;
     void visit(BoolLiteral& node) override {}
     void visit(NilLiteral& node) override {}
@@ -130,6 +132,7 @@ public:
     void visit(TernaryExpr& node) override;
     void visit(ListCompExpr& node) override;
     void visit(AddressOfExpr& node) override;
+    void visit(BorrowExpr& node) override;
     void visit(DerefExpr& node) override;
     void visit(NewExpr& node) override;
     void visit(CastExpr& node) override;
@@ -156,6 +159,45 @@ public:
     void visit(SemAcquireExpr& node) override {}
     void visit(SemReleaseExpr& node) override {}
     void visit(SemTryAcquireExpr& node) override {}
+    void visit(MakeAtomicExpr& node) override {}
+    void visit(AtomicLoadExpr& node) override {}
+    void visit(AtomicStoreExpr& node) override {}
+    void visit(AtomicSwapExpr& node) override {}
+    void visit(AtomicCasExpr& node) override {}
+    void visit(AtomicAddExpr& node) override {}
+    void visit(AtomicSubExpr& node) override {}
+    void visit(AtomicAndExpr& node) override {}
+    void visit(AtomicOrExpr& node) override {}
+    void visit(AtomicXorExpr& node) override {}
+    // Smart Pointer expressions
+    void visit(MakeBoxExpr& node) override {}
+    void visit(MakeRcExpr& node) override {}
+    void visit(MakeArcExpr& node) override {}
+    void visit(MakeWeakExpr& node) override {}
+    void visit(MakeCellExpr& node) override {}
+    void visit(MakeRefCellExpr& node) override {}
+    // Advanced Concurrency
+    void visit(MakeFutureExpr& node) override {}
+    void visit(FutureGetExpr& node) override {}
+    void visit(FutureSetExpr& node) override {}
+    void visit(FutureIsReadyExpr& node) override {}
+    void visit(MakeThreadPoolExpr& node) override {}
+    void visit(ThreadPoolSubmitExpr& node) override {}
+    void visit(ThreadPoolShutdownExpr& node) override {}
+    void visit(SelectExpr& node) override {}
+    void visit(TimeoutExpr& node) override {}
+    void visit(ChanRecvTimeoutExpr& node) override {}
+    void visit(ChanSendTimeoutExpr& node) override {}
+    void visit(MakeCancelTokenExpr& node) override {}
+    void visit(CancelExpr& node) override {}
+    void visit(IsCancelledExpr& node) override {}
+    // Async Runtime - Event Loop and Task Management
+    void visit(AsyncRuntimeInitExpr& node) override {}
+    void visit(AsyncRuntimeRunExpr& node) override {}
+    void visit(AsyncRuntimeShutdownExpr& node) override {}
+    void visit(AsyncSpawnExpr& node) override {}
+    void visit(AsyncSleepExpr& node) override {}
+    void visit(AsyncYieldExpr& node) override {}
     void visit(ExprStmt& node) override;
     void visit(VarDecl& node) override;
     void visit(DestructuringDecl& node) override;
@@ -187,6 +229,24 @@ public:
     void visit(DeleteStmt& node) override;
     void visit(LockStmt& node) override {}
     void visit(AsmStmt& node) override {}
+    // Syntax Redesign - New Expression Visitors
+    void visit(PlaceholderExpr& node) override {}
+    void visit(InclusiveRangeExpr& node) override;
+    void visit(SafeNavExpr& node) override;
+    void visit(TypeCheckExpr& node) override;
+    // Syntax Redesign - New Statement Visitors
+    void visit(LoopStmt& node) override;
+    void visit(WithStmt& node) override;
+    void visit(ScopeStmt& node) override;
+    void visit(RequireStmt& node) override;
+    void visit(EnsureStmt& node) override;
+    void visit(InvariantStmt& node) override;
+    void visit(ComptimeBlock& node) override;
+    // Algebraic Effects
+    void visit(EffectDecl& node) override;
+    void visit(PerformEffectExpr& node) override;
+    void visit(HandleExpr& node) override;
+    void visit(ResumeExpr& node) override;
     void visit(Program& node) override;
     
 private:
@@ -204,6 +264,6 @@ private:
     TypePtr parseType(const std::string& typeStr);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_MONOMORPHIZER_H
+#endif // TYL_MONOMORPHIZER_H

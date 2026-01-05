@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Trait Support
+// Tyl Compiler - Native Code Generator Trait Support
 // Handles: vtable generation, trait method dispatch, trait objects
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Get the index of a method in a trait's vtable
 int NativeCodeGen::getMethodIndex(const std::string& traitName, const std::string& methodName) {
@@ -155,4 +155,4 @@ void NativeCodeGen::emitTraitMethodCall(const std::string& traitName, const std:
     // Result is in RAX
 }
 
-} // namespace flex
+} // namespace tyl

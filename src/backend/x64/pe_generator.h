@@ -1,6 +1,6 @@
-// Flex Compiler - PE Executable Generator with Import Support
-#ifndef FLEX_PE_GENERATOR_H
-#define FLEX_PE_GENERATOR_H
+// Tyl Compiler - PE Executable Generator with Import Support
+#ifndef TYL_PE_GENERATOR_H
+#define TYL_PE_GENERATOR_H
 
 #include <vector>
 #include <string>
@@ -8,7 +8,7 @@
 #include <fstream>
 #include <map>
 
-namespace flex {
+namespace tyl {
 
 // Fixup types for RIP-relative addressing
 enum class FixupType {
@@ -49,6 +49,10 @@ public:
     uint32_t getActualDataRVA() const;
     uint32_t getActualIdataRVA() const;
     
+    // Get sections for object file generation
+    const std::vector<uint8_t>& getDataSection() const { return dataSection; }
+    const std::map<std::string, std::vector<std::string>>& getImports() const { return imports; }
+    
     static const uint64_t IMAGE_BASE = 0x140000000ULL;
     static const uint32_t CODE_RVA = 0x1000;
     // These are now placeholder values - actual RVAs computed at write time
@@ -78,6 +82,6 @@ private:
     void applyVtableFixups();
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_PE_GENERATOR_H
+#endif // TYL_PE_GENERATOR_H

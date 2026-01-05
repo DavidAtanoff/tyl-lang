@@ -1,10 +1,10 @@
-// Flex Compiler - Linker Output Generation
+// Tyl Compiler - Linker Output Generation
 
 #include "linker_base.h"
 #include <iostream>
 #include <fstream>
 
-namespace flex {
+namespace tyl {
 
 bool Linker::generateExecutable() {
     if (config_.verbose) {
@@ -298,4 +298,4 @@ void Linker::generateMapFile() {
     map.close();
 }
 
-} // namespace flex
+} // namespace tyl

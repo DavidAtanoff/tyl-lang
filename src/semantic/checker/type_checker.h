@@ -1,13 +1,14 @@
-// Flex Compiler - Type Checker and Inference
-#ifndef FLEX_TYPE_CHECKER_H
-#define FLEX_TYPE_CHECKER_H
+// Tyl Compiler - Type Checker and Inference
+#ifndef TYL_TYPE_CHECKER_H
+#define TYL_TYPE_CHECKER_H
 
 #include "frontend/ast/ast.h"
 #include "semantic/types/types.h"
 #include "semantic/symbols/symbol_table.h"
+#include "semantic/ownership/ownership.h"
 #include <vector>
 
-namespace flex {
+namespace tyl {
 
 struct TypeDiagnostic {
     enum class Level { ERROR, WARNING, NOTE };
@@ -25,12 +26,15 @@ public:
     bool hasErrors() const;
     TypePtr getType(Expression* expr);
     SymbolTable& symbols() { return symbols_; }
+    OwnershipTracker& ownership() { return ownership_; }
     
 private:
     SymbolTable symbols_;
     std::vector<TypeDiagnostic> diagnostics_;
     TypePtr currentType_;
     TypePtr expectedReturn_;
+    OwnershipTracker ownership_;  // Ownership and borrow tracking
+    bool borrowCheckEnabled_ = true;  // Enable/disable borrow checking
     
     // Generic type context
     std::unordered_map<std::string, TypePtr> currentTypeParams_;  // Active type parameter bindings
@@ -48,6 +52,13 @@ private:
     void registerBuiltins();  // Register built-in functions
     void checkUnusedVariables(Scope* scope);  // Check for unused variables in scope
     
+    // Ownership and borrow checking
+    void checkOwnership(Expression* expr, bool isMove = false);
+    void checkBorrow(Expression* expr, bool isMutable);
+    ParamMode parseParamMode(const std::string& typeName);
+    std::string stripBorrowPrefix(const std::string& typeName);
+    void emitOwnershipError(const std::string& msg, const SourceLocation& loc);
+    
     // Generic and trait type checking
     TypePtr parseGenericType(const std::string& str);
     TypePtr resolveTypeParam(const std::string& name);
@@ -59,6 +70,8 @@ private:
     void visit(IntegerLiteral& node) override;
     void visit(FloatLiteral& node) override;
     void visit(StringLiteral& node) override;
+    void visit(CharLiteral& node) override;
+    void visit(ByteStringLiteral& node) override;
     void visit(InterpolatedString& node) override;
     void visit(BoolLiteral& node) override;
     void visit(NilLiteral& node) override;
@@ -76,6 +89,7 @@ private:
     void visit(TernaryExpr& node) override;
     void visit(ListCompExpr& node) override;
     void visit(AddressOfExpr& node) override;
+    void visit(BorrowExpr& node) override;
     void visit(DerefExpr& node) override;
     void visit(NewExpr& node) override;
     void visit(CastExpr& node) override;
@@ -102,6 +116,45 @@ private:
     void visit(SemAcquireExpr& node) override;
     void visit(SemReleaseExpr& node) override;
     void visit(SemTryAcquireExpr& node) override;
+    void visit(MakeAtomicExpr& node) override;
+    void visit(AtomicLoadExpr& node) override;
+    void visit(AtomicStoreExpr& node) override;
+    void visit(AtomicSwapExpr& node) override;
+    void visit(AtomicCasExpr& node) override;
+    void visit(AtomicAddExpr& node) override;
+    void visit(AtomicSubExpr& node) override;
+    void visit(AtomicAndExpr& node) override;
+    void visit(AtomicOrExpr& node) override;
+    void visit(AtomicXorExpr& node) override;
+    // Smart Pointer expressions
+    void visit(MakeBoxExpr& node) override;
+    void visit(MakeRcExpr& node) override;
+    void visit(MakeArcExpr& node) override;
+    void visit(MakeWeakExpr& node) override;
+    void visit(MakeCellExpr& node) override;
+    void visit(MakeRefCellExpr& node) override;
+    // Advanced Concurrency
+    void visit(MakeFutureExpr& node) override;
+    void visit(FutureGetExpr& node) override;
+    void visit(FutureSetExpr& node) override;
+    void visit(FutureIsReadyExpr& node) override;
+    void visit(MakeThreadPoolExpr& node) override;
+    void visit(ThreadPoolSubmitExpr& node) override;
+    void visit(ThreadPoolShutdownExpr& node) override;
+    void visit(SelectExpr& node) override;
+    void visit(TimeoutExpr& node) override;
+    void visit(ChanRecvTimeoutExpr& node) override;
+    void visit(ChanSendTimeoutExpr& node) override;
+    void visit(MakeCancelTokenExpr& node) override;
+    void visit(CancelExpr& node) override;
+    void visit(IsCancelledExpr& node) override;
+    // Async Runtime - Event Loop and Task Management
+    void visit(AsyncRuntimeInitExpr& node) override;
+    void visit(AsyncRuntimeRunExpr& node) override;
+    void visit(AsyncRuntimeShutdownExpr& node) override;
+    void visit(AsyncSpawnExpr& node) override;
+    void visit(AsyncSleepExpr& node) override;
+    void visit(AsyncYieldExpr& node) override;
     void visit(ExprStmt& node) override;
     void visit(VarDecl& node) override;
     void visit(DestructuringDecl& node) override;
@@ -133,11 +186,29 @@ private:
     void visit(DeleteStmt& node) override;
     void visit(LockStmt& node) override;
     void visit(AsmStmt& node) override;
+    // Syntax Redesign - New Expression Visitors
+    void visit(PlaceholderExpr& node) override;
+    void visit(InclusiveRangeExpr& node) override;
+    void visit(SafeNavExpr& node) override;
+    void visit(TypeCheckExpr& node) override;
+    // Syntax Redesign - New Statement Visitors
+    void visit(LoopStmt& node) override;
+    void visit(WithStmt& node) override;
+    void visit(ScopeStmt& node) override;
+    void visit(RequireStmt& node) override;
+    void visit(EnsureStmt& node) override;
+    void visit(InvariantStmt& node) override;
+    void visit(ComptimeBlock& node) override;
+    // Algebraic Effects
+    void visit(EffectDecl& node) override;
+    void visit(PerformEffectExpr& node) override;
+    void visit(HandleExpr& node) override;
+    void visit(ResumeExpr& node) override;
     void visit(Program& node) override;
     
     std::unordered_map<Expression*, TypePtr> exprTypes_;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_TYPE_CHECKER_H
+#endif // TYL_TYPE_CHECKER_H

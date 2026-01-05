@@ -1,0 +1,18 @@
+// Channel test with print before send
+
+fn test_channel:
+    print("Creating...\n")
+    let ch = chan[int, 1]
+    print("Created\n")
+    print("Sending...\n")
+    ch <- 100
+    print("Sent\n")
+    print("Receiving...\n")
+    let value = <- ch
+    print("Received: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel()
+    return 0

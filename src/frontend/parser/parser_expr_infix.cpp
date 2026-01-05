@@ -1,11 +1,11 @@
-// Flex Compiler - Pratt Parser Infix Operations
+// Tyl Compiler - Pratt Parser Infix Operations
 // Handles infix operator parsing and postfix operations
 
 #include "parser_base.h"
 #include "frontend/macro/syntax_macro.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     auto loc = peek().location;
@@ -74,6 +74,11 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     if (op == TokenType::DOT) {
         return parseMemberAccess(std::move(left), loc);
     }
+    if (op == TokenType::QUESTION_DOT) {
+        // Safe navigation: obj?.member
+        auto member = consume(TokenType::IDENTIFIER, "Expected member name after '?.'").lexeme;
+        return std::make_unique<SafeNavExpr>(std::move(left), member, loc);
+    }
     if (op == TokenType::LBRACKET) {
         return parseIndexAccess(std::move(left), loc);
     }
@@ -103,7 +108,7 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
             return rec;
         }
         auto diag = errors::unexpectedToken(previous().lexeme, previous().location);
-        throw FlexDiagnosticError(diag);
+        throw TylDiagnosticError(diag);
     }
     
     // Ternary and postfix ?
@@ -132,9 +137,22 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     
     // Compound Assignment
     if (op == TokenType::ASSIGN || op == TokenType::PLUS_ASSIGN || op == TokenType::MINUS_ASSIGN ||
-        op == TokenType::STAR_ASSIGN || op == TokenType::SLASH_ASSIGN) {
+        op == TokenType::STAR_ASSIGN || op == TokenType::SLASH_ASSIGN || op == TokenType::PERCENT_ASSIGN) {
         auto right = parsePrecedence(Precedence::ASSIGNMENT);
         return std::make_unique<AssignExpr>(std::move(left), op, std::move(right), loc);
+    }
+    
+    // Arrow lambda: identifier => expr
+    if (op == TokenType::DOUBLE_ARROW) {
+        if (auto* id = dynamic_cast<Identifier*>(left.get())) {
+            return parseArrowLambda(id->name, loc);
+        }
+        // Could be placeholder lambda: _ => expr (but _ * 2 is handled differently)
+        if (auto* ph = dynamic_cast<PlaceholderExpr*>(left.get())) {
+            return parseArrowLambda("_", loc);
+        }
+        auto diag = errors::unexpectedToken("=>", loc);
+        throw TylDiagnosticError(diag);
     }
     
     // Channel send: ch <- value
@@ -159,6 +177,22 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
         return std::make_unique<RangeExpr>(std::move(left), std::move(end), std::move(step), loc);
     }
     
+    // Inclusive range operator ..=
+    if (op == TokenType::DOTDOT_EQ) {
+        auto end = parsePrecedence(static_cast<Precedence>(static_cast<int>(Precedence::RANGE) + 1));
+        ExprPtr step = nullptr;
+        if (match(TokenType::BY)) {
+            step = parsePrecedence(static_cast<Precedence>(static_cast<int>(Precedence::RANGE) + 1));
+        }
+        return std::make_unique<InclusiveRangeExpr>(std::move(left), std::move(end), std::move(step), loc);
+    }
+    
+    // Type check operator: value is Type
+    if (op == TokenType::IS) {
+        auto typeName = parseType();
+        return std::make_unique<TypeCheckExpr>(std::move(left), typeName, loc);
+    }
+    
     // Spaceship operator
     if (op == TokenType::SPACESHIP) {
         auto right = parsePrecedence(static_cast<Precedence>(static_cast<int>(prec) + 1));
@@ -179,6 +213,37 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     if (op == TokenType::PIPE_PIPE) op = TokenType::OR;
     if (op == TokenType::AMP_AMP) op = TokenType::AND;
     
+    // Check if this is a placeholder expression that should become a lambda
+    // e.g., _ * 2 becomes |_it| _it * 2
+    // But NOT in constraint contexts (refinement types)
+    bool leftIsPlaceholder = dynamic_cast<PlaceholderExpr*>(left.get()) != nullptr;
+    bool rightIsPlaceholder = dynamic_cast<PlaceholderExpr*>(right.get()) != nullptr;
+    
+    if (!inConstraintContext_ && (leftIsPlaceholder || rightIsPlaceholder)) {
+        // Transform into a lambda: |_it| _it op right (or left op _it)
+        std::string paramName = "_it";
+        
+        // Replace placeholder(s) with identifier
+        ExprPtr newLeft, newRight;
+        if (leftIsPlaceholder) {
+            newLeft = std::make_unique<Identifier>(paramName, loc);
+        } else {
+            newLeft = std::move(left);
+        }
+        if (rightIsPlaceholder) {
+            newRight = std::make_unique<Identifier>(paramName, loc);
+        } else {
+            newRight = std::move(right);
+        }
+        
+        auto body = std::make_unique<BinaryExpr>(std::move(newLeft), op, std::move(newRight), loc);
+        
+        auto lambda = std::make_unique<LambdaExpr>(loc);
+        lambda->params.push_back({paramName, ""});  // name, type (empty = inferred)
+        lambda->body = std::move(body);
+        return lambda;
+    }
+    
     return std::make_unique<BinaryExpr>(std::move(left), op, std::move(right), loc);
 }
 
@@ -191,6 +256,18 @@ ExprPtr Parser::parseMemberAccess(ExprPtr object, SourceLocation loc) {
         parseCallArgs(call.get());
         consume(TokenType::RPAREN, "Expected ')' after method arguments");
         return call;
+    }
+    
+    // Check if object is a placeholder - transform _.field into |_it| _it.field
+    // But NOT in constraint contexts (refinement types)
+    if (!inConstraintContext_ && dynamic_cast<PlaceholderExpr*>(object.get()) != nullptr) {
+        std::string paramName = "_it";
+        auto paramIdent = std::make_unique<Identifier>(paramName, loc);
+        auto body = std::make_unique<MemberExpr>(std::move(paramIdent), member, loc);
+        auto lambda = std::make_unique<LambdaExpr>(loc);
+        lambda->params.push_back({paramName, ""});
+        lambda->body = std::move(body);
+        return lambda;
     }
     
     return std::make_unique<MemberExpr>(std::move(object), member, loc);
@@ -264,4 +341,4 @@ ExprPtr Parser::parsePipe(ExprPtr left, ExprPtr right, SourceLocation loc) {
     return call;
 }
 
-} // namespace flex
+} // namespace tyl

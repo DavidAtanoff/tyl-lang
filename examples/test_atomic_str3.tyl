@@ -1,0 +1,12 @@
+// Test str() with atomic load - step by step
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](42)
+    let val: int = counter.load()
+    print(val)
+    println("")
+    let s: str = str(val)
+    println(s)
+    return 0
+
+main()

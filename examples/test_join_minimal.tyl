@@ -1,0 +1,6 @@
+// Minimal join test - isolate the issue
+fn main -> int:
+    let a = ["x"]
+    print("hi")
+    print(join(a, ","))
+    return 0

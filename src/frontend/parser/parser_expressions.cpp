@@ -1,4 +1,4 @@
-// Flex Compiler - Pratt Parser Expression Implementation
+// Tyl Compiler - Pratt Parser Expression Implementation
 // Uses Pratt parsing (top-down operator precedence) for clean, extensible expression parsing
 
 #include "parser_base.h"
@@ -7,7 +7,7 @@
 #include "common/errors.h"
 #include <unordered_set>
 
-namespace flex {
+namespace tyl {
 
 static Parser::Precedence getInfixPrecedence(TokenType type) {
     switch (type) {
@@ -15,7 +15,8 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::PLUS_ASSIGN:
         case TokenType::MINUS_ASSIGN:
         case TokenType::STAR_ASSIGN:
-        case TokenType::SLASH_ASSIGN: return Parser::Precedence::ASSIGNMENT;
+        case TokenType::SLASH_ASSIGN:
+        case TokenType::PERCENT_ASSIGN: return Parser::Precedence::ASSIGNMENT;
         case TokenType::CHAN_SEND: return Parser::Precedence::ASSIGNMENT;  // ch <- value has low precedence
         case TokenType::QUESTION_QUESTION: return Parser::Precedence::NULL_COALESCE;
         case TokenType::OR:
@@ -31,8 +32,9 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::GT:
         case TokenType::LE:
         case TokenType::GE:
-        case TokenType::SPACESHIP: return Parser::Precedence::COMPARISON;
-        case TokenType::DOTDOT: return Parser::Precedence::RANGE;
+        case TokenType::SPACESHIP:
+        case TokenType::IS: return Parser::Precedence::COMPARISON;  // is for type checking
+        case TokenType::DOTDOT: return Parser::Precedence::RANGE;  // .. inclusive range
         case TokenType::PLUS:
         case TokenType::MINUS: return Parser::Precedence::TERM;
         case TokenType::STAR:
@@ -41,7 +43,9 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::CUSTOM_OP: return Parser::Precedence::FACTOR; // Custom ops get factor precedence by default
         case TokenType::PIPE_GT: return Parser::Precedence::PIPE;
         case TokenType::QUESTION: return Parser::Precedence::TERNARY;
+        case TokenType::DOUBLE_ARROW: return Parser::Precedence::ASSIGNMENT;  // => for arrow lambdas
         case TokenType::DOT:
+        case TokenType::QUESTION_DOT:  // ?. safe navigation
         case TokenType::LBRACKET:
         case TokenType::LPAREN:
         case TokenType::LBRACE: return Parser::Precedence::POSTFIX;
@@ -67,6 +71,13 @@ ExprPtr Parser::parsePrecedence(Precedence minPrec) {
     // Parse infix operators while they have higher precedence
     while (!isAtEnd()) {
         Precedence prec = getInfixPrecedence(peek().type);
+        
+        // Special case: { is only a postfix operator for record construction
+        // when left is an identifier (type name). Otherwise, stop parsing.
+        // This allows: if x > 0 { ... }
+        if (check(TokenType::LBRACE) && !dynamic_cast<Identifier*>(left.get())) {
+            break;
+        }
         
         // Check for user-defined infix operators
         if (check(TokenType::IDENTIFIER)) {
@@ -107,10 +118,12 @@ ExprPtr Parser::parsePrefix() {
         return std::make_unique<UnaryExpr>(op, std::move(operand), loc);
     }
     
-    // Address-of
+    // Address-of / Borrow
     if (match(TokenType::AMP)) {
+        bool isMut = match(TokenType::MUT);
         auto operand = parsePrecedence(Precedence::UNARY);
-        return std::make_unique<AddressOfExpr>(std::move(operand), loc);
+        // Create BorrowExpr for safe borrows (& and &mut)
+        return std::make_unique<BorrowExpr>(std::move(operand), isMut, loc);
     }
     
     // Dereference
@@ -216,6 +229,11 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     if (op == TokenType::DOT) {
         return parseMemberAccess(std::move(left), loc);
     }
+    if (op == TokenType::QUESTION_DOT) {
+        // Safe navigation: obj?.member
+        auto member = consume(TokenType::IDENTIFIER, "Expected member name after '?.'").lexeme;
+        return std::make_unique<SafeNavExpr>(std::move(left), member, loc);
+    }
     if (op == TokenType::LBRACKET) {
         return parseIndexAccess(std::move(left), loc);
     }
@@ -224,6 +242,7 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     }
     if (op == TokenType::LBRACE) {
         // Record construction with type name: Point{x: 10, y: 20}
+        // Only treat { as postfix if left is an identifier (type name)
         if (auto* id = dynamic_cast<Identifier*>(left.get())) {
             auto rec = std::make_unique<RecordExpr>(loc);
             rec->typeName = id->name;
@@ -245,9 +264,10 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
             consume(TokenType::RBRACE, "Expected '}' after record fields");
             return rec;
         }
-        // Not an identifier - treat as error or anonymous record
-        auto diag = errors::unexpectedToken(previous().lexeme, previous().location);
-        throw FlexDiagnosticError(diag);
+        // Not an identifier - this { is not for us (e.g., if x > 0 { ... })
+        // Don't consume it, just return the left expression
+        current--;  // Put back the { we consumed in advance()
+        return left;
     }
     
     // Standard Ternary: condition ? then : else
@@ -283,9 +303,22 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     
     // Compound Assignment
     if (op == TokenType::ASSIGN || op == TokenType::PLUS_ASSIGN || op == TokenType::MINUS_ASSIGN ||
-        op == TokenType::STAR_ASSIGN || op == TokenType::SLASH_ASSIGN) {
+        op == TokenType::STAR_ASSIGN || op == TokenType::SLASH_ASSIGN || op == TokenType::PERCENT_ASSIGN) {
         auto right = parsePrecedence(Precedence::ASSIGNMENT);
         return std::make_unique<AssignExpr>(std::move(left), op, std::move(right), loc);
+    }
+    
+    // Arrow lambda: identifier => expr
+    if (op == TokenType::DOUBLE_ARROW) {
+        if (auto* id = dynamic_cast<Identifier*>(left.get())) {
+            return parseArrowLambda(id->name, loc);
+        }
+        // Could be placeholder lambda: _ => expr
+        if (auto* ph = dynamic_cast<PlaceholderExpr*>(left.get())) {
+            return parseArrowLambda("_", loc);
+        }
+        auto diag = errors::unexpectedToken("=>", loc);
+        throw TylDiagnosticError(diag);
     }
     
     // Channel send: ch <- value
@@ -300,7 +333,7 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
         return parsePipe(std::move(left), std::move(right), loc);
     }
     
-    // Range operator (can have optional 'by' step)
+    // Range operator: 1..5 is inclusive (1,2,3,4,5)
     if (op == TokenType::DOTDOT) {
         auto end = parsePrecedence(static_cast<Precedence>(static_cast<int>(Precedence::RANGE) + 1));
         ExprPtr step = nullptr;
@@ -308,6 +341,12 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
             step = parsePrecedence(static_cast<Precedence>(static_cast<int>(Precedence::RANGE) + 1));
         }
         return std::make_unique<RangeExpr>(std::move(left), std::move(end), std::move(step), loc);
+    }
+    
+    // Type check operator: value is Type
+    if (op == TokenType::IS) {
+        auto typeName = parseType();
+        return std::make_unique<TypeCheckExpr>(std::move(left), typeName, loc);
     }
     
     // Spaceship operator with user override check
@@ -330,6 +369,37 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
     // Normalize OR/AND variants
     if (op == TokenType::PIPE_PIPE) op = TokenType::OR;
     if (op == TokenType::AMP_AMP) op = TokenType::AND;
+    
+    // Check if this is a placeholder expression that should become a lambda
+    // e.g., _ * 2 becomes |_it| _it * 2
+    // But NOT in constraint contexts (refinement types)
+    bool leftIsPlaceholder = dynamic_cast<PlaceholderExpr*>(left.get()) != nullptr;
+    bool rightIsPlaceholder = dynamic_cast<PlaceholderExpr*>(right.get()) != nullptr;
+    
+    if (!inConstraintContext_ && (leftIsPlaceholder || rightIsPlaceholder)) {
+        // Transform into a lambda: |_it| _it op right (or left op _it)
+        std::string paramName = "_it";
+        
+        // Replace placeholder(s) with identifier
+        ExprPtr newLeft, newRight;
+        if (leftIsPlaceholder) {
+            newLeft = std::make_unique<Identifier>(paramName, loc);
+        } else {
+            newLeft = std::move(left);
+        }
+        if (rightIsPlaceholder) {
+            newRight = std::make_unique<Identifier>(paramName, loc);
+        } else {
+            newRight = std::move(right);
+        }
+        
+        auto body = std::make_unique<BinaryExpr>(std::move(newLeft), op, std::move(newRight), loc);
+        
+        auto lambda = std::make_unique<LambdaExpr>(loc);
+        lambda->params.push_back({paramName, ""});  // name, type (empty = inferred)
+        lambda->body = std::move(body);
+        return lambda;
+    }
     
     return std::make_unique<BinaryExpr>(std::move(left), op, std::move(right), loc);
 }
@@ -363,6 +433,18 @@ ExprPtr Parser::parseMemberAccess(ExprPtr object, SourceLocation loc) {
         parseCallArgs(call.get());
         consume(TokenType::RPAREN, "Expected ')' after method arguments");
         return call;
+    }
+    
+    // Check if object is a placeholder - transform _.field into |_it| _it.field
+    // But NOT in constraint contexts (refinement types)
+    if (!inConstraintContext_ && dynamic_cast<PlaceholderExpr*>(object.get()) != nullptr) {
+        std::string paramName = "_it";
+        auto paramIdent = std::make_unique<Identifier>(paramName, loc);
+        auto body = std::make_unique<MemberExpr>(std::move(paramIdent), member, loc);
+        auto lambda = std::make_unique<LambdaExpr>(loc);
+        lambda->params.push_back({paramName, ""});
+        lambda->body = std::move(body);
+        return lambda;
     }
     
     return std::make_unique<MemberExpr>(std::move(object), member, loc);
@@ -482,6 +564,99 @@ ExprPtr Parser::parseNew(SourceLocation loc) {
 ExprPtr Parser::primary() {
     auto loc = peek().location;
     
+    // Algebraic Effects - handle expression
+    // handle expr:
+    //     Effect.op(params) => body
+    if (match(TokenType::HANDLE)) {
+        auto expr = expression();
+        consume(TokenType::COLON, "Expected ':' after handle expression");
+        match(TokenType::NEWLINE);
+        
+        auto handleExpr = std::make_unique<HandleExpr>(std::move(expr), loc);
+        
+        consume(TokenType::INDENT, "Expected indented handler block");
+        skipNewlines();
+        
+        // Parse handler cases
+        while (!check(TokenType::DEDENT) && !isAtEnd()) {
+            // Parse Effect.op(params) => body
+            std::string effectName = consume(TokenType::IDENTIFIER, "Expected effect name").lexeme;
+            consume(TokenType::DOT, "Expected '.' after effect name");
+            std::string opName = consume(TokenType::IDENTIFIER, "Expected operation name").lexeme;
+            
+            EffectHandlerCase handlerCase(effectName, opName);
+            
+            // Parse parameter bindings
+            consume(TokenType::LPAREN, "Expected '(' after operation name");
+            if (!check(TokenType::RPAREN)) {
+                do {
+                    handlerCase.paramNames.push_back(
+                        consume(TokenType::IDENTIFIER, "Expected parameter name").lexeme);
+                } while (match(TokenType::COMMA));
+            }
+            consume(TokenType::RPAREN, "Expected ')' after parameters");
+            
+            // Check for resume parameter: => |k| body
+            if (match(TokenType::DOUBLE_ARROW)) {
+                if (match(TokenType::PIPE)) {
+                    handlerCase.resumeParam = consume(TokenType::IDENTIFIER, "Expected resume parameter").lexeme;
+                    consume(TokenType::PIPE, "Expected '|' after resume parameter");
+                }
+            } else {
+                consume(TokenType::ARROW, "Expected '=>' or '->' after handler pattern");
+            }
+            
+            // Parse handler body
+            if (check(TokenType::NEWLINE)) {
+                match(TokenType::NEWLINE);
+                handlerCase.body = block();
+            } else {
+                auto bodyExpr = expression();
+                handlerCase.body = std::make_unique<ExprStmt>(std::move(bodyExpr), loc);
+                match(TokenType::NEWLINE);
+            }
+            
+            handleExpr->handlers.push_back(std::move(handlerCase));
+            skipNewlines();
+        }
+        
+        consume(TokenType::DEDENT, "Expected end of handler block");
+        return handleExpr;
+    }
+    
+    // Algebraic Effects - perform expression
+    // perform Effect.op(args)
+    if (match(TokenType::PERFORM)) {
+        std::string effectName = consume(TokenType::IDENTIFIER, "Expected effect name").lexeme;
+        consume(TokenType::DOT, "Expected '.' after effect name");
+        std::string opName = consume(TokenType::IDENTIFIER, "Expected operation name").lexeme;
+        
+        auto performExpr = std::make_unique<PerformEffectExpr>(effectName, opName, loc);
+        
+        // Parse arguments
+        consume(TokenType::LPAREN, "Expected '(' after operation name");
+        if (!check(TokenType::RPAREN)) {
+            do {
+                performExpr->args.push_back(expression());
+            } while (match(TokenType::COMMA));
+        }
+        consume(TokenType::RPAREN, "Expected ')' after arguments");
+        
+        return performExpr;
+    }
+    
+    // Algebraic Effects - resume expression
+    // resume(value)
+    if (match(TokenType::RESUME)) {
+        consume(TokenType::LPAREN, "Expected '(' after resume");
+        ExprPtr value = nullptr;
+        if (!check(TokenType::RPAREN)) {
+            value = expression();
+        }
+        consume(TokenType::RPAREN, "Expected ')' after resume value");
+        return std::make_unique<ResumeExpr>(std::move(value), loc);
+    }
+    
     // Channel creation: chan[T] or chan[T, N]
     if (match(TokenType::CHAN)) {
         consume(TokenType::LBRACKET, "Expected '[' after chan");
@@ -533,14 +708,114 @@ ExprPtr Parser::primary() {
         return std::make_unique<MakeSemaphoreExpr>(initialCount, maxCount, loc);
     }
     
-    // Integer literal
-    if (match(TokenType::INTEGER)) {
-        return std::make_unique<IntegerLiteral>(std::get<int64_t>(previous().literal), loc);
+    // Atomic creation: Atomic[T](value)
+    if (match(TokenType::ATOMIC)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Atomic");
+        std::string elemType = parseType();
+        consume(TokenType::RBRACKET, "Expected ']' after Atomic type");
+        consume(TokenType::LPAREN, "Expected '(' after Atomic[T]");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after Atomic initial value");
+        return std::make_unique<MakeAtomicExpr>(elemType, std::move(initValue), loc);
     }
     
-    // Float literal
+    // Box creation: Box(value) or Box[T](value)
+    if (match(TokenType::BOX)) {
+        std::string elemType;
+        if (match(TokenType::LBRACKET)) {
+            elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after Box type");
+        }
+        consume(TokenType::LPAREN, "Expected '(' after Box");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after Box value");
+        return std::make_unique<MakeBoxExpr>(elemType, std::move(initValue), loc);
+    }
+    
+    // Rc creation: Rc(value) or Rc[T](value)
+    if (match(TokenType::RC)) {
+        std::string elemType;
+        if (match(TokenType::LBRACKET)) {
+            elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after Rc type");
+        }
+        consume(TokenType::LPAREN, "Expected '(' after Rc");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after Rc value");
+        return std::make_unique<MakeRcExpr>(elemType, std::move(initValue), loc);
+    }
+    
+    // Arc creation: Arc(value) or Arc[T](value)
+    if (match(TokenType::ARC)) {
+        std::string elemType;
+        if (match(TokenType::LBRACKET)) {
+            elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after Arc type");
+        }
+        consume(TokenType::LPAREN, "Expected '(' after Arc");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after Arc value");
+        return std::make_unique<MakeArcExpr>(elemType, std::move(initValue), loc);
+    }
+    
+    // Cell creation: Cell(value) or Cell[T](value)
+    if (match(TokenType::CELL)) {
+        std::string elemType;
+        if (match(TokenType::LBRACKET)) {
+            elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after Cell type");
+        }
+        consume(TokenType::LPAREN, "Expected '(' after Cell");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after Cell value");
+        return std::make_unique<MakeCellExpr>(elemType, std::move(initValue), loc);
+    }
+    
+    // RefCell creation: RefCell(value) or RefCell[T](value)
+    if (match(TokenType::REFCELL)) {
+        std::string elemType;
+        if (match(TokenType::LBRACKET)) {
+            elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after RefCell type");
+        }
+        consume(TokenType::LPAREN, "Expected '(' after RefCell");
+        auto initValue = expression();
+        consume(TokenType::RPAREN, "Expected ')' after RefCell value");
+        return std::make_unique<MakeRefCellExpr>(elemType, std::move(initValue), loc);
+    }
+    
+    // Integer literal (may have type suffix like i32, u64, etc.)
+    if (match(TokenType::INTEGER)) {
+        Token tok = previous();
+        int64_t value = std::get<int64_t>(tok.literal);
+        // Extract type suffix from lexeme (e.g., "42i32" -> suffix is "i32")
+        std::string suffix;
+        const std::string& lexeme = tok.lexeme;
+        size_t i = 0;
+        // Skip digits and optional leading minus
+        while (i < lexeme.size() && (std::isdigit(lexeme[i]) || lexeme[i] == '-')) i++;
+        if (i < lexeme.size()) suffix = lexeme.substr(i);
+        return std::make_unique<IntegerLiteral>(value, loc, suffix);
+    }
+    
+    // Float literal (may have type suffix like f32, f64, etc.)
     if (match(TokenType::FLOAT)) {
-        return std::make_unique<FloatLiteral>(std::get<double>(previous().literal), loc);
+        Token tok = previous();
+        double value = std::get<double>(tok.literal);
+        // Extract type suffix from lexeme (e.g., "3.14f32" -> suffix is "f32")
+        std::string suffix;
+        const std::string& lexeme = tok.lexeme;
+        size_t i = 0;
+        // Skip digits, decimal point, and exponent notation
+        while (i < lexeme.size() && (std::isdigit(lexeme[i]) || lexeme[i] == '.' || 
+               lexeme[i] == 'e' || lexeme[i] == 'E' || lexeme[i] == '+' || lexeme[i] == '-')) i++;
+        if (i < lexeme.size()) suffix = lexeme.substr(i);
+        return std::make_unique<FloatLiteral>(value, loc, suffix);
+    }
+    
+    // Placeholder _ for lambda shorthand (e.g., _ * 2)
+    if (match(TokenType::UNDERSCORE)) {
+        return std::make_unique<PlaceholderExpr>(loc);
     }
     
     // String literal (may be interpolated)
@@ -586,6 +861,26 @@ ExprPtr Parser::primary() {
         return std::make_unique<StringLiteral>(value, loc);
     }
     
+    // Character literal: 'A', '\n', '\u{1F600}'
+    if (match(TokenType::CHAR)) {
+        uint32_t value = static_cast<uint32_t>(std::get<int64_t>(previous().literal));
+        return std::make_unique<CharLiteral>(value, loc);
+    }
+    
+    // Byte string literal: b"hello"
+    if (match(TokenType::BYTE_STRING)) {
+        std::string strValue = std::get<std::string>(previous().literal);
+        std::vector<uint8_t> bytes(strValue.begin(), strValue.end());
+        return std::make_unique<ByteStringLiteral>(bytes, false, loc);
+    }
+    
+    // Raw byte string literal: br"\x00\xFF"
+    if (match(TokenType::RAW_BYTE_STRING)) {
+        std::string strValue = std::get<std::string>(previous().literal);
+        std::vector<uint8_t> bytes(strValue.begin(), strValue.end());
+        return std::make_unique<ByteStringLiteral>(bytes, true, loc);
+    }
+    
     // Boolean literals
     if (match(TokenType::TRUE)) {
         return std::make_unique<BoolLiteral>(true, loc);
@@ -599,10 +894,154 @@ ExprPtr Parser::primary() {
         return std::make_unique<NilLiteral>(loc);
     }
     
+    // Handle 'self' keyword as an identifier in method contexts
+    if (match(TokenType::SELF)) {
+        return std::make_unique<Identifier>("self", previous().location);
+    }
+    
     // Identifier (may be DSL block or builtin function)
     if (match(TokenType::IDENTIFIER)) {
         std::string name = previous().lexeme;
         auto idLoc = previous().location;
+        
+        // Advanced Concurrency - Future/Promise
+        if (name == "make_future") {
+            consume(TokenType::LBRACKET, "Expected '[' after make_future");
+            std::string elemType = parseType();
+            consume(TokenType::RBRACKET, "Expected ']' after type");
+            consume(TokenType::LPAREN, "Expected '(' after make_future[T]");
+            consume(TokenType::RPAREN, "Expected ')' after make_future[T](");
+            return std::make_unique<MakeFutureExpr>(elemType, idLoc);
+        }
+        
+        if (name == "future_get") {
+            consume(TokenType::LPAREN, "Expected '(' after future_get");
+            auto futureExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after future_get argument");
+            return std::make_unique<FutureGetExpr>(std::move(futureExpr), idLoc);
+        }
+        
+        if (name == "future_set") {
+            consume(TokenType::LPAREN, "Expected '(' after future_set");
+            auto futureExpr = expression();
+            consume(TokenType::COMMA, "Expected ',' after future argument");
+            auto valueExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after future_set arguments");
+            return std::make_unique<FutureSetExpr>(std::move(futureExpr), std::move(valueExpr), idLoc);
+        }
+        
+        if (name == "future_is_ready") {
+            consume(TokenType::LPAREN, "Expected '(' after future_is_ready");
+            auto futureExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after future_is_ready argument");
+            return std::make_unique<FutureIsReadyExpr>(std::move(futureExpr), idLoc);
+        }
+        
+        // Advanced Concurrency - Thread Pool
+        if (name == "make_thread_pool") {
+            consume(TokenType::LPAREN, "Expected '(' after make_thread_pool");
+            auto numWorkers = expression();
+            consume(TokenType::RPAREN, "Expected ')' after make_thread_pool argument");
+            return std::make_unique<MakeThreadPoolExpr>(std::move(numWorkers), idLoc);
+        }
+        
+        if (name == "thread_pool_submit") {
+            consume(TokenType::LPAREN, "Expected '(' after thread_pool_submit");
+            auto poolExpr = expression();
+            consume(TokenType::COMMA, "Expected ',' after pool argument");
+            auto taskExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after thread_pool_submit arguments");
+            return std::make_unique<ThreadPoolSubmitExpr>(std::move(poolExpr), std::move(taskExpr), idLoc);
+        }
+        
+        if (name == "thread_pool_shutdown") {
+            consume(TokenType::LPAREN, "Expected '(' after thread_pool_shutdown");
+            auto poolExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after thread_pool_shutdown argument");
+            return std::make_unique<ThreadPoolShutdownExpr>(std::move(poolExpr), idLoc);
+        }
+        
+        // Advanced Concurrency - Cancellation Token
+        if (name == "make_cancel_token") {
+            consume(TokenType::LPAREN, "Expected '(' after make_cancel_token");
+            consume(TokenType::RPAREN, "Expected ')' after make_cancel_token(");
+            return std::make_unique<MakeCancelTokenExpr>(idLoc);
+        }
+        
+        if (name == "cancel") {
+            consume(TokenType::LPAREN, "Expected '(' after cancel");
+            auto tokenExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after cancel argument");
+            return std::make_unique<CancelExpr>(std::move(tokenExpr), idLoc);
+        }
+        
+        if (name == "is_cancelled") {
+            consume(TokenType::LPAREN, "Expected '(' after is_cancelled");
+            auto tokenExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after is_cancelled argument");
+            return std::make_unique<IsCancelledExpr>(std::move(tokenExpr), idLoc);
+        }
+        
+        // Async Runtime - Event Loop and Task Management
+        if (name == "async_init") {
+            consume(TokenType::LPAREN, "Expected '(' after async_init");
+            auto numWorkers = expression();
+            consume(TokenType::RPAREN, "Expected ')' after async_init argument");
+            return std::make_unique<AsyncRuntimeInitExpr>(std::move(numWorkers), idLoc);
+        }
+        
+        if (name == "async_run") {
+            consume(TokenType::LPAREN, "Expected '(' after async_run");
+            consume(TokenType::RPAREN, "Expected ')' after async_run(");
+            return std::make_unique<AsyncRuntimeRunExpr>(idLoc);
+        }
+        
+        if (name == "async_shutdown") {
+            consume(TokenType::LPAREN, "Expected '(' after async_shutdown");
+            consume(TokenType::RPAREN, "Expected ')' after async_shutdown(");
+            return std::make_unique<AsyncRuntimeShutdownExpr>(idLoc);
+        }
+        
+        if (name == "async_spawn") {
+            consume(TokenType::LPAREN, "Expected '(' after async_spawn");
+            auto taskExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after async_spawn argument");
+            return std::make_unique<AsyncSpawnExpr>(std::move(taskExpr), idLoc);
+        }
+        
+        if (name == "async_sleep") {
+            consume(TokenType::LPAREN, "Expected '(' after async_sleep");
+            auto durationExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after async_sleep argument");
+            return std::make_unique<AsyncSleepExpr>(std::move(durationExpr), idLoc);
+        }
+        
+        if (name == "async_yield") {
+            consume(TokenType::LPAREN, "Expected '(' after async_yield");
+            consume(TokenType::RPAREN, "Expected ')' after async_yield(");
+            return std::make_unique<AsyncYieldExpr>(idLoc);
+        }
+        
+        // Advanced Concurrency - Channel Timeout
+        if (name == "chan_recv_timeout") {
+            consume(TokenType::LPAREN, "Expected '(' after chan_recv_timeout");
+            auto channelExpr = expression();
+            consume(TokenType::COMMA, "Expected ',' after channel argument");
+            auto timeoutExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after chan_recv_timeout arguments");
+            return std::make_unique<ChanRecvTimeoutExpr>(std::move(channelExpr), std::move(timeoutExpr), idLoc);
+        }
+        
+        if (name == "chan_send_timeout") {
+            consume(TokenType::LPAREN, "Expected '(' after chan_send_timeout");
+            auto channelExpr = expression();
+            consume(TokenType::COMMA, "Expected ',' after channel argument");
+            auto valueExpr = expression();
+            consume(TokenType::COMMA, "Expected ',' after value argument");
+            auto timeoutExpr = expression();
+            consume(TokenType::RPAREN, "Expected ')' after chan_send_timeout arguments");
+            return std::make_unique<ChanSendTimeoutExpr>(std::move(channelExpr), std::move(valueExpr), std::move(timeoutExpr), idLoc);
+        }
         
         // Check for builtin functions that can be called without parentheses in expressions
         // These are functions like str, len, int, float, bool, type, etc.
@@ -659,8 +1098,57 @@ ExprPtr Parser::primary() {
         return recordLiteral();
     }
     
-    // Grouped expression or tuple
+    // Grouped expression, tuple, or arrow lambda parameters
     if (match(TokenType::LPAREN)) {
+        // Check for empty parens: () => expr
+        if (check(TokenType::RPAREN)) {
+            advance(); // consume )
+            if (check(TokenType::DOUBLE_ARROW)) {
+                advance(); // consume =>
+                auto lam = std::make_unique<LambdaExpr>(loc);
+                lam->body = expression();
+                return lam;
+            }
+            // Empty tuple or unit - return nil for now
+            return std::make_unique<NilLiteral>(loc);
+        }
+        
+        // Check if this looks like lambda parameters: (a, b) => or (a) =>
+        // We need to look ahead to see if => follows the )
+        size_t savedPos = current;
+        std::vector<std::string> potentialParams;
+        bool couldBeLambdaParams = true;
+        
+        // Try to parse as identifier list
+        if (check(TokenType::IDENTIFIER)) {
+            potentialParams.push_back(advance().lexeme);
+            
+            while (match(TokenType::COMMA)) {
+                if (check(TokenType::IDENTIFIER)) {
+                    potentialParams.push_back(advance().lexeme);
+                } else {
+                    couldBeLambdaParams = false;
+                    break;
+                }
+            }
+            
+            if (couldBeLambdaParams && check(TokenType::RPAREN)) {
+                advance(); // consume )
+                if (check(TokenType::DOUBLE_ARROW)) {
+                    advance(); // consume =>
+                    auto lam = std::make_unique<LambdaExpr>(loc);
+                    for (const auto& param : potentialParams) {
+                        lam->params.emplace_back(param, "");
+                    }
+                    lam->body = expression();
+                    return lam;
+                }
+            }
+        }
+        
+        // Not a lambda - restore position and parse as expression
+        current = savedPos;
+        
         auto expr = expression();
         
         // Tuple: (a, b, c)
@@ -693,7 +1181,7 @@ ExprPtr Parser::primary() {
     }
     
     auto diag = errors::expectedExpression(tokenTypeToString(peek().type), loc);
-    throw FlexDiagnosticError(diag);
+    throw TylDiagnosticError(diag);
 }
 
 // List literal or list comprehension
@@ -809,6 +1297,14 @@ ExprPtr Parser::lambda() {
     return lam;
 }
 
+// Arrow lambda syntax: x => expr, (x, y) => expr, () => expr
+ExprPtr Parser::parseArrowLambda(const std::string& firstParam, SourceLocation loc) {
+    auto lam = std::make_unique<LambdaExpr>(loc);
+    lam->params.emplace_back(firstParam, "");
+    lam->body = expression();
+    return lam;
+}
+
 // Legacy compatibility wrappers (redirect to Pratt parser)
 ExprPtr Parser::assignment() { return parsePrecedence(Precedence::ASSIGNMENT); }
 ExprPtr Parser::ternary() { return parsePrecedence(Precedence::TERNARY); }
@@ -828,4 +1324,4 @@ ExprPtr Parser::factor() { return parsePrecedence(Precedence::FACTOR); }
 ExprPtr Parser::unary() { return parsePrefix(); }
 ExprPtr Parser::postfix() { return parsePrecedence(Precedence::POSTFIX); }
 
-} // namespace flex
+} // namespace tyl

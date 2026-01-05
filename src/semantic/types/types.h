@@ -1,6 +1,6 @@
-// Flex Compiler - Type System
-#ifndef FLEX_TYPES_H
-#define FLEX_TYPES_H
+// Tyl Compiler - Type System
+#ifndef TYL_TYPES_H
+#define TYL_TYPES_H
 
 #include <string>
 #include <vector>
@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include <optional>
 
-namespace flex {
+namespace tyl {
 
 struct Type;
 struct TraitType;
@@ -18,11 +18,19 @@ using TraitPtr = std::shared_ptr<TraitType>;
 
 enum class TypeKind {
     VOID, BOOL, INT, INT8, INT16, INT32, INT64, UINT8, UINT16, UINT32, UINT64,
-    FLOAT, FLOAT32, FLOAT64, STRING, LIST, MAP, RECORD, FUNCTION, PTR, REF,
+    FLOAT, FLOAT16, FLOAT32, FLOAT64, FLOAT128, STRING, CHAR, STR_VIEW, BYTE_ARRAY,
+    LIST, MAP, RECORD, FUNCTION, PTR, REF,
+    COMPLEX64, COMPLEX128,  // Complex number types
+    BIGINT, BIGFLOAT, DECIMAL, RATIONAL,  // Arbitrary precision types
+    FIXED,  // Fixed-point type
+    VEC2, VEC3, VEC4, MAT2, MAT3, MAT4,  // SIMD vector/matrix types
     ANY, NEVER, UNKNOWN, ERROR,
     // New kinds for generics and traits
     TYPE_PARAM,     // Generic type parameter (e.g., T in fn swap[T])
+    VALUE_PARAM,    // Value parameter for dependent types (e.g., N: int in Vector[T, N: int])
     GENERIC,        // Generic type instantiation (e.g., List[int])
+    DEPENDENT,      // Dependent type (type that depends on values)
+    REFINED,        // Refined type with constraint (e.g., NonEmpty[T] = [T] where len(_) > 0)
     TRAIT,          // Trait type
     TRAIT_OBJECT,   // Dynamic trait object (dyn Trait)
     FIXED_ARRAY,    // Fixed-size array (e.g., [int; 10])
@@ -30,7 +38,21 @@ enum class TypeKind {
     MUTEX,          // Mutex type for mutual exclusion (e.g., Mutex[int])
     RWLOCK,         // Reader-writer lock type (e.g., RWLock[int])
     COND,           // Condition variable type
-    SEMAPHORE       // Counting semaphore type
+    SEMAPHORE,      // Counting semaphore type
+    ATOMIC,         // Atomic type for lock-free operations (e.g., Atomic[int])
+    FUTURE,         // Future type for async results (e.g., Future[int])
+    THREAD_POOL,    // Thread pool type for worker threads
+    CANCEL_TOKEN,   // Cancellation token type for task cancellation
+    // Smart pointer types
+    BOX,            // Box[T] - unique ownership heap allocation
+    RC,             // Rc[T] - reference counted (single-threaded)
+    ARC,            // Arc[T] - atomic reference counted (thread-safe)
+    WEAK,           // Weak[T] - weak reference (non-owning)
+    CELL,           // Cell[T] - interior mutability (single-threaded)
+    REFCELL,        // RefCell[T] - runtime borrow checking
+    // Algebraic effects
+    EFFECT,         // Effect type (e.g., Error[str], State[int])
+    EFFECTFUL       // Function type with effects (e.g., fn() -> int with Error[str])
 };
 
 struct Type {
@@ -45,6 +67,7 @@ struct Type {
     bool isNumeric() const;
     bool isInteger() const;
     bool isFloat() const;
+    bool isComplex() const;
     bool isPrimitive() const;
     bool isReference() const;
     bool isPointer() const;
@@ -117,6 +140,41 @@ struct TypeParamType : Type {
     bool equals(const Type* other) const override;
     TypePtr clone() const override;
     bool satisfiesBound(const std::string& traitName) const;
+};
+
+// Value parameter for dependent types (e.g., N: int in Vector[T, N: int])
+struct ValueParamType : Type {
+    std::string name;                 // Parameter name (e.g., "N")
+    TypePtr valueType;                // Type of the value (e.g., int)
+    std::optional<int64_t> value;     // Concrete value if known at compile time
+    ValueParamType(std::string n, TypePtr vt) : Type(TypeKind::VALUE_PARAM), name(std::move(n)), valueType(std::move(vt)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Dependent type definition (e.g., type Vector[T, N: int] = [T; N])
+struct DependentType : Type {
+    std::string name;                                    // Type name (e.g., "Vector")
+    std::vector<std::pair<std::string, TypePtr>> params; // Type and value parameters
+    TypePtr baseType;                                    // The underlying type (e.g., [T; N])
+    DependentType(std::string n) : Type(TypeKind::DEPENDENT), name(std::move(n)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Refined type with constraint (e.g., type NonEmpty[T] = [T] where len(_) > 0)
+struct RefinedType : Type {
+    std::string name;                 // Type name (e.g., "NonEmpty")
+    TypePtr baseType;                 // The underlying type (e.g., [T])
+    std::string constraint;           // String representation of constraint for error messages
+    // The actual constraint is evaluated at runtime or compile-time
+    RefinedType(std::string n, TypePtr base, std::string constr = "") 
+        : Type(TypeKind::REFINED), name(std::move(n)), baseType(std::move(base)), constraint(std::move(constr)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
 };
 
 // Trait method signature
@@ -219,6 +277,186 @@ struct SemaphoreType : Type {
     TypePtr clone() const override;
 };
 
+// Atomic type for lock-free operations (e.g., Atomic[int])
+struct AtomicType : Type {
+    TypePtr element;                               // Element type (must be integer type)
+    AtomicType(TypePtr elem) : Type(TypeKind::ATOMIC), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Future type for async results (e.g., Future[int])
+struct FutureType : Type {
+    TypePtr element;                               // Result type
+    FutureType(TypePtr elem) : Type(TypeKind::FUTURE), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Thread pool type for worker threads
+struct ThreadPoolType : Type {
+    ThreadPoolType() : Type(TypeKind::THREAD_POOL) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Cancellation token type for task cancellation
+struct CancelTokenType : Type {
+    CancelTokenType() : Type(TypeKind::CANCEL_TOKEN) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Box type for unique ownership heap allocation (e.g., Box[int])
+struct BoxType : Type {
+    TypePtr element;                               // Contained type
+    BoxType(TypePtr elem) : Type(TypeKind::BOX), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Rc type for reference counting (single-threaded) (e.g., Rc[int])
+struct RcType : Type {
+    TypePtr element;                               // Contained type
+    RcType(TypePtr elem) : Type(TypeKind::RC), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Arc type for atomic reference counting (thread-safe) (e.g., Arc[int])
+struct ArcType : Type {
+    TypePtr element;                               // Contained type
+    ArcType(TypePtr elem) : Type(TypeKind::ARC), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Weak type for non-owning references (e.g., Weak[int])
+struct WeakType : Type {
+    TypePtr element;                               // Referenced type
+    bool isAtomic;                                 // true for Weak from Arc, false for Weak from Rc
+    WeakType(TypePtr elem, bool atomic = false) : Type(TypeKind::WEAK), element(std::move(elem)), isAtomic(atomic) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Cell type for interior mutability (single-threaded) (e.g., Cell[int])
+struct CellType : Type {
+    TypePtr element;                               // Contained type (must be Copy)
+    CellType(TypePtr elem) : Type(TypeKind::CELL), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// RefCell type for runtime borrow checking (e.g., RefCell[int])
+struct RefCellType : Type {
+    TypePtr element;                               // Contained type
+    RefCellType(TypePtr elem) : Type(TypeKind::REFCELL), element(std::move(elem)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// BigInt type for arbitrary precision integers
+struct BigIntType : Type {
+    BigIntType() : Type(TypeKind::BIGINT) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// BigFloat type for arbitrary precision floats
+struct BigFloatType : Type {
+    BigFloatType() : Type(TypeKind::BIGFLOAT) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Decimal type for exact decimal arithmetic (financial)
+struct DecimalType : Type {
+    DecimalType() : Type(TypeKind::DECIMAL) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Rational type for exact fractions (num/denom)
+struct RationalType : Type {
+    RationalType() : Type(TypeKind::RATIONAL) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Fixed-point type (e.g., Fixed[32, 16] = 32 total bits, 16 fractional)
+struct FixedPointType : Type {
+    size_t totalBits;      // Total number of bits
+    size_t fracBits;       // Number of fractional bits
+    FixedPointType(size_t total, size_t frac) : Type(TypeKind::FIXED), totalBits(total), fracBits(frac) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// SIMD Vector types (Vec2, Vec3, Vec4)
+struct VecType : Type {
+    TypePtr element;       // Element type (typically f32 or f64)
+    size_t size;           // 2, 3, or 4
+    VecType(TypeKind k, TypePtr elem, size_t sz) : Type(k), element(std::move(elem)), size(sz) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// SIMD Matrix types (Mat2, Mat3, Mat4)
+struct MatType : Type {
+    TypePtr element;       // Element type (typically f32 or f64)
+    size_t size;           // 2, 3, or 4 (square matrices)
+    MatType(TypeKind k, TypePtr elem, size_t sz) : Type(k), element(std::move(elem)), size(sz) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Effect operation signature
+struct EffectOperation {
+    std::string name;                              // Operation name (e.g., "raise", "get", "put")
+    std::vector<std::pair<std::string, TypePtr>> params;  // Parameters
+    TypePtr returnType;                            // Return type
+};
+
+// Effect type (e.g., Error[str], State[int])
+struct EffectType : Type {
+    std::string name;                              // Effect name (e.g., "Error", "State")
+    std::vector<TypePtr> typeArgs;                 // Type arguments (e.g., [str] for Error[str])
+    std::vector<EffectOperation> operations;       // Effect operations
+    EffectType(std::string n) : Type(TypeKind::EFFECT), name(std::move(n)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+    const EffectOperation* getOperation(const std::string& opName) const;
+};
+
+// Effectful function type (function with effects)
+struct EffectfulType : Type {
+    TypePtr baseType;                              // The underlying function type
+    std::vector<std::shared_ptr<EffectType>> effects;  // Effects this function may perform
+    EffectfulType(TypePtr base) : Type(TypeKind::EFFECTFUL), baseType(std::move(base)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
 // Trait implementation record
 struct TraitImpl {
     std::string traitName;
@@ -233,8 +471,10 @@ public:
     TypePtr voidType(); TypePtr boolType(); TypePtr intType();
     TypePtr int8Type(); TypePtr int16Type(); TypePtr int32Type(); TypePtr int64Type();
     TypePtr uint8Type(); TypePtr uint16Type(); TypePtr uint32Type(); TypePtr uint64Type();
-    TypePtr floatType(); TypePtr float32Type(); TypePtr float64Type();
-    TypePtr stringType(); TypePtr anyType(); TypePtr neverType(); TypePtr unknownType(); TypePtr errorType();
+    TypePtr floatType(); TypePtr float16Type(); TypePtr float32Type(); TypePtr float64Type(); TypePtr float128Type();
+    TypePtr complex64Type(); TypePtr complex128Type();
+    TypePtr stringType(); TypePtr charType(); TypePtr strViewType(); TypePtr byteArrayType();
+    TypePtr anyType(); TypePtr neverType(); TypePtr unknownType(); TypePtr errorType();
     TypePtr ptrType(TypePtr pointee, bool raw = false);
     TypePtr refType(TypePtr pointee);
     TypePtr listType(TypePtr element);
@@ -256,6 +496,33 @@ public:
     TypePtr rwlockType(TypePtr element);  // Reader-writer lock type
     TypePtr condType();  // Condition variable type
     TypePtr semaphoreType();  // Counting semaphore type
+    TypePtr atomicType(TypePtr element);  // Atomic type for lock-free operations
+    TypePtr futureType(TypePtr element);  // Future type for async results
+    TypePtr threadPoolType();  // Thread pool type for worker threads
+    TypePtr cancelTokenType();  // Cancellation token type for task cancellation
+    
+    // Smart pointer types
+    TypePtr boxType(TypePtr element);      // Box[T] - unique ownership heap allocation
+    TypePtr rcType(TypePtr element);       // Rc[T] - reference counted (single-threaded)
+    TypePtr arcType(TypePtr element);      // Arc[T] - atomic reference counted (thread-safe)
+    TypePtr weakType(TypePtr element, bool isAtomic = false);  // Weak[T] - weak reference
+    TypePtr cellType(TypePtr element);     // Cell[T] - interior mutability
+    TypePtr refCellType(TypePtr element);  // RefCell[T] - runtime borrow checking
+    
+    // Arbitrary precision and fixed-point types
+    TypePtr bigIntType();      // Arbitrary precision integer
+    TypePtr bigFloatType();    // Arbitrary precision float
+    TypePtr decimalType();     // Exact decimal arithmetic
+    TypePtr rationalType();    // Exact fractions
+    TypePtr fixedPointType(size_t totalBits, size_t fracBits);  // Fixed-point type
+    
+    // SIMD vector and matrix types
+    TypePtr vec2Type(TypePtr element);   // 2D vector
+    TypePtr vec3Type(TypePtr element);   // 3D vector
+    TypePtr vec4Type(TypePtr element);   // 4D vector
+    TypePtr mat2Type(TypePtr element);   // 2x2 matrix
+    TypePtr mat3Type(TypePtr element);   // 3x3 matrix
+    TypePtr mat4Type(TypePtr element);   // 4x4 matrix
     
     // Trait registration and lookup
     void registerTrait(const std::string& name, TraitPtr trait);
@@ -274,17 +541,36 @@ public:
     // Type constraint checking
     bool checkTraitBounds(TypePtr type, const std::vector<std::string>& bounds);
     
+    // Dependent type support
+    TypePtr valueParamType(const std::string& name, TypePtr valueType);  // Value parameter (N: int)
+    TypePtr dependentType(const std::string& name);                       // Dependent type definition
+    TypePtr refinedType(const std::string& name, TypePtr baseType, const std::string& constraint = "");  // Refined type with constraint
+    void registerDependentType(const std::string& name, TypePtr type);    // Register a dependent type
+    TypePtr lookupDependentType(const std::string& name);                 // Lookup a dependent type
+    TypePtr instantiateDependentType(const std::string& name, const std::vector<std::pair<std::string, int64_t>>& valueArgs, const std::vector<TypePtr>& typeArgs);  // Instantiate with concrete values
+    bool checkRefinementConstraint(TypePtr type, const std::string& constraint);  // Check if value satisfies constraint
+    
+    // Algebraic effects support
+    std::shared_ptr<EffectType> effectType(const std::string& name);      // Create/lookup effect type
+    TypePtr effectfulType(TypePtr baseType, const std::vector<std::shared_ptr<EffectType>>& effects);  // Function with effects
+    void registerEffect(const std::string& name, std::shared_ptr<EffectType> effect);  // Register an effect
+    std::shared_ptr<EffectType> lookupEffect(const std::string& name);    // Lookup an effect by name
+    
 private:
     TypeRegistry();
     std::unordered_map<std::string, TypePtr> namedTypes_;
     std::unordered_map<std::string, TraitPtr> traits_;
+    std::unordered_map<std::string, TypePtr> dependentTypes_;  // Dependent type definitions
+    std::unordered_map<std::string, std::shared_ptr<EffectType>> effects_;  // Registered effects
     std::vector<TraitImpl> traitImpls_;
     TypePtr void_, bool_, int_, int8_, int16_, int32_, int64_;
     TypePtr uint8_, uint16_, uint32_, uint64_;
-    TypePtr float_, float32_, float64_, string_;
+    TypePtr float_, float16_, float32_, float64_, float128_, string_, char_, str_view_, byte_array_;
+    TypePtr complex64_, complex128_;
+    TypePtr bigint_, bigfloat_, decimal_, rational_;
     TypePtr any_, never_, unknown_, error_;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_TYPES_H
+#endif // TYL_TYPES_H

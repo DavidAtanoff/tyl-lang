@@ -1,0 +1,9 @@
+// Simple clone test
+fn take_list data: [int]:
+    print("Got list: {data[1]}")
+
+fn main():
+    let a = [1, 2, 3]
+    let b = a.clone()
+    print("b[1] = {b[1]}")
+    take_list(b)

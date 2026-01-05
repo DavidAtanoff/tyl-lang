@@ -1,0 +1,11 @@
+// Debug test for split function
+
+fn main -> int:
+    print("Testing split debug...\n")
+    
+    // Test with constant strings (compile-time)
+    // "a,b,c" split by "," should give ["a", "b", "c"]
+    let parts = split("hello,world", ",")
+    
+    print("Done\n")
+    return 0

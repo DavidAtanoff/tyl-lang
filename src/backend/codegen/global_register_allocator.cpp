@@ -1,11 +1,11 @@
-// Flex Compiler - Global Register Allocator Implementation
+// Tyl Compiler - Global Register Allocator Implementation
 // Graph coloring register allocation for top-level variables
 
 #include "global_register_allocator.h"
 #include <algorithm>
 #include <queue>
 
-namespace flex {
+namespace tyl {
 
 GlobalRegisterAllocator::GlobalRegisterAllocator() : nextStackOffset_(-8) {}
 
@@ -566,4 +566,4 @@ void SSAGlobalRegisterAllocator::allocateRegisters() {
     // Use linear scan or graph coloring on SSA values
 }
 
-} // namespace flex
+} // namespace tyl

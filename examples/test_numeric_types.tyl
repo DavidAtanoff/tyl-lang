@@ -1,0 +1,82 @@
+// Test Basic Numeric Types
+// Tests: Extended integers, floats, complex numbers, numeric suffixes
+
+fn main() {
+    print("=== Basic Numeric Types Test ===\n")
+    
+    // Test integer types
+    print("\n--- Integer Types ---\n")
+    let i: i32 = 42
+    print("i32: ")
+    print(i)
+    print("\n")
+    
+    let big: i64 = 9223372036854775807
+    print("i64 max: ")
+    print(big)
+    print("\n")
+    
+    let small: i8 = 127
+    print("i8 max: ")
+    print(small)
+    print("\n")
+    
+    // Test unsigned integers
+    let u: u32 = 4294967295
+    print("u32 max: ")
+    print(u)
+    print("\n")
+    
+    // Test float types
+    print("\n--- Float Types ---\n")
+    let f32_val: f32 = 3.14159
+    print("f32: ")
+    print(f32_val)
+    print("\n")
+    
+    let f64_val: f64 = 2.718281828459045
+    print("f64: ")
+    print(f64_val)
+    print("\n")
+    
+    // Test numeric suffixes
+    print("\n--- Numeric Suffixes ---\n")
+    let with_suffix = 100i32
+    print("100i32: ")
+    print(with_suffix)
+    print("\n")
+    
+    let float_suffix = 1.5f64
+    print("1.5f64: ")
+    print(float_suffix)
+    print("\n")
+    
+    // Test complex numbers
+    print("\n--- Complex Numbers ---\n")
+    let c = complex(3.0, 4.0)
+    let re = real(c)
+    let im = imag(c)
+    print("complex(3, 4) real: ")
+    print(re)
+    print(", imag: ")
+    print(im)
+    print("\n")
+    
+    // Test arithmetic with typed integers
+    print("\n--- Typed Arithmetic ---\n")
+    let a: i32 = 10
+    let b: i32 = 20
+    let sum = a + b
+    print("i32: 10 + 20 = ")
+    print(sum)
+    print("\n")
+    
+    let x: f64 = 1.5
+    let y: f64 = 2.5
+    let fsum = x + y
+    print("f64: 1.5 + 2.5 = ")
+    print(fsum)
+    print("\n")
+    
+    print("\n=== All Tests Complete ===\n")
+}

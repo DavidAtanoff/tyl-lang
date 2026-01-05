@@ -1,0 +1,19 @@
+// Test memory ordering - verify MFENCE is emitted
+
+fn main:
+    let a: Atomic[int] = Atomic[int](0)
+    
+    // These should emit MFENCE instructions
+    let v1: int = a.load()    // MFENCE after load (acquire semantics)
+    a.store(42)               // MFENCE before store (release semantics)
+    let v2: int = a.swap(100) // XCHG has implicit barrier
+    let ok: int = a.cas(100, 200) // LOCK CMPXCHG + MFENCE
+    
+    println("load: " + str(v1))
+    println("after store, swap returned: " + str(v2))
+    println("cas success: " + str(ok))
+    println("final: " + str(a.load()))
+    
+    return 0
+
+main()

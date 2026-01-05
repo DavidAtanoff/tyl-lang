@@ -1,0 +1,7 @@
+// Test list element printing - no print before
+
+fn main -> int:
+    let a = ["hello", "world"]
+    print(a[0])
+    print("\n")
+    return 0

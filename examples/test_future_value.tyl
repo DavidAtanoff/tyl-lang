@@ -1,0 +1,10 @@
+// Test future value storage
+
+fn main -> int:
+    let f = make_future[int]()
+    future_set(f, 42)
+    let v = future_get(f)
+    print("Value: ")
+    print(v)
+    print("\n")
+    return 0

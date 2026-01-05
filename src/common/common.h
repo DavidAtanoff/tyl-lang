@@ -1,6 +1,6 @@
-// Flex Compiler - Common definitions
-#ifndef FLEX_COMMON_H
-#define FLEX_COMMON_H
+// Tyl Compiler - Common definitions
+#ifndef TYL_COMMON_H
+#define TYL_COMMON_H
 
 // Platform compatibility - must be first
 #include "common/platform.h"
@@ -19,7 +19,7 @@
 #include <cstdint>
 #include <map>
 
-namespace flex {
+namespace tyl {
 
 // Source location for error reporting
 struct SourceLocation {
@@ -33,11 +33,11 @@ struct SourceLocation {
 };
 
 // Compiler error
-class FlexError : public std::runtime_error {
+class TylError : public std::runtime_error {
 public:
     SourceLocation location;
     
-    FlexError(const std::string& msg, SourceLocation loc = {})
+    TylError(const std::string& msg, SourceLocation loc = {})
         : std::runtime_error(loc.toString() + ": " + msg), location(loc) {}
 };
 
@@ -47,6 +47,6 @@ struct ASTNode;
 struct Type;
 struct Value;
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_COMMON_H
+#endif // TYL_COMMON_H

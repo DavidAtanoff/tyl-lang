@@ -1,0 +1,11 @@
+// Debug str() issue
+
+fn main:
+    let x: int = 42
+    println("Before str")
+    let s: str = str(x)
+    println("After str")
+    println(s)
+    return 0
+
+main()

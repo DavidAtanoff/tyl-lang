@@ -1,10 +1,10 @@
-// Flex Compiler - Register Allocator Implementation
+// Tyl Compiler - Register Allocator Implementation
 // Linear Scan Register Allocation
 
 #include "register_allocator.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 RegisterAllocator::RegisterAllocator() : currentPos_(0) {}
 
@@ -297,4 +297,4 @@ void RegisterAllocator::allocateRegisters() {
     }
 }
 
-} // namespace flex
+} // namespace tyl

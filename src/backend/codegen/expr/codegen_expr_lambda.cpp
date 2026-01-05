@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Lambda Expressions
+// Tyl Compiler - Native Code Generator Lambda Expressions
 // Handles: LambdaExpr
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(LambdaExpr& node) {
     std::string lambdaLabel = newLabel("lambda");
@@ -185,4 +185,4 @@ void NativeCodeGen::visit(LambdaExpr& node) {
     lastExprWasFloat_ = false;
 }
 
-} // namespace flex
+} // namespace tyl

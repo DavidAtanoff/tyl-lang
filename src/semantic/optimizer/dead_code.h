@@ -1,7 +1,7 @@
-// Flex Compiler - Dead Code Elimination Pass
+// Tyl Compiler - Dead Code Elimination Pass
 // Removes unreachable code and unused declarations
-#ifndef FLEX_DEAD_CODE_H
-#define FLEX_DEAD_CODE_H
+#ifndef TYL_DEAD_CODE_H
+#define TYL_DEAD_CODE_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -9,7 +9,7 @@
 #include <unordered_map>
 #include <queue>
 
-namespace flex {
+namespace tyl {
 
 class DeadCodeEliminationPass : public OptimizationPass {
 public:
@@ -75,6 +75,6 @@ private:
     bool hasSideEffects(Expression* expr);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_DEAD_CODE_H
+#endif // TYL_DEAD_CODE_H

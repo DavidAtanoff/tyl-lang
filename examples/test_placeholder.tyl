@@ -1,0 +1,37 @@
+// Test placeholder _ expressions
+
+fn main():
+    // Test _ * 2 as lambda
+    let f = _ * 2
+    let result = f(5)
+    print("f(5) = " + str(result))  // Should print 10
+    
+    // Test _ + 10 as lambda
+    let g = _ + 10
+    print("g(3) = " + str(g(3)))  // Should print 13
+    
+    // Test 100 - _ as lambda
+    let h = 100 - _
+    print("h(30) = " + str(h(30)))  // Should print 70
+    
+    // Test _ / 2 as lambda
+    let div2 = _ / 2
+    print("div2(20) = " + str(div2(20)))  // Should print 10
+    
+    // Test _ % 3 as lambda
+    let mod3 = _ % 3
+    print("mod3(10) = " + str(mod3(10)))  // Should print 1
+    
+    // Test _ > 5 as lambda (comparison)
+    let gt5 = _ > 5
+    if gt5(10):
+        print("gt5(10) = true: PASS")
+    else:
+        print("gt5(10) = true: FAIL")
+    
+    if gt5(3):
+        print("gt5(3) = false: FAIL")
+    else:
+        print("gt5(3) = false: PASS")
+    
+    print("All placeholder tests passed!")

@@ -1,12 +1,19 @@
-// Flex Compiler - Parser Type and Helper Implementations
+// Tyl Compiler - Parser Type and Helper Implementations
 // Handles: type parsing, parameter parsing, call args, DSL blocks
 
 #include "parser_base.h"
 
-namespace flex {
+namespace tyl {
 
 std::string Parser::parseType() {
     std::string type;
+    
+    // Lifetime annotation: 'a, 'static, etc.
+    // Can appear before reference types: &'a T, &'a mut T
+    std::string lifetime;
+    if (check(TokenType::LIFETIME)) {
+        lifetime = advance().lexeme;  // e.g., "'a", "'static"
+    }
     
     // C-style pointer: *int, *str, **int (pointer to pointer)
     // Also handles function pointer: *fn(int, int) -> int
@@ -19,10 +26,19 @@ std::string Parser::parseType() {
             type = "*" + parseType();
         }
     }
-    // Reference type: &T, &mut T
+    // Reference type: &T, &mut T, &'a T, &'a mut T
     else if (match(TokenType::AMP)) {
+        // Check for lifetime after &: &'a T
+        if (check(TokenType::LIFETIME)) {
+            lifetime = advance().lexeme;
+        }
         bool isMut = match(TokenType::MUT);
-        type = (isMut ? "&mut " : "&") + parseType();
+        std::string innerType = parseType();
+        if (!lifetime.empty()) {
+            type = (isMut ? "&" + lifetime + " mut " : "&" + lifetime + " ") + innerType;
+        } else {
+            type = (isMut ? "&mut " : "&") + innerType;
+        }
     }
     // Verbose pointer: ptr<T>
     else if (match(TokenType::PTR)) {
@@ -72,16 +88,75 @@ std::string Parser::parseType() {
     else if (match(TokenType::SEMAPHORE)) {
         type = "Semaphore";
     }
+    // Atomic type: Atomic[T]
+    else if (match(TokenType::ATOMIC)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Atomic");
+        std::string elemType = parseType();
+        type = "Atomic[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Atomic type");
+    }
+    // Box type: Box[T]
+    else if (match(TokenType::BOX)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Box");
+        std::string elemType = parseType();
+        type = "Box[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Box type");
+    }
+    // Rc type: Rc[T]
+    else if (match(TokenType::RC)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Rc");
+        std::string elemType = parseType();
+        type = "Rc[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Rc type");
+    }
+    // Arc type: Arc[T]
+    else if (match(TokenType::ARC)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Arc");
+        std::string elemType = parseType();
+        type = "Arc[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Arc type");
+    }
+    // Weak type: Weak[T]
+    else if (match(TokenType::WEAK_PTR)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Weak");
+        std::string elemType = parseType();
+        type = "Weak[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Weak type");
+    }
+    // Cell type: Cell[T]
+    else if (match(TokenType::CELL)) {
+        consume(TokenType::LBRACKET, "Expected '[' after Cell");
+        std::string elemType = parseType();
+        type = "Cell[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after Cell type");
+    }
+    // RefCell type: RefCell[T]
+    else if (match(TokenType::REFCELL)) {
+        consume(TokenType::LBRACKET, "Expected '[' after RefCell");
+        std::string elemType = parseType();
+        type = "RefCell[" + elemType + "]";
+        consume(TokenType::RBRACKET, "Expected ']' after RefCell type");
+    }
     // List type: [T] or fixed-size array: [T; N]
     else if (match(TokenType::LBRACKET)) {
         std::string elemType = parseType();
         
-        // Check for fixed-size array syntax: [T; N]
+        // Check for fixed-size array syntax: [T; N] or [T; SizeParam]
         if (match(TokenType::SEMICOLON)) {
-            // Parse the size
-            auto sizeTok = consume(TokenType::INTEGER, "Expected array size");
-            int64_t size = std::get<int64_t>(sizeTok.literal);
-            type = "[" + elemType + "; " + std::to_string(size) + "]";
+            // Parse the size - can be an integer literal or a type parameter name
+            if (check(TokenType::INTEGER)) {
+                auto sizeTok = advance();
+                int64_t size = std::get<int64_t>(sizeTok.literal);
+                type = "[" + elemType + "; " + std::to_string(size) + "]";
+            } else if (check(TokenType::IDENTIFIER)) {
+                // Type parameter name for dependent types (e.g., [T; N])
+                auto paramName = advance().lexeme;
+                type = "[" + elemType + "; " + paramName + "]";
+            } else {
+                // Fallback - consume whatever is there and use 0
+                advance();
+                type = "[" + elemType + "; 0]";
+            }
         } else {
             // Regular list type: [T]
             type = "[" + elemType + "]";
@@ -137,14 +212,26 @@ std::string Parser::parseType() {
 std::vector<std::pair<std::string, std::string>> Parser::parseParams() {
     std::vector<std::pair<std::string, std::string>> params;
     
-    while (check(TokenType::IDENTIFIER)) {
+    // Support both parenthesized and non-parenthesized params
+    // fn add(a, b) or fn add a, b
+    bool hasParens = match(TokenType::LPAREN);
+    
+    // Handle empty params: fn foo() or fn foo
+    if (hasParens && check(TokenType::RPAREN)) {
+        advance(); // consume )
+        return params;
+    }
+    
+    // Check for self or identifier as parameter name
+    while (check(TokenType::IDENTIFIER) || check(TokenType::SELF)) {
         std::string name = advance().lexeme;
         std::string type;
         
         if (match(TokenType::COLON)) {
             if (check(TokenType::IDENTIFIER) || check(TokenType::PTR) || 
                 check(TokenType::REF) || check(TokenType::LBRACKET) ||
-                check(TokenType::STAR) || check(TokenType::FN)) {
+                check(TokenType::STAR) || check(TokenType::FN) ||
+                check(TokenType::AMP)) {  // Support & and &mut reference types
                 type = parseType();
             } else {
                 current--;
@@ -155,6 +242,10 @@ std::vector<std::pair<std::string, std::string>> Parser::parseParams() {
         
         params.emplace_back(name, type);
         if (!match(TokenType::COMMA)) break;
+    }
+    
+    if (hasParens) {
+        consume(TokenType::RPAREN, "Expected ')' after parameters");
     }
     
     return params;
@@ -226,4 +317,4 @@ ExprPtr Parser::parseDSLBlock(const std::string& dslName, SourceLocation loc) {
     return std::make_unique<DSLBlock>(dslName, rawContent, loc);
 }
 
-} // namespace flex
+} // namespace tyl

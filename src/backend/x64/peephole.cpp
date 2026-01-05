@@ -1,8 +1,8 @@
-// Flex Compiler - Peephole Optimizer Implementation
+// Tyl Compiler - Peephole Optimizer Implementation
 #include "peephole.h"
 #include <cstring>
 
-namespace flex {
+namespace tyl {
 
 size_t PeepholeOptimizer::optimize(std::vector<uint8_t>& code) {
     removedBytes_ = 0;
@@ -268,4 +268,4 @@ bool PeepholeOptimizer::isNop(const std::vector<uint8_t>& code, size_t i) {
     return i < code.size() && code[i] == 0x90;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,13 +1,14 @@
-// Flex Compiler - Token definitions
-#ifndef FLEX_TOKEN_H
-#define FLEX_TOKEN_H
+// Tyl Compiler - Token definitions
+#ifndef TYL_TOKEN_H
+#define TYL_TOKEN_H
 
 #include "common/common.h"
 
-namespace flex {
+namespace tyl {
 
 enum class TokenType {
-    INTEGER, FLOAT, STRING, IDENTIFIER,
+    INTEGER, FLOAT, STRING, CHAR, BYTE_STRING, RAW_BYTE_STRING, IDENTIFIER,
+    LIFETIME,  // Lifetime annotation: 'a, 'static, etc.
     FN, IF, ELSE, ELIF, FOR, WHILE, MATCH, RETURN,
     TRUE, FALSE, NIL, AND, OR, NOT, IN, TO, BY,
     TRY, ELSE_KW, USE, LAYER, MACRO, IMPORT, MODULE,
@@ -23,9 +24,47 @@ enum class TokenType {
     COND,  // Cond keyword for condition variable type
     SEMAPHORE,  // Semaphore keyword for semaphore type
     LOCK,  // lock keyword for scoped lock acquisition
+    ATOMIC,  // Atomic keyword for Atomic[T] type
+    // Smart pointer keywords
+    BOX,        // Box[T] - unique ownership heap allocation
+    RC,         // Rc[T] - reference counted (single-threaded)
+    ARC,        // Arc[T] - atomic reference counted (thread-safe)
+    WEAK_PTR,   // Weak[T] - weak reference (non-owning)
+    CELL,       // Cell[T] - interior mutability (single-threaded)
+    REFCELL,    // RefCell[T] - runtime borrow checking
+    // New syntax redesign tokens
+    LOOP,           // loop keyword for infinite loops
+    UNLESS,         // unless keyword (alias for if not)
+    UNDERSCORE,     // _ placeholder for lambdas
+    DOTDOT_EQ,      // ..= inclusive range
+    QUESTION_DOT,   // ?. safe navigation
+    EXPORT,         // export keyword attribute
+    INLINE,         // inline keyword attribute
+    NOINLINE,       // noinline keyword attribute
+    PACKED,         // packed keyword attribute
+    ALIGN,          // align keyword attribute
+    REPR,           // repr keyword attribute
+    HIDDEN,         // hidden keyword attribute
+    WEAK,           // weak keyword attribute
+    CDECL,          // cdecl calling convention
+    STDCALL,        // stdcall calling convention
+    FASTCALL,       // fastcall calling convention
+    NAKED,          // naked function attribute
+    COMPTIME,       // comptime keyword for compile-time execution
+    REQUIRE,        // require keyword for contracts
+    ENSURE,         // ensure keyword for contracts
+    INVARIANT,      // invariant keyword for contracts
+    SCOPE,          // scope keyword for structured concurrency
+    WITH,           // with keyword for resource management
+    IS,             // is keyword for type checking
+    FROM,           // from keyword for imports
+    EFFECT,         // effect keyword for algebraic effects
+    HANDLE,         // handle keyword for effect handlers
+    PERFORM,        // perform keyword for effect operations
+    RESUME,         // resume keyword for continuing from handlers
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQ, NE, LT, GT, LE, GE,
-    ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN,
+    ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, PERCENT_ASSIGN,
     DOT, DOTDOT, ARROW, DOUBLE_ARROW,
     AMP, PIPE, CARET, TILDE,
     AMP_AMP, PIPE_PIPE,
@@ -43,7 +82,10 @@ enum class TokenType {
 inline std::string tokenTypeToString(TokenType type) {
     switch (type) {
         case TokenType::INTEGER: return "INTEGER"; case TokenType::FLOAT: return "FLOAT";
-        case TokenType::STRING: return "STRING"; case TokenType::IDENTIFIER: return "IDENTIFIER";
+        case TokenType::STRING: return "STRING"; case TokenType::CHAR: return "CHAR";
+        case TokenType::BYTE_STRING: return "BYTE_STRING"; case TokenType::RAW_BYTE_STRING: return "RAW_BYTE_STRING";
+        case TokenType::IDENTIFIER: return "IDENTIFIER";
+        case TokenType::LIFETIME: return "LIFETIME";
         case TokenType::FN: return "FN"; case TokenType::IF: return "IF"; case TokenType::ELSE: return "ELSE";
         case TokenType::ELIF: return "ELIF"; case TokenType::FOR: return "FOR"; case TokenType::WHILE: return "WHILE";
         case TokenType::MATCH: return "MATCH"; case TokenType::RETURN: return "RETURN";
@@ -69,6 +111,45 @@ inline std::string tokenTypeToString(TokenType type) {
         case TokenType::COND: return "COND";
         case TokenType::SEMAPHORE: return "SEMAPHORE";
         case TokenType::LOCK: return "LOCK";
+        case TokenType::ATOMIC: return "ATOMIC";
+        // Smart pointer tokens
+        case TokenType::BOX: return "BOX";
+        case TokenType::RC: return "RC";
+        case TokenType::ARC: return "ARC";
+        case TokenType::WEAK_PTR: return "WEAK_PTR";
+        case TokenType::CELL: return "CELL";
+        case TokenType::REFCELL: return "REFCELL";
+        // New syntax redesign tokens
+        case TokenType::LOOP: return "LOOP";
+        case TokenType::UNLESS: return "UNLESS";
+        case TokenType::UNDERSCORE: return "UNDERSCORE";
+        case TokenType::DOTDOT_EQ: return "DOTDOT_EQ";
+        case TokenType::QUESTION_DOT: return "QUESTION_DOT";
+        case TokenType::EXPORT: return "EXPORT";
+        case TokenType::INLINE: return "INLINE";
+        case TokenType::NOINLINE: return "NOINLINE";
+        case TokenType::PACKED: return "PACKED";
+        case TokenType::ALIGN: return "ALIGN";
+        case TokenType::REPR: return "REPR";
+        case TokenType::HIDDEN: return "HIDDEN";
+        case TokenType::WEAK: return "WEAK";
+        case TokenType::CDECL: return "CDECL";
+        case TokenType::STDCALL: return "STDCALL";
+        case TokenType::FASTCALL: return "FASTCALL";
+        case TokenType::NAKED: return "NAKED";
+        case TokenType::COMPTIME: return "COMPTIME";
+        case TokenType::REQUIRE: return "REQUIRE";
+        case TokenType::ENSURE: return "ENSURE";
+        case TokenType::INVARIANT: return "INVARIANT";
+        case TokenType::SCOPE: return "SCOPE";
+        case TokenType::WITH: return "WITH";
+        case TokenType::IS: return "IS";
+        case TokenType::FROM: return "FROM";
+        case TokenType::EFFECT: return "EFFECT";
+        case TokenType::HANDLE: return "HANDLE";
+        case TokenType::PERFORM: return "PERFORM";
+        case TokenType::RESUME: return "RESUME";
+        case TokenType::PERCENT_ASSIGN: return "PERCENT_ASSIGN";
         case TokenType::PLUS: return "PLUS"; case TokenType::MINUS: return "MINUS"; case TokenType::STAR: return "STAR";
         case TokenType::SLASH: return "SLASH"; case TokenType::PERCENT: return "PERCENT";
         case TokenType::EQ: return "EQ"; case TokenType::NE: return "NE"; case TokenType::LT: return "LT";
@@ -113,6 +194,6 @@ public:
     std::string toString() const { return tokenTypeToString(type) + " '" + lexeme + "' at " + location.toString(); }
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_TOKEN_H
+#endif // TYL_TOKEN_H

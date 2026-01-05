@@ -1,7 +1,7 @@
-// Flex Compiler - Linker Base Header
-#ifndef FLEX_LINKER_BASE_H
-#define FLEX_LINKER_BASE_H
+// Tyl Compiler - Linker Base Header
+#ifndef TYL_LINKER_BASE_H
+#define TYL_LINKER_BASE_H
 
 #include "backend/linker/linker.h"
 
-#endif // FLEX_LINKER_BASE_H
+#endif // TYL_LINKER_BASE_H

@@ -1,7 +1,7 @@
-// Flex Compiler - Symbol Table Implementation
+// Tyl Compiler - Symbol Table Implementation
 #include "semantic/symbols/symbol_table.h"
 
-namespace flex {
+namespace tyl {
 
 bool Scope::define(const Symbol& sym) {
     if (symbols_.count(sym.name)) return false;
@@ -79,9 +79,15 @@ void SymbolTable::pushScope(Scope::Kind kind) {
     auto scope = std::make_unique<Scope>(kind, current_);
     current_ = scope.get();
     scopes_.push_back(std::move(scope));
+    scopeDepth_++;
 }
 
-void SymbolTable::popScope() { if (current_ != &global_) current_ = current_->parent(); }
+void SymbolTable::popScope() { 
+    if (current_ != &global_) {
+        current_ = current_->parent();
+        scopeDepth_--;
+    }
+}
 bool SymbolTable::define(const Symbol& sym) { return current_->define(sym); }
 Symbol* SymbolTable::lookup(const std::string& name) { return current_->lookup(name); }
 Symbol* SymbolTable::lookupLocal(const std::string& name) { return current_->lookupLocal(name); }
@@ -112,4 +118,4 @@ Scope* SymbolTable::enclosingFunction() {
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

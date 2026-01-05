@@ -1,10 +1,9 @@
-// Flex Compiler - AST Printer Implementation
+// Tyl Compiler - AST Printer Implementation
 
 #include "ast_printer.h"
-#include "backend/bytecode/bytecode.h"
 #include <iostream>
 
-namespace flex {
+namespace tyl {
 
 void ASTPrinter::print(const std::string& s) {
     std::cout << std::string(indent * 2, ' ') << s << "\n";
@@ -13,6 +12,16 @@ void ASTPrinter::print(const std::string& s) {
 void ASTPrinter::visit(IntegerLiteral& n) { print("Int: " + std::to_string(n.value)); }
 void ASTPrinter::visit(FloatLiteral& n) { print("Float: " + std::to_string(n.value)); }
 void ASTPrinter::visit(StringLiteral& n) { print("String: \"" + n.value + "\""); }
+void ASTPrinter::visit(CharLiteral& n) { print("Char: " + std::to_string(n.value)); }
+void ASTPrinter::visit(ByteStringLiteral& n) { 
+    std::string hex;
+    for (uint8_t b : n.value) {
+        char buf[4];
+        snprintf(buf, sizeof(buf), "%02X", b);
+        hex += buf;
+    }
+    print("ByteString: " + hex + (n.isRaw ? " (raw)" : "")); 
+}
 void ASTPrinter::visit(InterpolatedString& n) { 
     print("InterpolatedString");
     indent++;
@@ -60,7 +69,7 @@ void ASTPrinter::visit(ListExpr& n) {
 
 
 void ASTPrinter::visit(RecordExpr& n) {
-    print("RecordExpr");
+    print("RecordExpr" + (n.typeName.empty() ? "" : ": " + n.typeName));
     indent++;
     for (auto& [name, val] : n.fields) {
         print(name + ":");
@@ -90,7 +99,15 @@ void ASTPrinter::visit(RangeExpr& n) {
 }
 
 void ASTPrinter::visit(LambdaExpr& n) {
-    print("LambdaExpr");
+    std::string params;
+    for (size_t i = 0; i < n.params.size(); i++) {
+        if (i > 0) params += ", ";
+        params += n.params[i].first;
+        if (!n.params[i].second.empty()) {
+            params += ": " + n.params[i].second;
+        }
+    }
+    print("LambdaExpr(" + params + ")");
     indent++; n.body->accept(*this); indent--;
 }
 
@@ -107,6 +124,7 @@ void ASTPrinter::visit(ListCompExpr& n) {
 }
 
 void ASTPrinter::visit(AddressOfExpr& n) { print("AddressOf"); indent++; n.operand->accept(*this); indent--; }
+void ASTPrinter::visit(BorrowExpr& n) { print(n.isMutable ? "BorrowMut" : "Borrow"); indent++; n.operand->accept(*this); indent--; }
 void ASTPrinter::visit(DerefExpr& n) { print("Deref"); indent++; n.operand->accept(*this); indent--; }
 void ASTPrinter::visit(NewExpr& n) {
     print("New: " + n.typeName);
@@ -162,7 +180,9 @@ void ASTPrinter::visit(WhileStmt& n) {
 }
 
 void ASTPrinter::visit(ForStmt& n) {
-    print("ForStmt: " + n.var);
+    std::string info = "ForStmt: " + n.var;
+    if (!n.label.empty()) info += " [label: " + n.label + "]";
+    print(info);
     indent++; n.iterable->accept(*this); n.body->accept(*this); indent--;
 }
 
@@ -185,8 +205,16 @@ void ASTPrinter::visit(ReturnStmt& n) {
     if (n.value) { indent++; n.value->accept(*this); indent--; }
 }
 
-void ASTPrinter::visit(BreakStmt&) { print("BreakStmt"); }
-void ASTPrinter::visit(ContinueStmt&) { print("ContinueStmt"); }
+void ASTPrinter::visit(BreakStmt& n) { 
+    std::string info = "BreakStmt";
+    if (!n.label.empty()) info += " [label: " + n.label + "]";
+    print(info);
+}
+void ASTPrinter::visit(ContinueStmt& n) { 
+    std::string info = "ContinueStmt";
+    if (!n.label.empty()) info += " [label: " + n.label + "]";
+    print(info);
+}
 
 void ASTPrinter::visit(TryStmt& n) {
     print("TryStmt");
@@ -249,7 +277,33 @@ void ASTPrinter::visit(EnumDecl& n) {
     indent--;
 }
 
-void ASTPrinter::visit(TypeAlias& n) { print("TypeAlias: " + n.name + " = " + n.targetType); }
+void ASTPrinter::visit(TypeAlias& n) { 
+    std::string str = "TypeAlias: " + n.name;
+    
+    // Print type parameters (including value parameters for dependent types)
+    if (!n.typeParams.empty()) {
+        str += "[";
+        for (size_t i = 0; i < n.typeParams.size(); i++) {
+            if (i > 0) str += ", ";
+            str += n.typeParams[i].name;
+            if (n.typeParams[i].isValue) {
+                str += ": " + n.typeParams[i].kind;
+            }
+        }
+        str += "]";
+    }
+    
+    str += " = " + n.targetType;
+    if (n.constraint) {
+        str += " where <constraint>";
+    }
+    print(str);
+    if (n.constraint) {
+        indent++;
+        n.constraint->accept(*this);
+        indent--;
+    }
+}
 
 void ASTPrinter::visit(TraitDecl& n) {
     std::string typeParams;
@@ -317,30 +371,6 @@ void ASTPrinter::visit(Program& n) { print("Program"); indent++; for (auto& s : 
 void printTokens(const std::vector<Token>& tokens) {
     std::cout << "=== Tokens ===\n";
     for (const auto& tok : tokens) std::cout << tok.toString() << "\n";
-    std::cout << "\n";
-}
-
-void printBytecode(Chunk& chunk) {
-    std::cout << "=== Bytecode ===\n";
-    std::cout << "Constants:\n";
-    for (size_t i = 0; i < chunk.constants.size(); i++) {
-        std::cout << "  [" << i << "] " << chunk.constants[i].toString() << "\n";
-    }
-    std::cout << "\nInstructions:\n";
-    for (size_t i = 0; i < chunk.code.size(); i++) {
-        auto& instr = chunk.code[i];
-        std::cout << "  " << i << ": " << opCodeToString(instr.op);
-        if (instr.operand != 0 || 
-            instr.op == OpCode::CONST || instr.op == OpCode::LOAD_GLOBAL ||
-            instr.op == OpCode::STORE_GLOBAL || instr.op == OpCode::LOAD_LOCAL ||
-            instr.op == OpCode::STORE_LOCAL || instr.op == OpCode::JUMP ||
-            instr.op == OpCode::JUMP_IF_FALSE || instr.op == OpCode::JUMP_IF_TRUE ||
-            instr.op == OpCode::LOOP || instr.op == OpCode::CALL ||
-            instr.op == OpCode::MAKE_LIST || instr.op == OpCode::MAKE_RECORD) {
-            std::cout << " " << instr.operand;
-        }
-        std::cout << "\n";
-    }
     std::cout << "\n";
 }
 
@@ -449,6 +479,116 @@ void ASTPrinter::visit(SemTryAcquireExpr& n) {
     indent++; n.sem->accept(*this); indent--;
 }
 
+void ASTPrinter::visit(MakeAtomicExpr& n) {
+    print("MakeAtomicExpr: Atomic[" + n.elementType + "]");
+    if (n.initialValue) {
+        indent++; 
+        print("InitialValue:"); indent++; n.initialValue->accept(*this); indent--;
+        indent--;
+    }
+}
+
+void ASTPrinter::visit(AtomicLoadExpr& n) {
+    print("AtomicLoadExpr");
+    indent++; n.atomic->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(AtomicStoreExpr& n) {
+    print("AtomicStoreExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicSwapExpr& n) {
+    print("AtomicSwapExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicCasExpr& n) {
+    print("AtomicCasExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Expected:"); indent++; n.expected->accept(*this); indent--;
+    print("Desired:"); indent++; n.desired->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicAddExpr& n) {
+    print("AtomicAddExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicSubExpr& n) {
+    print("AtomicSubExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicAndExpr& n) {
+    print("AtomicAndExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicOrExpr& n) {
+    print("AtomicOrExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(AtomicXorExpr& n) {
+    print("AtomicXorExpr");
+    indent++;
+    print("Atomic:"); indent++; n.atomic->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+// Smart Pointer expressions
+void ASTPrinter::visit(MakeBoxExpr& n) {
+    print("MakeBoxExpr: Box[" + n.elementType + "]");
+    indent++; n.value->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(MakeRcExpr& n) {
+    print("MakeRcExpr: Rc[" + n.elementType + "]");
+    indent++; n.value->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(MakeArcExpr& n) {
+    print("MakeArcExpr: Arc[" + n.elementType + "]");
+    indent++; n.value->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(MakeWeakExpr& n) {
+    print("MakeWeakExpr");
+    indent++; n.source->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(MakeCellExpr& n) {
+    print("MakeCellExpr: Cell[" + n.elementType + "]");
+    indent++; n.value->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(MakeRefCellExpr& n) {
+    print("MakeRefCellExpr: RefCell[" + n.elementType + "]");
+    indent++; n.value->accept(*this); indent--;
+}
+
 void ASTPrinter::visit(LockStmt& n) {
     print("LockStmt");
     indent++;
@@ -457,4 +597,282 @@ void ASTPrinter::visit(LockStmt& n) {
     indent--;
 }
 
-} // namespace flex
+// Advanced Concurrency - Future/Promise
+void ASTPrinter::visit(MakeFutureExpr& n) {
+    print("MakeFutureExpr: Future[" + n.elementType + "]");
+}
+
+void ASTPrinter::visit(FutureGetExpr& n) {
+    print("FutureGetExpr");
+    indent++; n.future->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(FutureSetExpr& n) {
+    print("FutureSetExpr");
+    indent++;
+    print("Future:"); indent++; n.future->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(FutureIsReadyExpr& n) {
+    print("FutureIsReadyExpr");
+    indent++; n.future->accept(*this); indent--;
+}
+
+// Advanced Concurrency - Thread Pool
+void ASTPrinter::visit(MakeThreadPoolExpr& n) {
+    print("MakeThreadPoolExpr");
+    if (n.numWorkers) {
+        indent++;
+        print("Workers:"); indent++; n.numWorkers->accept(*this); indent--;
+        indent--;
+    }
+}
+
+void ASTPrinter::visit(ThreadPoolSubmitExpr& n) {
+    print("ThreadPoolSubmitExpr");
+    indent++;
+    print("Pool:"); indent++; n.pool->accept(*this); indent--;
+    print("Task:"); indent++; n.task->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(ThreadPoolShutdownExpr& n) {
+    print("ThreadPoolShutdownExpr");
+    indent++; n.pool->accept(*this); indent--;
+}
+
+// Advanced Concurrency - Select
+void ASTPrinter::visit(SelectExpr& n) {
+    print("SelectExpr");
+    indent++;
+    for (size_t i = 0; i < n.cases.size(); i++) {
+        auto& c = n.cases[i];
+        print("Case " + std::to_string(i) + " (" + (c.isSend ? "send" : "recv") + "):");
+        indent++;
+        print("Channel:"); indent++; c.channel->accept(*this); indent--;
+        if (c.value) {
+            print("Value:"); indent++; c.value->accept(*this); indent--;
+        }
+        if (c.body) {
+            print("Body:"); indent++; c.body->accept(*this); indent--;
+        }
+        indent--;
+    }
+    if (n.defaultCase) {
+        print("Default:"); indent++; n.defaultCase->accept(*this); indent--;
+    }
+    indent--;
+}
+
+// Advanced Concurrency - Timeout
+void ASTPrinter::visit(TimeoutExpr& n) {
+    print("TimeoutExpr");
+    indent++;
+    print("Operation:"); indent++; n.operation->accept(*this); indent--;
+    print("Timeout:"); indent++; n.timeoutMs->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(ChanRecvTimeoutExpr& n) {
+    print("ChanRecvTimeoutExpr");
+    indent++;
+    print("Channel:"); indent++; n.channel->accept(*this); indent--;
+    print("Timeout:"); indent++; n.timeoutMs->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(ChanSendTimeoutExpr& n) {
+    print("ChanSendTimeoutExpr");
+    indent++;
+    print("Channel:"); indent++; n.channel->accept(*this); indent--;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    print("Timeout:"); indent++; n.timeoutMs->accept(*this); indent--;
+    indent--;
+}
+
+// Advanced Concurrency - Cancellation
+void ASTPrinter::visit(MakeCancelTokenExpr& n) {
+    (void)n;
+    print("MakeCancelTokenExpr");
+}
+
+void ASTPrinter::visit(CancelExpr& n) {
+    print("CancelExpr");
+    indent++; n.token->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(IsCancelledExpr& n) {
+    print("IsCancelledExpr");
+    indent++; n.token->accept(*this); indent--;
+}
+
+// Async Runtime - Event Loop and Task Management
+void ASTPrinter::visit(AsyncRuntimeInitExpr& n) {
+    print("AsyncRuntimeInitExpr");
+    if (n.numWorkers) { indent++; n.numWorkers->accept(*this); indent--; }
+}
+
+void ASTPrinter::visit(AsyncRuntimeRunExpr& n) {
+    (void)n;
+    print("AsyncRuntimeRunExpr");
+}
+
+void ASTPrinter::visit(AsyncRuntimeShutdownExpr& n) {
+    (void)n;
+    print("AsyncRuntimeShutdownExpr");
+}
+
+void ASTPrinter::visit(AsyncSpawnExpr& n) {
+    print("AsyncSpawnExpr");
+    indent++; n.task->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(AsyncSleepExpr& n) {
+    print("AsyncSleepExpr");
+    indent++; n.durationMs->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(AsyncYieldExpr& n) {
+    (void)n;
+    print("AsyncYieldExpr");
+}
+
+// Syntax Redesign - New Expression Visitors
+void ASTPrinter::visit(PlaceholderExpr& n) {
+    (void)n;
+    print("PlaceholderExpr: _");
+}
+
+void ASTPrinter::visit(InclusiveRangeExpr& n) {
+    print("InclusiveRangeExpr (..=)");
+    indent++;
+    print("Start:"); indent++; n.start->accept(*this); indent--;
+    print("End:"); indent++; n.end->accept(*this); indent--;
+    if (n.step) {
+        print("Step:"); indent++; n.step->accept(*this); indent--;
+    }
+    indent--;
+}
+
+void ASTPrinter::visit(SafeNavExpr& n) {
+    print("SafeNavExpr: ?." + n.member);
+    indent++; n.object->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(TypeCheckExpr& n) {
+    print("TypeCheckExpr: is " + n.typeName);
+    indent++; n.value->accept(*this); indent--;
+}
+
+// Syntax Redesign - New Statement Visitors
+void ASTPrinter::visit(LoopStmt& n) {
+    std::string info = "LoopStmt";
+    if (!n.label.empty()) info += " '" + n.label;
+    print(info);
+    indent++; n.body->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(WithStmt& n) {
+    std::string info = "WithStmt";
+    if (!n.alias.empty()) info += " as " + n.alias;
+    print(info);
+    indent++;
+    print("Resource:"); indent++; n.resource->accept(*this); indent--;
+    print("Body:"); indent++; n.body->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(ScopeStmt& n) {
+    std::string info = "ScopeStmt";
+    if (!n.label.empty()) info += " '" + n.label;
+    print(info);
+    indent++;
+    if (n.timeout) {
+        print("Timeout:"); indent++; n.timeout->accept(*this); indent--;
+    }
+    print("Body:"); indent++; n.body->accept(*this); indent--;
+    indent--;
+}
+
+void ASTPrinter::visit(RequireStmt& n) {
+    print("RequireStmt" + (n.message.empty() ? "" : ": \"" + n.message + "\""));
+    indent++; n.condition->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(EnsureStmt& n) {
+    print("EnsureStmt" + (n.message.empty() ? "" : ": \"" + n.message + "\""));
+    indent++; n.condition->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(InvariantStmt& n) {
+    print("InvariantStmt" + (n.message.empty() ? "" : ": \"" + n.message + "\""));
+    indent++; n.condition->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(ComptimeBlock& n) {
+    print("ComptimeBlock");
+    indent++; n.body->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(EffectDecl& n) {
+    std::string params;
+    for (size_t i = 0; i < n.typeParams.size(); i++) {
+        if (i > 0) params += ", ";
+        params += n.typeParams[i];
+    }
+    print("EffectDecl: " + n.name + (params.empty() ? "" : "[" + params + "]"));
+    indent++;
+    for (auto& op : n.operations) {
+        std::string opStr = "fn " + op.name + "(";
+        for (size_t i = 0; i < op.params.size(); i++) {
+            if (i > 0) opStr += ", ";
+            opStr += op.params[i].first + ": " + op.params[i].second;
+        }
+        opStr += ") -> " + op.returnType;
+        print(opStr);
+    }
+    indent--;
+}
+
+void ASTPrinter::visit(PerformEffectExpr& n) {
+    print("PerformEffect: " + n.effectName + "." + n.opName);
+    indent++;
+    for (auto& arg : n.args) {
+        arg->accept(*this);
+    }
+    indent--;
+}
+
+void ASTPrinter::visit(HandleExpr& n) {
+    print("HandleExpr");
+    indent++;
+    print("Expression:");
+    indent++; n.expr->accept(*this); indent--;
+    for (auto& handler : n.handlers) {
+        std::string handlerStr = handler.effectName + "." + handler.opName + "(";
+        for (size_t i = 0; i < handler.paramNames.size(); i++) {
+            if (i > 0) handlerStr += ", ";
+            handlerStr += handler.paramNames[i];
+        }
+        handlerStr += ")";
+        if (!handler.resumeParam.empty()) {
+            handlerStr += " |" + handler.resumeParam + "|";
+        }
+        print("Handler: " + handlerStr);
+        if (handler.body) {
+            indent++; handler.body->accept(*this); indent--;
+        }
+    }
+    indent--;
+}
+
+void ASTPrinter::visit(ResumeExpr& n) {
+    print("ResumeExpr");
+    if (n.value) {
+        indent++; n.value->accept(*this); indent--;
+    }
+}
+
+} // namespace tyl

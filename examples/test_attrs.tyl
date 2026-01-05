@@ -1,0 +1,20 @@
+// Test attribute syntax - both @ and #[] styles
+
+// @ style attributes
+@cfg(windows)
+fn windows_only -> str:
+    return "Windows"
+
+@export
+fn exported_fn -> int:
+    return 42
+
+// #[] style (legacy, still supported)
+#[cfg(windows)]
+fn windows_legacy -> str:
+    return "Legacy Windows"
+
+fn main:
+    println(windows_only())
+    println(exported_fn())
+    println(windows_legacy())

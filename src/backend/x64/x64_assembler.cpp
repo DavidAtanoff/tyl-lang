@@ -1,7 +1,7 @@
-// Flex Compiler - x86-64 Assembler Implementation
+// Tyl Compiler - x86-64 Assembler Implementation
 #include "x64_assembler.h"
 
-namespace flex {
+namespace tyl {
 
 void X64Assembler::emit8(uint8_t b) { code.push_back(b); }
 
@@ -100,6 +100,10 @@ void X64Assembler::inc_rcx() { emit8(0x48); emit8(0xFF); emit8(0xC1); }
 void X64Assembler::dec_rax() { emit8(0x48); emit8(0xFF); emit8(0xC8); }
 void X64Assembler::cmp_rax_rcx() { emit8(0x48); emit8(0x39); emit8(0xC8); }
 void X64Assembler::cmp_rax_imm32(int32_t val) { emit8(0x48); emit8(0x3D); emit32(val); }
+void X64Assembler::cmp_rax_imm8(int8_t val) { 
+    // cmp rax, imm8 (sign-extended) - 48 83 F8 ib
+    emit8(0x48); emit8(0x83); emit8(0xF8); emit8(static_cast<uint8_t>(val)); 
+}
 void X64Assembler::cmp_rax_mem_rbp(int32_t offset) { emit8(0x48); emit8(0x3B); emit8(0x85); emit32(offset); }
 void X64Assembler::test_rax_rax() { emit8(0x48); emit8(0x85); emit8(0xC0); }
 void X64Assembler::sete_al() { emit8(0x0F); emit8(0x94); emit8(0xC0); }
@@ -188,7 +192,9 @@ void X64Assembler::mov_rcx_r15() { emit8(0x4C); emit8(0x89); emit8(0xF9); }  // 
 
 void X64Assembler::jmp_rel32(const std::string& lbl) { emit8(0xE9); fixupLabel(lbl); }
 void X64Assembler::jz_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x84); fixupLabel(lbl); }
+void X64Assembler::je_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x84); fixupLabel(lbl); }  // Same as jz
 void X64Assembler::jnz_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x85); fixupLabel(lbl); }
+void X64Assembler::jne_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x85); fixupLabel(lbl); }  // Same as jnz
 void X64Assembler::jge_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x8D); fixupLabel(lbl); }
 void X64Assembler::jl_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x8C); fixupLabel(lbl); }
 void X64Assembler::jle_rel32(const std::string& lbl) { emit8(0x0F); emit8(0x8E); fixupLabel(lbl); }
@@ -847,6 +853,31 @@ void X64Assembler::mov_mem_rdi_rax() {
     emit8(0x48); emit8(0x89); emit8(0x07);
 }
 
+// mov rsi, rax
+void X64Assembler::mov_rsi_rax() {
+    emit8(0x48); emit8(0x89); emit8(0xC6);
+}
+
+// mov rsi, rcx
+void X64Assembler::mov_rsi_rcx() {
+    emit8(0x48); emit8(0x89); emit8(0xCE);
+}
+
+// mov rsi, [rbp + offset]
+void X64Assembler::mov_rsi_mem_rbp(int32_t offset) {
+    emit8(0x48); emit8(0x8B); emit8(0xB5); emit32(offset);
+}
+
+// mov rsi, [rax + offset]
+void X64Assembler::mov_rsi_mem_rax(int32_t offset) {
+    emit8(0x48); emit8(0x8B); emit8(0xB0); emit32(offset);
+}
+
+// mov rdi, [rbp + offset]
+void X64Assembler::mov_rdi_mem_rbp(int32_t offset) {
+    emit8(0x48); emit8(0x8B); emit8(0xBD); emit32(offset);
+}
+
 // add rcx, imm32
 void X64Assembler::add_rcx_imm32(int32_t val) {
     emit8(0x48); emit8(0x81); emit8(0xC1); emit32(val);
@@ -964,4 +995,4 @@ void X64Assembler::xchg_rax_rcx() {
     emit8(0x48); emit8(0x91);  // xchg rax, rcx
 }
 
-} // namespace flex
+} // namespace tyl

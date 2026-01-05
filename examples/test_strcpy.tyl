@@ -1,0 +1,21 @@
+// Test string copy
+
+fn main -> int:
+    // Test direct string printing
+    print("Direct: ")
+    print("hello")
+    print("\n")
+    
+    // Test via variable
+    let s = "world"
+    print("Via var: ")
+    print(s)
+    print("\n")
+    
+    // Test list element
+    let arr = ["test"]
+    print("List elem: ")
+    print(arr[1])
+    print("\n")
+    
+    return 0

@@ -1,0 +1,15 @@
+// Test function call inside handle block
+
+effect Reader:
+    fn ask -> int
+
+fn get_value -> int:
+    return 42
+
+fn main -> int:
+    print("Before handle")
+    let x = handle get_value():
+        Reader.ask() => 100
+    print("After handle, x =")
+    print(x)
+    return 0

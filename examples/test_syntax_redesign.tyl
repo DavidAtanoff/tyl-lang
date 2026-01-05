@@ -1,0 +1,51 @@
+// Test file for Syntax Redesign features
+
+// Test 1: Block comments
+/// This is a block comment
+    that spans multiple lines
+    and can contain any text
+///
+
+// Test 2: Inclusive range (..=)
+fn test_inclusive_range():
+    for i in 1..=5:
+        print(i)  // Should print 1, 2, 3, 4, 5
+
+// Test 3: Loop statement (infinite loop with break)
+fn test_loop():
+    mut count = 0
+    loop:
+        count = count + 1
+        if count >= 3:
+            break
+        print(count)
+
+// Test 4: Require (precondition)
+fn divide(a: int, b: int) -> int:
+    require b != 0, "Division by zero"
+    return a / b
+
+// Test 5: Simple test
+fn main():
+    print("Testing syntax redesign features")
+    
+    // Test inclusive range
+    print("Inclusive range 1..=3:")
+    for i in 1..=3:
+        print(i)
+    
+    // Test loop
+    print("Loop test:")
+    mut x = 0
+    loop:
+        x = x + 1
+        print(x)
+        if x >= 2:
+            break
+    
+    // Test require
+    print("Divide test:")
+    result = divide(10, 2)
+    print(result)
+    
+    print("All tests passed!")

@@ -1,0 +1,10 @@
+// Simple cancel test
+
+fn main -> int:
+    let token = make_cancel_token()
+    cancel(token)
+    let c = is_cancelled(token)
+    print("Cancelled: ")
+    print(c)
+    print("\n")
+    return 0

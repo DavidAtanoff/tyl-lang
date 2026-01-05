@@ -1,10 +1,21 @@
-// Flex Compiler - Native Code Generator Type Utilities
+// Tyl Compiler - Native Code Generator Type Utilities
 // Handles: isFloatExpression, isStringReturningExpr, type size/alignment
 
 #include "backend/codegen/codegen_base.h"
 #include "semantic/types/types.h"
 
-namespace flex {
+namespace tyl {
+
+// Static helper to check if a type string represents a float type
+bool NativeCodeGen::isFloatTypeName(const std::string& typeName) {
+    return typeName == "float" || typeName == "f16" || typeName == "f32" || 
+           typeName == "f64" || typeName == "f128";
+}
+
+// Static helper to check if a type string represents a complex type
+bool NativeCodeGen::isComplexTypeName(const std::string& typeName) {
+    return typeName == "c64" || typeName == "c128";
+}
 
 bool NativeCodeGen::isFloatExpression(Expression* expr) {
     if (dynamic_cast<FloatLiteral*>(expr)) return true;
@@ -12,6 +23,12 @@ bool NativeCodeGen::isFloatExpression(Expression* expr) {
     if (auto* ident = dynamic_cast<Identifier*>(expr)) {
         if (floatVars.count(ident->name)) return true;
         if (constFloatVars.count(ident->name)) return true;
+        
+        // Check varTypes_ for explicit float type annotations
+        auto typeIt = varTypes_.find(ident->name);
+        if (typeIt != varTypes_.end() && isFloatTypeName(typeIt->second)) {
+            return true;
+        }
     }
     
     // Check for record field access - check if the field type is float
@@ -24,7 +41,7 @@ bool NativeCodeGen::isFloatExpression(Expression* expr) {
                     for (size_t i = 0; i < typeIt->second.fieldNames.size(); i++) {
                         if (typeIt->second.fieldNames[i] == member->member) {
                             const std::string& fieldType = typeIt->second.fieldTypes[i];
-                            if (fieldType == "float" || fieldType == "f64" || fieldType == "f32") {
+                            if (isFloatTypeName(fieldType)) {
                                 return true;
                             }
                             break;
@@ -178,7 +195,7 @@ int32_t NativeCodeGen::getTypeSize(const std::string& typeName) {
     if (typeName == "i32" || typeName == "u32" || typeName == "f32") {
         return 4;
     }
-    if (typeName == "i16" || typeName == "u16") {
+    if (typeName == "i16" || typeName == "u16" || typeName == "f16") {
         return 2;
     }
     if (typeName == "i8" || typeName == "u8" || typeName == "bool") {
@@ -186,6 +203,17 @@ int32_t NativeCodeGen::getTypeSize(const std::string& typeName) {
     }
     if (typeName == "void") {
         return 0;
+    }
+    // Extended precision floats
+    if (typeName == "f128") {
+        return 16;
+    }
+    // Complex numbers
+    if (typeName == "c64") {
+        return 8;   // 2x f32
+    }
+    if (typeName == "c128") {
+        return 16;  // 2x f64
     }
     // Pointers and strings are 8 bytes
     if (typeName == "str" || typeName == "string" || (!typeName.empty() && typeName.front() == '*')) {
@@ -290,4 +318,4 @@ int32_t NativeCodeGen::getTypeAlignment(const std::string& typeName) {
     return 8;  // Default alignment
 }
 
-} // namespace flex
+} // namespace tyl

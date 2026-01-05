@@ -1,0 +1,58 @@
+// Test smart pointer types and operations
+
+fn main:
+    // Test Box - unique ownership heap allocation
+    boxed = Box(42)
+    print("Box created with value: ")
+    box_val = boxed.get()
+    println(box_val)
+    
+    // Test Rc - reference counted (single-threaded)
+    shared = Rc(100)
+    print("Rc created with value: ")
+    rc_val = shared.get()
+    println(rc_val)
+    
+    // Test Rc clone - increment refcount
+    shared2 = shared.clone()
+    print("Rc cloned, strong_count: ")
+    count = shared.strong_count()
+    println(count)
+    
+    // Test Arc - atomic reference counted (thread-safe)
+    atomic_shared = Arc(200)
+    print("Arc created with value: ")
+    arc_val = atomic_shared.get()
+    println(arc_val)
+    
+    // Test Arc clone - atomic increment refcount
+    atomic_shared2 = atomic_shared.clone()
+    print("Arc cloned, strong_count: ")
+    arc_count = atomic_shared.strong_count()
+    println(arc_count)
+    
+    // Test Cell - interior mutability
+    cell = Cell(10)
+    print("Cell created with value: ")
+    cell_val = cell.get()
+    println(cell_val)
+    
+    // Test Cell set
+    cell.set(20)
+    print("Cell after set: ")
+    cell_val2 = cell.get()
+    println(cell_val2)
+    
+    // Test RefCell - runtime borrow checking
+    refcell = RefCell(30)
+    print("RefCell created with value: ")
+    refcell_val = refcell.get()
+    println(refcell_val)
+    
+    // Test RefCell set
+    refcell.set(40)
+    print("RefCell after set: ")
+    refcell_val2 = refcell.get()
+    println(refcell_val2)
+    
+    println("Smart pointer operations work!")

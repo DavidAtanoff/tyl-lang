@@ -1,10 +1,10 @@
-// Flex Compiler - Native Code Generator Record Layout
+// Tyl Compiler - Native Code Generator Record Layout
 // Handles: computeRecordLayout, getRecordFieldOffset, getRecordSize, bitfield operations
 
 #include "backend/codegen/codegen_base.h"
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::computeRecordLayout(RecordTypeInfo& info) {
     if (info.offsetsComputed) return;
@@ -327,4 +327,4 @@ void NativeCodeGen::emitBitfieldWrite(const std::string& recordName, int fieldIn
     asm_.mov_mem_rcx_rax();
 }
 
-} // namespace flex
+} // namespace tyl

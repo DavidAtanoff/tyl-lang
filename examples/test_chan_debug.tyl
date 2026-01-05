@@ -1,0 +1,18 @@
+// Debug channel test
+
+fn main -> int:
+    print("Creating channel...\n")
+    let ch = chan[int, 1]
+    print("Channel created\n")
+    
+    print("Sending 42...\n")
+    ch <- 42
+    print("Sent\n")
+    
+    print("Receiving...\n")
+    let v = <- ch
+    print("Received: ")
+    print(v)
+    print("\n")
+    
+    return 0

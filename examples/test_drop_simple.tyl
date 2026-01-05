@@ -1,0 +1,17 @@
+// Simple Drop trait test
+
+record Resource:
+    id: int
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping resource")
+        print(self.id)
+
+fn main():
+    print("Start")
+    let r1 = Resource { id: 1 }
+    print("Created r1")
+    let r2 = Resource { id: 2 }
+    print("Created r2")
+    print("End of main")

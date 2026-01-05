@@ -1,0 +1,13 @@
+// Non-constant reassignment test
+
+fn make_list(x: int) -> [int]:
+    return [x, x+1, x+2]
+
+fn main:
+    println("Start")
+    mut e = make_list(7)
+    println("Created e")
+    e = make_list(10)
+    println("Reassigned e")
+    println(e[1])
+    println("Done")

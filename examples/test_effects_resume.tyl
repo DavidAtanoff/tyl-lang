@@ -1,0 +1,19 @@
+// Test algebraic effects - resume syntax
+
+effect Ask:
+    fn ask -> int
+
+// Main function
+fn main -> int:
+    print("Testing resume syntax...")
+    
+    // Test: Handle with resume parameter
+    // The |k| syntax captures the continuation
+    let result = handle 10:
+        Ask.ask() => |k| k(42)
+    
+    print("Handle with resume:")
+    print(result)
+    
+    print("Resume syntax test passed!")
+    return 0

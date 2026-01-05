@@ -1,9 +1,9 @@
-// Flex Compiler - FFI/Extern Code Generation Helpers
+// Tyl Compiler - FFI/Extern Code Generation Helpers
 // Handles: C type utilities, calling convention helpers, callbacks
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // FFI helper functions for C interop
 // These are used by the main codegen to handle extern function calls
@@ -111,4 +111,4 @@ uint32_t NativeCodeGen::getCallbackAddress(const std::string& fnName) {
     return 0;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,9 +1,9 @@
-// Flex Compiler - x86-64 Assembler SSE/SSE2 Instructions
+// Tyl Compiler - x86-64 Assembler SSE/SSE2 Instructions
 // Handles: floating point operations, SIMD
 
 #include "x64_assembler.h"
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // SSE/SSE2 Floating Point Instructions
@@ -335,4 +335,4 @@ void X64Assembler::pxor_xmm1_xmm1() {
     emit8(0x66); emit8(0x0F); emit8(0xEF); emit8(0xC9);
 }
 
-} // namespace flex
+} // namespace tyl

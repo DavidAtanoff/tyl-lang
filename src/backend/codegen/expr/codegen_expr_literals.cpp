@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Expression Literals
+// Tyl Compiler - Native Code Generator Expression Literals
 // Handles: IntegerLiteral, FloatLiteral, StringLiteral, BoolLiteral, NilLiteral, Identifier
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(IntegerLiteral& node) {
     if (node.value == 0) {
@@ -30,6 +30,31 @@ void NativeCodeGen::visit(FloatLiteral& node) {
 
 void NativeCodeGen::visit(StringLiteral& node) {
     uint32_t rva = addString(node.value);
+    asm_.lea_rax_rip_fixup(rva);
+    lastExprWasFloat_ = false;
+}
+
+void NativeCodeGen::visit(CharLiteral& node) {
+    // Character is stored as a 32-bit Unicode code point
+    if (node.value == 0) {
+        asm_.xor_rax_rax();
+    } else if (node.value <= 0x7FFFFFFF) {
+        asm_.code.push_back(0xB8);
+        asm_.code.push_back(node.value & 0xFF);
+        asm_.code.push_back((node.value >> 8) & 0xFF);
+        asm_.code.push_back((node.value >> 16) & 0xFF);
+        asm_.code.push_back((node.value >> 24) & 0xFF);
+    } else {
+        asm_.mov_rax_imm64(node.value);
+    }
+    lastExprWasFloat_ = false;
+}
+
+void NativeCodeGen::visit(ByteStringLiteral& node) {
+    // Byte string is stored as a pointer to the byte array in .rdata
+    // The array is null-terminated for convenience
+    std::string byteStr(node.value.begin(), node.value.end());
+    uint32_t rva = addString(byteStr);
     asm_.lea_rax_rip_fixup(rva);
     lastExprWasFloat_ = false;
 }
@@ -215,9 +240,22 @@ void NativeCodeGen::visit(Identifier& node) {
         return;
     }
     
+    // Fallback: check allFunctionNames_ in case label wasn't registered yet
+    // This can happen when referencing functions from within handle blocks
+    if (allFunctionNames_.count(node.name)) {
+        // Register the label if not already present
+        if (asm_.labels.find(node.name) == asm_.labels.end()) {
+            asm_.labels[node.name] = 0;
+        }
+        asm_.code.push_back(0x48); asm_.code.push_back(0x8D); asm_.code.push_back(0x05);
+        asm_.fixupLabel(node.name);
+        lastExprWasFloat_ = false;
+        return;
+    }
+    
     // Unknown identifier - return 0
     asm_.xor_rax_rax();
     lastExprWasFloat_ = false;
 }
 
-} // namespace flex
+} // namespace tyl

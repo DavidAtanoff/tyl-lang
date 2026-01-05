@@ -1,0 +1,6 @@
+// Failing case - print before join
+fn main -> int:
+    let a = ["x"]
+    print("hi")
+    print(join(a, ","))
+    return 0

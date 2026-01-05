@@ -1,0 +1,22 @@
+// Test Borrow Checker with proper function syntax
+
+fn print_list data: &[int] -> int:
+    print("List has {len(data)} elements")
+    return len(data)
+
+fn modify_list data: &mut [int] -> int:
+    data[1] = 999
+    return data[1]
+
+fn main -> int:
+    // Test immutable borrow
+    let b = [4, 5, 6]
+    let n = print_list(&b)
+    print("b[1] = {b[1]}")
+    
+    // Test mutable borrow
+    mut c = [7, 8, 9]
+    let m = modify_list(&mut c)
+    print("c[1] = {c[1]}")
+    
+    return 0

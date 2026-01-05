@@ -1,0 +1,19 @@
+// Test list length
+
+fn main -> int:
+    print("Testing list length...\n")
+    
+    // Test with literal list
+    let list1 = ["a", "b", "c"]
+    print("list1 length: ")
+    print(len(list1))
+    print("\n")
+    
+    // Test with split
+    let list2 = split("x,y,z", ",")
+    print("list2 length: ")
+    print(len(list2))
+    print("\n")
+    
+    print("Done\n")
+    return 0

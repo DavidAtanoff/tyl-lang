@@ -1,7 +1,7 @@
-// Flex Compiler - Compile-Time Function Execution (CTFE)
+// Tyl Compiler - Compile-Time Function Execution (CTFE)
 // Evaluates pure functions with constant arguments at compile time
-#ifndef FLEX_CTFE_H
-#define FLEX_CTFE_H
+#ifndef TYL_CTFE_H
+#define TYL_CTFE_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -10,7 +10,7 @@
 #include <variant>
 #include <optional>
 
-namespace flex {
+namespace tyl {
 
 // Value types that can be computed at compile time
 using CTFEValue = std::variant<int64_t, double, bool, std::string>;
@@ -75,6 +75,6 @@ private:
     LoopControl loopControl_ = LoopControl::None;  // Track continue/break
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_CTFE_H
+#endif // TYL_CTFE_H

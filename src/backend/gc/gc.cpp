@@ -1,4 +1,4 @@
-// Flex Compiler - Garbage Collector Implementation
+// Tyl Compiler - Garbage Collector Implementation
 // Mark-and-sweep garbage collector with proper runtime integration
 // Supports custom allocators for flexible memory management
 
@@ -8,7 +8,7 @@
 #include <cstring>
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 // Global GC instance
 GarbageCollector* g_gc = nullptr;
@@ -350,18 +350,18 @@ void GarbageCollector::sweep() {
 // C API implementations
 extern "C" {
 
-void* flex_gc_alloc(size_t size, uint16_t type) {
-    if (!g_gc) flex_gc_init();
+void* TYL_gc_alloc(size_t size, uint16_t type) {
+    if (!g_gc) TYL_gc_init();
     return g_gc->alloc(size, static_cast<GCObjectType>(type));
 }
 
-void* flex_gc_alloc_string(size_t len) {
-    return flex_gc_alloc(len + 1, static_cast<uint16_t>(GCObjectType::STRING));
+void* TYL_gc_alloc_string(size_t len) {
+    return TYL_gc_alloc(len + 1, static_cast<uint16_t>(GCObjectType::STRING));
 }
 
-void* flex_gc_alloc_list(size_t capacity) {
+void* TYL_gc_alloc_list(size_t capacity) {
     size_t size = 16 + capacity * 8;
-    void* ptr = flex_gc_alloc(size, static_cast<uint16_t>(GCObjectType::LIST));
+    void* ptr = TYL_gc_alloc(size, static_cast<uint16_t>(GCObjectType::LIST));
     if (ptr) {
         int64_t* data = static_cast<int64_t*>(ptr);
         data[0] = 0;
@@ -370,9 +370,9 @@ void* flex_gc_alloc_list(size_t capacity) {
     return ptr;
 }
 
-void* flex_gc_alloc_record(size_t fieldCount) {
+void* TYL_gc_alloc_record(size_t fieldCount) {
     size_t size = 8 + fieldCount * 8;
-    void* ptr = flex_gc_alloc(size, static_cast<uint16_t>(GCObjectType::RECORD));
+    void* ptr = TYL_gc_alloc(size, static_cast<uint16_t>(GCObjectType::RECORD));
     if (ptr) {
         int64_t* data = static_cast<int64_t*>(ptr);
         data[0] = fieldCount;
@@ -380,9 +380,9 @@ void* flex_gc_alloc_record(size_t fieldCount) {
     return ptr;
 }
 
-void* flex_gc_alloc_closure(size_t captureCount) {
+void* TYL_gc_alloc_closure(size_t captureCount) {
     size_t size = 16 + captureCount * 8;
-    void* ptr = flex_gc_alloc(size, static_cast<uint16_t>(GCObjectType::CLOSURE));
+    void* ptr = TYL_gc_alloc(size, static_cast<uint16_t>(GCObjectType::CLOSURE));
     if (ptr) {
         int64_t* data = static_cast<int64_t*>(ptr);
         data[0] = 0;
@@ -391,28 +391,28 @@ void* flex_gc_alloc_closure(size_t captureCount) {
     return ptr;
 }
 
-void flex_gc_push_frame(void** frameBase) {
+void TYL_gc_push_frame(void** frameBase) {
     stackFrames.push_back(frameBase);
 }
 
-void flex_gc_pop_frame() {
+void TYL_gc_pop_frame() {
     if (!stackFrames.empty()) {
         stackFrames.pop_back();
     }
 }
 
-void flex_gc_collect() {
+void TYL_gc_collect() {
     if (g_gc) g_gc->collect();
 }
 
-void flex_gc_init() {
+void TYL_gc_init() {
     if (!g_gc) {
         g_gc = new GarbageCollector();
         g_gc->init();
     }
 }
 
-void flex_gc_shutdown() {
+void TYL_gc_shutdown() {
     if (g_gc) {
         g_gc->shutdown();
         delete g_gc;
@@ -420,44 +420,44 @@ void flex_gc_shutdown() {
     }
 }
 
-void flex_gc_enable() {
+void TYL_gc_enable() {
     gcEnabled = true;
 }
 
-void flex_gc_disable() {
+void TYL_gc_disable() {
     gcEnabled = false;
 }
 
-size_t flex_gc_stats() {
+size_t TYL_gc_stats() {
     if (g_gc) {
         return g_gc->getStats().totalAllocated;
     }
     return 0;
 }
 
-void flex_gc_write_barrier(void* obj, void* field, void* newValue) {
+void TYL_gc_write_barrier(void* obj, void* field, void* newValue) {
     (void)obj;
     (void)field;
     (void)newValue;
 }
 
 // Custom allocator API
-void flex_gc_set_allocator(AllocFn alloc, FreeFn free, void* userData) {
+void TYL_gc_set_allocator(AllocFn alloc, FreeFn free, void* userData) {
     g_customAlloc = alloc;
     g_customFree = free;
     g_customAllocUserData = userData;
 }
 
-void flex_gc_reset_allocator() {
+void TYL_gc_reset_allocator() {
     g_customAlloc = nullptr;
     g_customFree = nullptr;
     g_customAllocUserData = nullptr;
 }
 
-void* flex_gc_get_allocator_userdata() {
+void* TYL_gc_get_allocator_userdata() {
     return g_customAllocUserData;
 }
 
 } // extern "C"
 
-} // namespace flex
+} // namespace tyl

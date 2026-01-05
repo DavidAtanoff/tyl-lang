@@ -1,0 +1,16 @@
+// Test function call inside handle block with debug
+
+effect Reader:
+    fn ask -> int
+
+fn get_value -> int:
+    print("Inside get_value")
+    return 42
+
+fn main -> int:
+    print("Before handle")
+    let x = handle get_value():
+        Reader.ask() => 100
+    print("After handle")
+    print(x)
+    return 0

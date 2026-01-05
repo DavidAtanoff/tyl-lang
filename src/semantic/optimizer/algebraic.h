@@ -1,12 +1,12 @@
-// Flex Compiler - Algebraic Simplification and Advanced Strength Reduction
+// Tyl Compiler - Algebraic Simplification and Advanced Strength Reduction
 // Applies algebraic identities and replaces expensive operations with cheaper ones
-#ifndef FLEX_ALGEBRAIC_H
-#define FLEX_ALGEBRAIC_H
+#ifndef TYL_ALGEBRAIC_H
+#define TYL_ALGEBRAIC_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
 
-namespace flex {
+namespace tyl {
 
 class AlgebraicSimplificationPass : public OptimizationPass {
 public:
@@ -64,6 +64,6 @@ private:
     ExprPtr cloneExpr(Expression* expr);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_ALGEBRAIC_H
+#endif // TYL_ALGEBRAIC_H

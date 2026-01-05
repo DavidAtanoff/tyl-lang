@@ -1,0 +1,18 @@
+// Order Test
+
+fn main -> int:
+    print("Creating future...\n")
+    let f = make_future[int]()
+    print("Future created\n")
+    
+    print("Checking ready...\n")
+    let ready = future_is_ready(f)
+    print("Check done, ready = ")
+    print(ready)
+    print("\n")
+    
+    print("Setting value...\n")
+    future_set(f, 42)
+    print("Value set\n")
+    
+    return 0

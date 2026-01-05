@@ -1,0 +1,11 @@
+// Test string concat with atomic load
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](0)
+    counter.store(42)
+    let val: int = counter.load()
+    let s: str = str(val)
+    println("Value: " + s)
+    return 0
+
+main()

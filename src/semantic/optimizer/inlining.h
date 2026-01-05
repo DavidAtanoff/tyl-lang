@@ -1,14 +1,14 @@
-// Flex Compiler - Function Inlining Optimization Pass
+// Tyl Compiler - Function Inlining Optimization Pass
 // Inlines small functions to eliminate call overhead
-#ifndef FLEX_INLINING_H
-#define FLEX_INLINING_H
+#ifndef TYL_INLINING_H
+#define TYL_INLINING_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
 #include <map>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 // Information about a function for inlining decisions
 struct FunctionInfo {
@@ -79,6 +79,6 @@ private:
     std::string generateUniqueName(const std::string& base);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_INLINING_H
+#endif // TYL_INLINING_H

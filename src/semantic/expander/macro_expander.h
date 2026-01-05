@@ -1,12 +1,12 @@
-// Flex Compiler - Macro Expander
-#ifndef FLEX_MACRO_EXPANDER_H
-#define FLEX_MACRO_EXPANDER_H
+// Tyl Compiler - Macro Expander
+#ifndef TYL_MACRO_EXPANDER_H
+#define TYL_MACRO_EXPANDER_H
 
 #include "frontend/ast/ast.h"
 #include <unordered_map>
 #include <unordered_set>
 
-namespace flex {
+namespace tyl {
 
 struct MacroInfo {
     std::string name;
@@ -61,6 +61,6 @@ private:
     std::vector<std::string> errors_;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_MACRO_EXPANDER_H
+#endif // TYL_MACRO_EXPANDER_H

@@ -1,0 +1,93 @@
+// Test Advanced Concurrency Features
+
+fn test_future:
+    print("--- Test Future/Promise ---\n")
+    
+    let f = make_future[int]()
+    print("Future created\n")
+    
+    let ready1 = future_is_ready(f)
+    print("Future ready before set: ")
+    if ready1:
+        print("true\n")
+    else:
+        print("false\n")
+    
+    future_set(f, 42)
+    print("Future value set to 42\n")
+    
+    let ready2 = future_is_ready(f)
+    print("Future ready after set: ")
+    if ready2:
+        print("true\n")
+    else:
+        print("false\n")
+    
+    let val = future_get(f)
+    print("Future value: ")
+    print(val)
+    print("\n")
+
+fn test_thread_pool:
+    print("--- Test Thread Pool ---\n")
+    
+    let pool = make_thread_pool(4)
+    print("Thread pool created with 4 workers\n")
+    
+    thread_pool_shutdown(pool)
+    print("Thread pool shutdown\n")
+
+fn test_cancel_token:
+    print("--- Test Cancellation Token ---\n")
+    
+    let token = make_cancel_token()
+    print("Cancel token created\n")
+    
+    let cancelled1 = is_cancelled(token)
+    print("Token cancelled before cancel: ")
+    if cancelled1:
+        print("true\n")
+    else:
+        print("false\n")
+    
+    cancel(token)
+    print("Token cancelled\n")
+    
+    let cancelled2 = is_cancelled(token)
+    print("Token cancelled after cancel: ")
+    if cancelled2:
+        print("true\n")
+    else:
+        print("false\n")
+
+fn test_chan_timeout:
+    print("--- Test Channel ---\n")
+    print("Creating channel...\n")
+    let ch = chan[int, 1]
+    print("Channel created\n")
+    print("Sending 100...\n")
+    ch <- 100
+    print("Sent\n")
+    print("Receiving...\n")
+    let value = <- ch
+    print("Received: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    print("=== Advanced Concurrency Test ===\n\n")
+    
+    test_future()
+    print("\n")
+    
+    test_thread_pool()
+    print("\n")
+    
+    test_cancel_token()
+    print("\n")
+    
+    test_chan_timeout()
+    print("\n")
+    
+    print("=== All Tests Complete ===\n")
+    return 0

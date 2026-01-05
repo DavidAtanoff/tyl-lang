@@ -1,9 +1,9 @@
-// Flex Compiler - Constant Folding Implementation
+// Tyl Compiler - Constant Folding Implementation
 #include "constant_folding.h"
 #include <cmath>
 #include <limits>
 
-namespace flex {
+namespace tyl {
 
 void ConstantFoldingPass::run(Program& ast) {
     transformations_ = 0;
@@ -385,4 +385,4 @@ ExprPtr ConstantFoldingPass::createLiteral(const ConstValue& value, const Source
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

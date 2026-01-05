@@ -1,10 +1,10 @@
-// Flex Compiler - Native Code Generator GC Builtin Calls
+// Tyl Compiler - Native Code Generator GC Builtin Calls
 // Handles: gc_collect, gc_stats, gc_count, gc_pin, gc_unpin, gc_add_root, gc_remove_root,
 //          set_allocator, reset_allocator, allocator_stats, allocator_peak
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::emitGCCollect(CallExpr& node) {
     (void)node;
@@ -99,4 +99,4 @@ void NativeCodeGen::emitAllocatorPeak(CallExpr& node) {
     asm_.mov_rax_mem_rax();
 }
 
-} // namespace flex
+} // namespace tyl

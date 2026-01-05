@@ -1,0 +1,9 @@
+// Test str() with a simple int variable first
+
+fn main:
+    let x: int = 42
+    let s: str = str(x)
+    println(s)
+    return 0
+
+main()

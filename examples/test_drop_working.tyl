@@ -1,0 +1,26 @@
+// Test Drop Trait - Working Example
+
+record Resource:
+    id: int
+    name: str
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping resource id=")
+        print(self.id)
+
+fn main():
+    print("=== Drop Trait Test ===")
+    
+    // Test 1: Basic drop at end of function
+    print("Creating r1...")
+    let r1 = Resource { id: 1, name: "first" }
+    print("Created r1")
+    
+    print("Creating r2...")
+    let r2 = Resource { id: 2, name: "second" }
+    print("Created r2")
+    
+    print("End of main - drops should happen now")
+    // r2 dropped first (reverse order)
+    // r1 dropped second

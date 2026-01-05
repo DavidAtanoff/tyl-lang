@@ -1,0 +1,28 @@
+// Simple Rational test
+fn main() {
+    print("Testing Rational...\n")
+    
+    // Create 1/2
+    let r1 = rational(1, 2)
+    print("Created 1/2\n")
+    
+    // Convert to float
+    let f1 = rational_to_float(r1)
+    print("1/2 as float: ")
+    print(f1)
+    print("\n")
+    
+    // Create 1/4
+    let r2 = rational(1, 4)
+    let f2 = rational_to_float(r2)
+    print("1/4 as float: ")
+    print(f2)
+    print("\n")
+    
+    // Add them
+    let r3 = rational_add(r1, r2)
+    let f3 = rational_to_float(r3)
+    print("1/2 + 1/4 = ")
+    print(f3)
+    print(" (expected 0.75)\n")
+}

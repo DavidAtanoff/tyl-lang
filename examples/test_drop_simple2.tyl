@@ -1,0 +1,15 @@
+// Test: Simple Drop without move
+
+record Resource:
+    id: int
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping id=")
+        print(self.id)
+
+fn main():
+    print("Start")
+    let r1 = Resource { id: 42 }
+    print("Created r1")
+    print("End")

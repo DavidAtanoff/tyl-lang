@@ -1,0 +1,12 @@
+// Simpler test - function call inside handle block
+
+fn get_value -> int:
+    return 42
+
+fn main -> int:
+    print("Step 1")
+    let x = handle get_value():
+        pass
+    print("Step 2")
+    print(x)
+    return 0

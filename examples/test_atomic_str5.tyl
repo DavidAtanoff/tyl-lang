@@ -1,0 +1,9 @@
+// Minimal test - just str() on atomic load result
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](42)
+    let val: int = counter.load()
+    print(str(val))
+    return 0
+
+main()

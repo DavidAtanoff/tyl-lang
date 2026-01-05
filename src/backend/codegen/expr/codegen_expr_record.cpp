@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Record/Map Expressions
+// Tyl Compiler - Native Code Generator Record/Map Expressions
 // Handles: RecordExpr, MapExpr, MemberExpr
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(RecordExpr& node) {
     if (node.fields.empty()) {
@@ -12,6 +12,18 @@ void NativeCodeGen::visit(RecordExpr& node) {
     }
     
     size_t fieldCount = node.fields.size();
+    
+    // Get or assign type ID for RTTI
+    uint64_t typeId = 0;
+    if (!node.typeName.empty()) {
+        auto typeIdIt = typeIds_.find(node.typeName);
+        if (typeIdIt != typeIds_.end()) {
+            typeId = typeIdIt->second;
+        } else {
+            typeId = nextTypeId_++;
+            typeIds_[node.typeName] = typeId;
+        }
+    }
     
     // Check if this is a named record type with known layout
     if (!node.typeName.empty()) {
@@ -26,6 +38,12 @@ void NativeCodeGen::visit(RecordExpr& node) {
             
             allocLocal("$record_ptr");
             asm_.mov_mem_rbp_rax(locals["$record_ptr"]);
+            
+            // Store type ID at offset 0 for RTTI (for raw allocated records)
+            // Note: For raw records, we store typeId at the start
+            asm_.mov_rcx_imm64(static_cast<int64_t>(typeId));
+            asm_.mov_rax_mem_rbp(locals["$record_ptr"]);
+            asm_.mov_mem_rax_rcx();  // [rax] = typeId
             
             for (size_t i = 0; i < node.fields.size(); i++) {
                 int fieldIndex = -1;
@@ -68,8 +86,8 @@ void NativeCodeGen::visit(RecordExpr& node) {
         }
     }
     
-    // Anonymous record
-    emitGCAllocRecord(fieldCount);
+    // Anonymous record - use GC allocation with type ID
+    emitGCAllocRecord(fieldCount, typeId);
     
     allocLocal("$record_ptr");
     asm_.mov_mem_rbp_rax(locals["$record_ptr"]);
@@ -79,7 +97,8 @@ void NativeCodeGen::visit(RecordExpr& node) {
         
         asm_.mov_rcx_mem_rbp(locals["$record_ptr"]);
         
-        int32_t offset = 8 + static_cast<int32_t>(i * 8);
+        // Fields start at offset 16 now (after fieldCount and typeId)
+        int32_t offset = 16 + static_cast<int32_t>(i * 8);
         if (offset > 0) {
             asm_.add_rcx_imm32(offset);
         }
@@ -209,7 +228,7 @@ void NativeCodeGen::visit(MemberExpr& node) {
                     
                     const std::string& fieldType = typeIt->second.fieldTypes[fieldIndex];
                     int32_t fieldSize = getTypeSize(fieldType);
-                    bool isFloat = (fieldType == "float" || fieldType == "f64" || fieldType == "f32");
+                    bool isFloat = isFloatTypeName(fieldType);
                     
                     if (isFloat) {
                         asm_.code.push_back(0xF2);
@@ -276,7 +295,7 @@ void NativeCodeGen::visit(MemberExpr& node) {
                 
                 const std::string& fieldType = typeInfo.fieldTypes[i];
                 int32_t fieldSize = getTypeSize(fieldType);
-                bool isFloat = (fieldType == "float" || fieldType == "f64" || fieldType == "f32");
+                bool isFloat = isFloatTypeName(fieldType);
                 
                 if (isFloat) {
                     asm_.code.push_back(0xF2);
@@ -312,4 +331,4 @@ void NativeCodeGen::visit(MemberExpr& node) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Channel Expressions
+// Tyl Compiler - Native Code Generator Channel Expressions
 // Handles: ChanSendExpr, ChanRecvExpr, MakeChanExpr
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Channel structure layout (allocated on heap):
 // Offset 0:  mutex handle (8 bytes) - for synchronization
@@ -369,4 +369,4 @@ void NativeCodeGen::visit(ChanRecvExpr& node) {
     // Received value is now in RAX
 }
 
-} // namespace flex
+} // namespace tyl

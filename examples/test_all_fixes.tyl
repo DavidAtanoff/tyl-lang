@@ -1,0 +1,25 @@
+// Test all recent fixes
+
+fn get_val(x: &int) -> int:
+    return x
+
+fn main:
+    // Test 1: List reassignment
+    println("=== List Reassignment ===")
+    mut e = [7, 8, 9]
+    println(e[1])
+    e = [10, 11, 12]
+    println(e[1])
+
+    // Test 2: Borrow auto-dereference
+    println("=== Borrow Auto-Deref ===")
+    a = 42
+    b = get_val(&a)
+    println(b)
+
+    // Test 3: weak as variable name
+    println("=== Weak Variable ===")
+    weak = 123
+    println(weak)
+    
+    println("=== All Tests Passed ===")

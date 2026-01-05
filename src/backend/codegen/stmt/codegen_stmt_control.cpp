@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Control Flow Statements
+// Tyl Compiler - Native Code Generator Control Flow Statements
 // Handles: IfStmt, WhileStmt, ForStmt, MatchStmt
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(IfStmt& node) {
     std::string elseLabel = newLabel("if_else");
@@ -43,7 +43,7 @@ void NativeCodeGen::visit(WhileStmt& node) {
     std::string loopLabel = newLabel("while_loop");
     std::string endLabel = newLabel("while_end");
     
-    loopStack.push_back({loopLabel, endLabel});
+    loopStack.push_back({node.label, loopLabel, endLabel});
     
     constVars.clear();
     
@@ -66,11 +66,11 @@ void NativeCodeGen::visit(ForStmt& node) {
     std::string continueLabel = newLabel("for_continue");
     std::string endLabel = newLabel("for_end");
     
-    loopStack.push_back({continueLabel, endLabel});
+    loopStack.push_back({node.label, continueLabel, endLabel});
     
     varRegisters_.erase(node.var);
     
-    // Handle range expression: for i in 1..10 (INCLUSIVE)
+    // Handle range expression: for i in 1..10 (INCLUSIVE - includes both start and end)
     if (auto* range = dynamic_cast<RangeExpr*>(node.iterable.get())) {
         range->start->accept(*this);
         allocLocal(node.var);
@@ -80,18 +80,44 @@ void NativeCodeGen::visit(ForStmt& node) {
         allocLocal("$end");
         asm_.mov_mem_rbp_rax(locals["$end"]);
         
+        // Handle step value (by keyword)
+        int64_t stepValue = 1;
+        bool hasConstStep = false;
+        bool hasVarStep = false;
+        if (range->step) {
+            if (auto* stepLit = dynamic_cast<IntegerLiteral*>(range->step.get())) {
+                stepValue = stepLit->value;
+                hasConstStep = true;
+            } else {
+                // Non-constant step - evaluate and store
+                range->step->accept(*this);
+                allocLocal("$step");
+                asm_.mov_mem_rbp_rax(locals["$step"]);
+                hasVarStep = true;
+            }
+        }
+        
         constVars.erase(node.var);
         
         asm_.label(loopLabel);
         asm_.mov_rax_mem_rbp(locals[node.var]);
         asm_.cmp_rax_mem_rbp(locals["$end"]);
-        asm_.jg_rel32(endLabel);
+        asm_.jg_rel32(endLabel);  // Exit when i > end (inclusive)
         
         node.body->accept(*this);
         
         asm_.label(continueLabel);
         asm_.mov_rax_mem_rbp(locals[node.var]);
-        asm_.inc_rax();
+        if (hasConstStep) {
+            // Constant step
+            asm_.add_rax_imm32(static_cast<int32_t>(stepValue));
+        } else if (hasVarStep) {
+            // Non-constant step: load step, add to rax
+            asm_.mov_rcx_mem_rbp(locals["$step"]);
+            asm_.add_rax_rcx();
+        } else {
+            asm_.inc_rax();
+        }
         asm_.mov_mem_rbp_rax(locals[node.var]);
         asm_.jmp_rel32(loopLabel);
         
@@ -294,4 +320,4 @@ void NativeCodeGen::visit(MatchStmt& node) {
     asm_.label(endLabel);
 }
 
-} // namespace flex
+} // namespace tyl

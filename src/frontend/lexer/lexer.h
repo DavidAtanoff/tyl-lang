@@ -1,11 +1,11 @@
-// Flex Compiler - Lexer
-#ifndef FLEX_LEXER_H
-#define FLEX_LEXER_H
+// Tyl Compiler - Lexer
+#ifndef TYL_LEXER_H
+#define TYL_LEXER_H
 
 #include "frontend/token/token.h"
 #include <stack>
 
-namespace flex {
+namespace tyl {
 
 class Lexer {
 public:
@@ -43,6 +43,8 @@ private:
     void addToken(TokenType type, const std::string& value);
     
     void scanString();
+    void scanChar();
+    void scanByteString(bool isRaw);
     void scanNumber();
     void scanIdentifier();
     void scanTemplateVar();
@@ -60,6 +62,6 @@ private:
     }
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_LEXER_H
+#endif // TYL_LEXER_H

@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator List Builtin Calls
+// Tyl Compiler - Native Code Generator List Builtin Calls
 // Handles: push, pop, range, contains (for lists)
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::emitListPush(CallExpr& node) {
     node.args[0]->accept(*this);
@@ -198,4 +198,4 @@ void NativeCodeGen::emitRange(CallExpr& node) {
     asm_.xor_rax_rax();
 }
 
-} // namespace flex
+} // namespace tyl

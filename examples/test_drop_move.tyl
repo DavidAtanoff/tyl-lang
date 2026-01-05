@@ -1,0 +1,31 @@
+// Test: Move semantics integration with Drop
+// Moved values should NOT be dropped (they don't own the value anymore)
+
+record Resource:
+    id: int
+    name: str
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping resource id=")
+        print(self.id)
+
+fn main():
+    print("=== Move + Drop Test ===")
+    
+    // Create a resource
+    print("Creating r1...")
+    let r1 = Resource { id: 1, name: "first" }
+    print("Created r1")
+    
+    // Move r1 to r2 - r1 should NOT be dropped
+    print("Moving r1 to r2...")
+    let r2 = r1
+    print("Moved. r1 is now invalid, r2 owns the value")
+    
+    // Use r2 to prove it has the value
+    print("r2.id = ")
+    print(r2.id)
+    
+    print("End of main - only r2 should be dropped (not r1)")
+    // Expected output: only ONE drop call for id=1

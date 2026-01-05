@@ -1,7 +1,7 @@
-// Flex Compiler - Profile-Guided Optimization (PGO)
+// Tyl Compiler - Profile-Guided Optimization (PGO)
 // Collects and uses runtime profile data to guide optimization decisions
-#ifndef FLEX_PGO_H
-#define FLEX_PGO_H
+#ifndef TYL_PGO_H
+#define TYL_PGO_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -11,7 +11,7 @@
 #include <fstream>
 #include <cstdint>
 
-namespace flex {
+namespace tyl {
 
 // Profile data for a single function
 struct FunctionProfile {
@@ -187,6 +187,6 @@ public:
 std::unique_ptr<PGOPass> createPGOPass();
 std::unique_ptr<PGOPass> createPGOPass(const std::string& profileFile);
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_PGO_H
+#endif // TYL_PGO_H

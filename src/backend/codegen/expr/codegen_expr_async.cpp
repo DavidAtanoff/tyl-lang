@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Async Expressions
+// Tyl Compiler - Native Code Generator Async Expressions
 // Handles: AwaitExpr, SpawnExpr, PropagateExpr, DSLBlock
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(AwaitExpr& node) {
     node.operand->accept(*this);
@@ -143,4 +143,4 @@ void NativeCodeGen::visit(PropagateExpr& node) {
     asm_.code.push_back(0x48); asm_.code.push_back(0xD1); asm_.code.push_back(0xE8);
 }
 
-} // namespace flex
+} // namespace tyl

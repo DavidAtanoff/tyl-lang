@@ -1,0 +1,7 @@
+// Test join - with assignment before
+fn main -> int:
+    let a = ["x"]
+    let b = 1
+    let r = join(a, ",")
+    print(r)
+    return 0

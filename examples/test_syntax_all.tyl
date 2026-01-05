@@ -1,0 +1,86 @@
+// Comprehensive test of all syntax features
+
+// Helper functions
+fn double(x: int) -> int:
+    return x * 2
+
+fn add_ten(x: int) -> int:
+    return x + 10
+
+fn check_positive(x: int) -> int:
+    return 0 if x < 0  // Inline conditional
+    return x * 2
+
+fn divide(a: int, b: int) -> int:
+    require b != 0  // Contract
+    return a / b
+
+// Platform-specific function
+#[cfg(windows)]
+fn get_platform -> str:
+    return "Windows"
+
+#[cfg(linux)]
+fn get_platform -> str:
+    return "Linux"
+
+fn main:
+    println("=== Syntax Feature Tests ===")
+    
+    // 1. Pipe operator
+    result = 5 |> double |> add_ten
+    println(result)  // 20
+    
+    // 2. Named loops with break
+    mut found = 0
+    outer: for i in 0..100:
+        for j in 0..100:
+            if i == 2 and j == 3:
+                found = i * 10 + j
+                break outer
+    println(found)  // 23
+    
+    // 3. Range with step
+    mut stepSum = 0
+    for i in 0..10 by 2:
+        stepSum = stepSum + i
+    println(stepSum)  // 30
+    
+    // 4. Inline conditionals
+    println(check_positive(5))   // 10
+    println(check_positive(-3))  // 0
+    
+    // 5. Contracts
+    println(divide(10, 2))  // 5
+    
+    // 6. Destructuring
+    (a, b, c) = (1, 2, 3)
+    println(a)  // 1
+    println(b)  // 2
+    println(c)  // 3
+    
+    {x, y} = {x: 100, y: 200}
+    println(x)  // 100
+    println(y)  // 200
+    
+    // 7. Single-line if
+    if 1 == 1: println(42)  // 42
+    
+    // 8. Brace blocks
+    if 2 == 2 {
+        println(99)  // 99
+    }
+    
+    // 9. Conditional compilation
+    println(get_platform())  // Windows (on Windows)
+    
+    // 10. Named loops with continue
+    mut sum = 0
+    outer2: for i in 0..4:
+        for j in 0..4:
+            if j == 2:
+                continue outer2
+            sum = sum + 1
+    println(sum)  // 10
+    
+    println("=== All tests passed! ===")

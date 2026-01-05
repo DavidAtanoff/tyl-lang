@@ -1,0 +1,43 @@
+// Test Ownership System - Function Parameters
+
+// Function that takes ownership (moves the value)
+fn consume_list data: [int]:
+    print("Consumed list with {len(data)} elements")
+    print("First element: {data[1]}")
+
+// Function that works with a copy (primitives)
+fn double_value x: int -> int:
+    return x * 2
+
+fn main():
+    print("=== Ownership in Functions ===")
+    
+    // Test 1: Primitives are copied
+    print("\n--- Test 1: Primitives copy ---")
+    let x = 42
+    let y = double_value(x)
+    print("x = {x}")  // OK: x was copied, not moved
+    print("y = {y}")
+    
+    // Test 2: Lists are moved to functions
+    print("\n--- Test 2: List ownership transfer ---")
+    let a = [1, 2, 3]
+    consume_list(a)
+    // After this, 'a' is moved and cannot be used
+    // print("a = {a}")  // Would error: use of moved value
+    print("List was consumed")
+    
+    // Test 3: Clone before passing to preserve ownership
+    print("\n--- Test 3: Clone to preserve ---")
+    let b = [4, 5, 6]
+    consume_list(b.clone())  // Pass a clone
+    print("b[1] = {b[1]}")   // OK: b still valid
+    
+    // Test 4: Multiple function calls with clones
+    print("\n--- Test 4: Multiple clones ---")
+    let c = [7, 8, 9]
+    consume_list(c.clone())
+    consume_list(c.clone())
+    print("c still valid: {c[1]}")
+    
+    print("\n=== All tests passed! ===")

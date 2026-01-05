@@ -1,0 +1,14 @@
+// Test conditional compilation
+
+#[cfg(windows)]
+fn windows_only:
+    println("Windows!")
+
+#[cfg(linux)]
+fn linux_only:
+    println("Linux!")
+
+fn main:
+    // This should only call windows_only on Windows
+    windows_only()
+    println("done")

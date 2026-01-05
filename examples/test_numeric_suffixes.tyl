@@ -1,0 +1,38 @@
+// Test file for numeric literal suffixes
+
+fn main() {
+    // Test integer suffixes
+    let a: i32 = 42i32
+    let b: i64 = 1000000i64
+    let c: u32 = 255u32
+    
+    print("i32 value: ")
+    print(a)
+    print("\n")
+    
+    print("i64 value: ")
+    print(b)
+    print("\n")
+    
+    print("u32 value: ")
+    print(c)
+    print("\n")
+    
+    // Test float suffixes
+    let x: f32 = 3.14f32
+    let y: f64 = 2.71828f64
+    
+    print("f32 value: ")
+    print(x)
+    print("\n")
+    
+    print("f64 value: ")
+    print(y)
+    print("\n")
+    
+    // Test integer with float suffix (should become float)
+    let z: f64 = 42f64
+    print("42f64 value: ")
+    print(z)
+    print("\n")
+}

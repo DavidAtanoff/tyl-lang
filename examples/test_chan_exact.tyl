@@ -1,0 +1,18 @@
+// Channel test exact
+
+fn test_channel_timeout:
+    print("Creating channel...\n")
+    let ch = chan[int, 1]
+    print("Channel created\n")
+    print("Sending 100...\n")
+    ch <- 100
+    print("Sent\n")
+    print("Receiving...\n")
+    let value = <- ch
+    print("Received: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel_timeout()
+    return 0

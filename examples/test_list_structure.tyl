@@ -1,0 +1,18 @@
+// Test list structure
+
+fn main -> int:
+    print("Testing list structure...\n")
+    
+    // String list - should use GC allocation
+    let strings = ["hello", "world"]
+    print("String list length: ")
+    print(len(strings))
+    print("\n")
+    
+    // Integer list - might use constant data
+    let ints = [1, 2, 3]
+    print("Int list length: ")
+    print(len(ints))
+    print("\n")
+    
+    return 0

@@ -1,0 +1,13 @@
+// Channel timeout no print test
+
+fn test_channel_timeout:
+    let ch = chan[int, 1]
+    ch <- 100
+    let value = chan_recv_timeout(ch, 1000)
+    print("Received value: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel_timeout()
+    return 0

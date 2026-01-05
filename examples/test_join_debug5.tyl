@@ -1,0 +1,11 @@
+// Debug join with multiple elements
+
+fn main -> int:
+    let a = ["x", "y", "z"]
+    print("Before join\n")
+    let result = join(a, ",")
+    print("After join\n")
+    print("Result: ")
+    print(result)
+    print("\n")
+    return 0

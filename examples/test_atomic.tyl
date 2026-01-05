@@ -1,0 +1,34 @@
+// Test Atomic[int] operations
+
+fn main:
+    // Create an atomic integer with initial value 0
+    let counter: Atomic[int] = Atomic[int](0)
+    
+    // Test atomic load
+    let val: int = counter.load()
+    println("Initial value: " + str(val))
+    
+    // Test atomic store
+    counter.store(42)
+    let val2: int = counter.load()
+    println("After store(42): " + str(val2))
+    
+    // Test atomic swap
+    let old: int = counter.swap(100)
+    println("Swap returned old value: " + str(old))
+    let val3: int = counter.load()
+    println("After swap(100): " + str(val3))
+    
+    // Test multiple operations
+    counter.store(0)
+    for i in 0..10:
+        let current: int = counter.load()
+        counter.store(current + 1)
+    
+    let final_val: int = counter.load()
+    println("After 10 increments: " + str(final_val))
+    
+    println("Atomic test completed!")
+    return 0
+
+main()

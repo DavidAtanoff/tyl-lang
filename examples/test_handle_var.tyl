@@ -1,0 +1,13 @@
+// Test variable inside handle block
+
+effect Reader:
+    fn ask -> int
+
+fn main -> int:
+    print("Before handle")
+    let y = 42
+    let x = handle y:
+        Reader.ask() => 100
+    print("After handle, x =")
+    print(x)
+    return 0

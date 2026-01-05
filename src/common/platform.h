@@ -1,6 +1,6 @@
-// Flex Compiler - Platform compatibility header
-#ifndef FLEX_PLATFORM_H
-#define FLEX_PLATFORM_H
+// Tyl Compiler - Platform compatibility header
+#ifndef TYL_PLATFORM_H
+#define TYL_PLATFORM_H
 
 // Windows-specific defines
 #ifdef _WIN32
@@ -13,4 +13,4 @@
 #endif
 #endif
 
-#endif // FLEX_PLATFORM_H
+#endif // TYL_PLATFORM_H

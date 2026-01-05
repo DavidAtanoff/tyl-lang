@@ -1,0 +1,7 @@
+// Test list parameter
+fn take_list data: [int]:
+    print("Got list")
+
+fn main():
+    let a = [1, 2, 3]
+    take_list(a)

@@ -1,0 +1,8 @@
+// Simple for loop test
+fn main():
+    print("Testing for loop:\n")
+    for i in 0..3:
+        print(i)
+        print(" ")
+    print("\nDone!\n")
+    return 0

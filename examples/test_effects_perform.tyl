@@ -1,0 +1,27 @@
+// Test algebraic effects with actual perform
+
+effect Reader:
+    fn ask -> int
+
+fn get_value -> int:
+    return perform Reader.ask()
+
+fn main -> int:
+    print("Testing effect perform...")
+    
+    // Test 1: handle with perform
+    let result = handle get_value():
+        Reader.ask() => 42
+    
+    print("Result (should be 42):")
+    print(result)
+    
+    // Test 2: handle with different value
+    let result2 = handle get_value():
+        Reader.ask() => 100
+    
+    print("Result2 (should be 100):")
+    print(result2)
+    
+    print("Done!")
+    return 0

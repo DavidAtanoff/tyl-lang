@@ -1,10 +1,10 @@
-// Flex Compiler - SSA (Static Single Assignment) Implementation
+// Tyl Compiler - SSA (Static Single Assignment) Implementation
 // Converts AST to SSA form using Braun et al. algorithm
 #include "ssa.h"
 #include <sstream>
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // SSAValue Implementation
@@ -887,4 +887,4 @@ std::optional<int64_t> SSAOptimizer::tryEvalConstant(SSAInstruction* instr) {
     return std::nullopt;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,10 +1,10 @@
-// Flex Compiler - Parser Module/Import Declarations
+// Tyl Compiler - Parser Module/Import Declarations
 // Handles: use, import, module, extern declarations
 
 #include "parser_base.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 StmtPtr Parser::useStatement() {
     auto loc = previous().location;
@@ -21,11 +21,11 @@ StmtPtr Parser::useStatement() {
         return stmt;
     }
     
-    // use "file.fx" - file import
+    // use "file.tyl" - file import
     if (check(TokenType::STRING)) {
         auto path = std::get<std::string>(advance().literal);
         
-        // Check for alias: use "file.fx" as name
+        // Check for alias: use "file.tyl" as name
         std::string alias;
         if (check(TokenType::IDENTIFIER) && peek().lexeme == "as") {
             advance();  // consume 'as'
@@ -229,4 +229,4 @@ StmtPtr Parser::externFnDeclaration() {
     return fn;
 }
 
-} // namespace flex
+} // namespace tyl

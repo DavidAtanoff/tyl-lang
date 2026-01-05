@@ -1,0 +1,42 @@
+// Test algebraic effects - basic syntax and type checking
+
+// Define effects
+effect Logger:
+    fn log msg: str -> void
+
+effect State:
+    fn get -> int
+    fn put val: int -> void
+
+effect Error:
+    fn raise msg: str -> never
+
+// Main function
+fn main -> int:
+    print("Testing algebraic effects syntax...")
+    
+    // Test 1: Effect declarations are parsed
+    print("1. Effect declarations: OK")
+    
+    // Test 2: Handle expression without actual effect
+    let x = handle 42:
+        Logger.log(msg) => print("logged")
+    print("2. Handle expression result:")
+    print(x)
+    
+    // Test 3: Multiple handlers
+    let y = handle 100:
+        Logger.log(msg) => 0
+        State.get() => 50
+        State.put(val) => 0
+    print("3. Multiple handlers result:")
+    print(y)
+    
+    // Test 4: Handler with expression body
+    let z = handle 7 * 6:
+        Error.raise(msg) => -1
+    print("4. Expression in handle:")
+    print(z)
+    
+    print("All syntax tests passed!")
+    return 0

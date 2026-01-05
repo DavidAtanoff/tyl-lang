@@ -1,0 +1,16 @@
+// Test split pointer
+
+fn main -> int:
+    let x = split("a,b", ",")
+    
+    // Print length
+    print("Length: ")
+    print(len(x))
+    print("\n")
+    
+    // Try to access first element
+    print("First: ")
+    print(x[1])
+    print("\n")
+    
+    return 0

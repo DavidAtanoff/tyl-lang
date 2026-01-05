@@ -1,0 +1,39 @@
+// Test atomic CAS, fetch-and-add, and other atomic operations
+
+fn main:
+    // Create an atomic integer with initial value 10
+    let counter: Atomic[int] = Atomic[int](10)
+    
+    // Test atomic load
+    let val: int = counter.load()
+    println("Initial value: " + str(val))
+    
+    // Test atomic store
+    counter.store(20)
+    println("After store(20): " + str(counter.load()))
+    
+    // Test atomic swap
+    let old: int = counter.swap(30)
+    println("Swap returned: " + str(old) + ", new value: " + str(counter.load()))
+    
+    // Test atomic add (fetch-and-add)
+    let prev: int = counter.add(5)
+    println("Add(5) returned: " + str(prev) + ", new value: " + str(counter.load()))
+    
+    // Test atomic sub (fetch-and-sub)
+    prev = counter.sub(10)
+    println("Sub(10) returned: " + str(prev) + ", new value: " + str(counter.load()))
+    
+    // Test atomic CAS (compare-and-swap)
+    // Current value should be 25 (30 + 5 - 10)
+    let success: int = counter.cas(25, 100)
+    println("CAS(25, 100) success: " + str(success) + ", value: " + str(counter.load()))
+    
+    // Test CAS failure (expected doesn't match)
+    success = counter.cas(25, 200)
+    println("CAS(25, 200) success: " + str(success) + ", value: " + str(counter.load()))
+    
+    println("All atomic tests completed!")
+    return 0
+
+main()

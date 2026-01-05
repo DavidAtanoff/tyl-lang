@@ -1,8 +1,8 @@
-// Flex Compiler - Algebraic Simplification Implementation
+// Tyl Compiler - Algebraic Simplification Implementation
 #include "algebraic.h"
 #include <cmath>
 
-namespace flex {
+namespace tyl {
 
 // ============================================
 // Algebraic Simplification Pass
@@ -759,4 +759,4 @@ ExprPtr AdvancedStrengthReductionPass::cloneExpr(Expression* expr) {
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

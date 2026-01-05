@@ -1,0 +1,15 @@
+// Debug test
+
+fn main:
+    println("1")
+    let counter: Atomic[int] = Atomic[int](42)
+    println("2")
+    let val: int = counter.load()
+    println("3")
+    let s: str = str(val)
+    println("4")
+    print(s)
+    println("5")
+    return 0
+
+main()

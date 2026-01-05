@@ -1,0 +1,13 @@
+// Test join with single element
+
+fn main -> int:
+    print("Test 1: Single element list\n")
+    let one = ["only"]
+    print("len = ")
+    print(len(one))
+    print("\n")
+    print("Result: '")
+    print(join(one, ","))
+    print("'\n")
+    
+    return 0

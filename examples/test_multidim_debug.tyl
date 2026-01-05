@@ -1,0 +1,19 @@
+// Test multi-dimensional array access with 1-based indexing
+fn main():
+    // Simple 2D array: 2 rows, 2 columns
+    mat: [[int; 2]; 2] = [[1, 2], [3, 4]]
+    
+    // Direct nested access - test all elements (1-based indexing)
+    print("mat[1][1]:")
+    print(mat[1][1])
+    
+    print("mat[1][2]:")
+    print(mat[1][2])
+    
+    print("mat[2][1]:")
+    print(mat[2][1])
+    
+    print("mat[2][2]:")
+    print(mat[2][2])
+    
+    print("Done!")

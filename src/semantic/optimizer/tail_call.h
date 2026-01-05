@@ -1,14 +1,14 @@
-// Flex Compiler - Tail Call Optimization Pass
+// Tyl Compiler - Tail Call Optimization Pass
 // Converts tail-recursive calls into loops to prevent stack overflow
-#ifndef FLEX_TAIL_CALL_H
-#define FLEX_TAIL_CALL_H
+#ifndef TYL_TAIL_CALL_H
+#define TYL_TAIL_CALL_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
 #include <map>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 // Information about tail calls in a function
 struct TailCallInfo {
@@ -48,6 +48,6 @@ private:
     std::string newLabel(const std::string& prefix);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_TAIL_CALL_H
+#endif // TYL_TAIL_CALL_H

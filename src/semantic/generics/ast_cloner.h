@@ -1,7 +1,7 @@
-// Flex Compiler - AST Cloner for Monomorphization
+// Tyl Compiler - AST Cloner for Monomorphization
 // Deep clones AST nodes with type parameter substitution
-#ifndef FLEX_AST_CLONER_H
-#define FLEX_AST_CLONER_H
+#ifndef TYL_AST_CLONER_H
+#define TYL_AST_CLONER_H
 
 #include "frontend/ast/ast.h"
 #include "semantic/types/types.h"
@@ -9,7 +9,7 @@
 #include <memory>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Deep clones AST nodes with type parameter substitution
 class ASTCloner {
@@ -80,6 +80,6 @@ private:
     StmtPtr cloneStmt(DeleteStmt* node);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_AST_CLONER_H
+#endif // TYL_AST_CLONER_H

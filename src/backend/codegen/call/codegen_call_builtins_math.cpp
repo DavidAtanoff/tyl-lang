@@ -1,10 +1,10 @@
-// Flex Compiler - Native Code Generator Math Builtin Calls
+// Tyl Compiler - Native Code Generator Math Builtin Calls
 // Handles: abs, min, max, sqrt, sin, cos, tan, pow, floor, ceil, round
 
 #include "backend/codegen/codegen_base.h"
 #include <cmath>
 
-namespace flex {
+namespace tyl {
 
 // Math builtin implementations extracted from codegen_call_core.cpp
 
@@ -262,4 +262,4 @@ void NativeCodeGen::emitMathPow(CallExpr& node) {
     node.args[0]->accept(*this);
 }
 
-} // namespace flex
+} // namespace tyl

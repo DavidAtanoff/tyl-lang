@@ -1,0 +1,17 @@
+// Future is_ready Test
+
+fn main -> int:
+    print("Creating future...\n")
+    let f = make_future[int]()
+    print("Future created\n")
+    
+    print("Checking ready...\n")
+    let ready = future_is_ready(f)
+    print("Check done\n")
+    
+    if ready:
+        print("Ready: true\n")
+    else:
+        print("Ready: false\n")
+    
+    return 0

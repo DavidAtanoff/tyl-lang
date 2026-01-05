@@ -1,0 +1,12 @@
+// Test literal inside handle block
+
+effect Reader:
+    fn ask -> int
+
+fn main -> int:
+    print("Before handle")
+    let x = handle 42:
+        Reader.ask() => 100
+    print("After handle, x =")
+    print(x)
+    return 0

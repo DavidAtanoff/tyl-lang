@@ -1,9 +1,9 @@
-// Flex Compiler - Extended System Builtins for Native Code Generation
+// Tyl Compiler - Extended System Builtins for Native Code Generation
 // Additional system functions ported from stdlib/system/system.cpp
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // env(name) -> str - Get environment variable
 void NativeCodeGen::emitSystemEnv(CallExpr& node) {
@@ -188,4 +188,4 @@ void NativeCodeGen::emitSystemCommand(CallExpr& node) {
     asm_.xor_rax_rax();
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,10 +1,11 @@
-// Flex Compiler - Native Code Generator
-#ifndef FLEX_NATIVE_CODEGEN_H
-#define FLEX_NATIVE_CODEGEN_H
+// Tyl Compiler - Native Code Generator
+#ifndef TYL_NATIVE_CODEGEN_H
+#define TYL_NATIVE_CODEGEN_H
 
 #include "frontend/ast/ast.h"
 #include "backend/x64/x64_assembler.h"
 #include "backend/x64/pe_generator.h"
+#include "backend/object/object_file.h"
 #include "backend/codegen/register_allocator.h"
 #include "backend/codegen/global_register_allocator.h"
 #include "backend/gc/gc.h"
@@ -12,7 +13,7 @@
 #include <map>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 // Optimization level for code generation (LLVM/Clang compatible)
 enum class CodeGenOptLevel {
@@ -29,6 +30,7 @@ class NativeCodeGen : public ASTVisitor {
 public:
     NativeCodeGen();
     bool compile(Program& program, const std::string& outputFile);
+    bool compileToObject(Program& program, const std::string& outputFile);  // Compile to .obj/.o file
     
     // Set optimization level
     void setOptLevel(CodeGenOptLevel level) { optLevel_ = level; }
@@ -55,15 +57,21 @@ private:
     std::map<std::string, std::string> constStrVars;
     std::map<std::string, std::vector<int64_t>> constListVars;  // Track constant list values
     std::map<std::string, size_t> listSizes;  // Track list sizes
+    std::set<std::string> listVars;  // Track variables that hold list values (runtime)
     
     // Float support
     std::set<std::string> floatVars;           // Variables that are floats
     std::map<std::string, double> constFloatVars;  // Constant float values
     uint32_t negZeroRVA_ = 0;                  // RVA for -0.0 constant (for negation)
     bool lastExprWasFloat_ = false;            // Track if last expression result is float
+    bool lastExprWasComplex_ = false;          // Track if last expression result is complex
+    
+    // Comprehensive variable type tracking for 'is' type checks
+    std::map<std::string, std::string> varTypes_;  // Variable name -> type name (int, float, str, bool, record name, etc.)
     
     // Loop context for break/continue
     struct LoopLabels {
+        std::string label;          // Optional label for named loops
         std::string continueLabel;  // Jump here for continue
         std::string breakLabel;     // Jump here for break
     };
@@ -124,12 +132,18 @@ private:
     bool tryEvalConstant(Expression* expr, int64_t& outValue);
     bool tryEvalConstantFloat(Expression* expr, double& outValue);  // Evaluate float constants
     bool tryEvalConstantString(Expression* expr, std::string& outValue);
+    bool tryEvalComptimeCall(Expression* expr, int64_t& outValue);  // Evaluate compile-time function calls
     void emitPrintExpr(Expression* expr);  // Helper to print a single expression
     bool isFloatExpression(Expression* expr);  // Check if expression is float type
     bool isStringReturningExpr(Expression* expr);  // Check if expression returns a string pointer
     void emitPrintStringPtr();  // Print string from pointer in rax (calculates length at runtime)
+    void emitPrintStrView();    // Print str_view from pointer in rax (ptr at [rax], len at [rax+8])
     void emitWriteConsole(uint32_t strRVA, size_t len);  // Emit WriteConsoleA with cached stdout handle
     void emitWriteConsoleBuffer();  // Emit WriteConsoleA for buffer in rdx with length in r8, uses cached handle
+    
+    // Type checking helpers for extended numeric types
+    static bool isFloatTypeName(const std::string& typeName);    // Check if type is any float (f16, f32, f64, f128, float)
+    static bool isComplexTypeName(const std::string& typeName);  // Check if type is complex (c64, c128)
     
     // Stack frame optimization helpers
     int32_t calculateFunctionStackSize(Statement* body);  // Pre-scan to calculate stack needs
@@ -200,6 +214,31 @@ private:
     std::vector<std::unique_ptr<FnDecl>> specializedFunctions_;    // Specialized function copies
     std::vector<std::unique_ptr<RecordDecl>> specializedRecords_;  // Specialized record copies
     
+    // All user-defined function names (for UFCS lookup)
+    std::set<std::string> allFunctionNames_;                       // All function names including inlined ones
+    
+    // Refinement type information
+    struct RefinementTypeInfo {
+        std::string name;                                  // Type alias name (e.g., "Positive")
+        std::string baseType;                              // Base type (e.g., "int")
+        Expression* constraint;                            // Constraint expression (e.g., _ > 0)
+    };
+    std::map<std::string, RefinementTypeInfo> refinementTypes_;    // Type name -> refinement info
+    std::map<std::string, std::string> varRefinementTypes_;        // Variable name -> refinement type name
+    
+    // Dependent type information (types that depend on values)
+    struct DependentTypeParam {
+        std::string name;                                  // Parameter name (e.g., "T" or "N")
+        std::string kind;                                  // "type" for type params, or type name for value params
+        bool isValue;                                      // true if this is a value parameter
+    };
+    struct DependentTypeInfo {
+        std::string name;                                  // Type alias name (e.g., "Vector")
+        std::string baseType;                              // Base type (e.g., "[T; N]")
+        std::vector<DependentTypeParam> params;            // Type and value parameters
+    };
+    std::map<std::string, DependentTypeInfo> dependentTypes_;      // Type name -> dependent type info
+    
     // Record type information for field access
     struct RecordTypeInfo {
         std::string name;
@@ -219,6 +258,10 @@ private:
     std::map<std::string, RecordTypeInfo> recordTypes_;    // Record name -> type info
     std::map<std::string, std::string> varRecordTypes_;    // Variable name -> record type name
     
+    // Runtime type identification (RTTI) for 'is' type checks
+    std::map<std::string, uint64_t> typeIds_;              // Type name -> unique type ID
+    uint64_t nextTypeId_ = 1;                              // Next type ID to assign (0 = unknown)
+    
     // Fixed-size array type tracking
     struct FixedArrayInfo {
         std::string elementType;                           // Element type (e.g., "int", "[int; 3]")
@@ -229,6 +272,7 @@ private:
     
     // Function pointer type tracking
     std::set<std::string> fnPtrVars_;                      // Variables that hold function pointers
+    std::set<std::string> closureVars_;                    // Variables that hold closures (lambdas)
     
     // Callback/trampoline support for passing Flex functions to C
     struct CallbackInfo {
@@ -244,6 +288,14 @@ private:
     // Function calling convention tracking
     std::map<std::string, CallingConvention> fnCallingConvs_;  // Function name -> calling convention
     
+    // Function export/visibility attributes
+    struct FnAttributes {
+        bool isExport = false;    // #[export] - export from DLL
+        bool isHidden = false;    // #[hidden] - not visible outside module
+        bool isWeak = false;      // #[weak] - can be overridden
+    };
+    std::map<std::string, FnAttributes> fnAttributes_;  // Function name -> attributes
+    
     // Channel support
     struct ChannelInfo {
         std::string elementType;                               // Element type being sent/received
@@ -251,6 +303,51 @@ private:
         int32_t elementSize;                                   // Size of each element in bytes
     };
     std::map<std::string, ChannelInfo> varChannelTypes_;       // Variable name -> channel info
+    
+    // Atomic type tracking
+    struct AtomicInfo {
+        std::string elementType;                               // Element type (e.g., "int")
+        int32_t elementSize;                                   // Size of element in bytes
+    };
+    std::map<std::string, AtomicInfo> varAtomicTypes_;         // Variable name -> atomic info
+    
+    // Smart pointer type tracking
+    struct SmartPtrInfo {
+        std::string elementType;                               // Element type (e.g., "int")
+        int32_t elementSize;                                   // Size of element in bytes
+        enum class Kind { Box, Rc, Arc, Weak, Cell, RefCell } kind;
+        bool isAtomic = false;                                 // For Weak: true if from Arc
+    };
+    std::map<std::string, SmartPtrInfo> varSmartPtrTypes_;     // Variable name -> smart pointer info
+    
+    // Algebraic Effects runtime support
+    // Effect handler stack entry - pushed when entering a handle block
+    struct EffectHandlerEntry {
+        std::string effectName;                                // Effect being handled (e.g., "Console")
+        std::string opName;                                    // Operation being handled (e.g., "log")
+        std::string handlerLabel;                              // Label to jump to for this handler
+        std::string resumeLabel;                               // Label to resume after handler
+        std::vector<std::string> paramNames;                   // Parameter names for the handler
+        bool hasResume;                                        // Whether handler has resume parameter
+    };
+    std::vector<EffectHandlerEntry> effectHandlerStack_;       // Runtime handler stack (compile-time tracking)
+    int effectHandlerDepth_ = 0;                               // Current handler nesting depth
+    std::string currentResumeLabel_;                           // Label for current resume point
+    std::string currentHandlerEndLabel_;                       // Label for end of current handler block
+    uint32_t effectHandlerStackRVA_ = 0;                       // RVA of global handler stack pointer
+    bool effectRuntimeInitialized_ = false;                    // Whether effect runtime is initialized
+    
+    // Effect runtime helper methods
+    void emitEffectRuntimeInit();                              // Initialize effect handler stack
+    void emitPushEffectHandler(const std::string& effectName, const std::string& opName,
+                               const std::string& handlerLabel, bool hasResume);
+    void emitPopEffectHandler();                               // Pop handler from stack
+    void emitLookupEffectHandler(const std::string& effectName, const std::string& opName);
+    void emitEffectDispatch(const std::string& effectName, const std::string& opName, size_t numArgs);
+    
+    // Borrow parameter tracking for auto-dereference on return
+    std::map<std::string, std::string> borrowParams_;          // Parameter name -> base type (e.g., "x" -> "int" for &int)
+    std::string currentFnReturnType_;                          // Return type of current function
     
     // Channel helper methods
     void emitChannelCreate(size_t bufferSize, int32_t elementSize);  // Create a new channel
@@ -280,6 +377,63 @@ private:
     void emitSemaphoreAcquire();                                     // Acquire semaphore (sem in RAX)
     void emitSemaphoreRelease();                                     // Release semaphore (sem in RAX)
     void emitSemaphoreTryAcquire();                                  // Try to acquire (sem in RAX, result in RAX)
+    
+    // Atomic integer helper methods
+    void emitAtomicCreate(int64_t initialValue);                     // Create a new atomic (result in RAX)
+    void emitAtomicLoad(MemoryOrder order = MemoryOrder::SeqCst);    // Load value (atomic in RAX, result in RAX)
+    void emitAtomicStore(MemoryOrder order = MemoryOrder::SeqCst);   // Store value (atomic in RAX, value in RCX)
+    void emitAtomicSwap(MemoryOrder order = MemoryOrder::SeqCst);    // Swap value (atomic in RAX, new value in RCX, old value in RAX)
+    void emitAtomicCas(MemoryOrder successOrder = MemoryOrder::SeqCst, MemoryOrder failureOrder = MemoryOrder::SeqCst);  // CAS (atomic in RAX, expected in RCX, desired in RDX, returns 1 if success)
+    void emitAtomicAdd(MemoryOrder order = MemoryOrder::SeqCst);     // Fetch-and-add (atomic in RAX, value in RCX, returns old value in RAX)
+    void emitAtomicSub(MemoryOrder order = MemoryOrder::SeqCst);     // Fetch-and-sub (atomic in RAX, value in RCX, returns old value in RAX)
+    void emitAtomicAnd(MemoryOrder order = MemoryOrder::SeqCst);     // Fetch-and-and (atomic in RAX, value in RCX, returns old value in RAX)
+    void emitAtomicOr(MemoryOrder order = MemoryOrder::SeqCst);      // Fetch-and-or (atomic in RAX, value in RCX, returns old value in RAX)
+    void emitAtomicXor(MemoryOrder order = MemoryOrder::SeqCst);     // Fetch-and-xor (atomic in RAX, value in RCX, returns old value in RAX)
+    void emitMemoryFence(MemoryOrder order);                         // Emit memory fence for ordering
+    
+    // Future/Promise helper methods (codegen_expr_advanced_concurrency.cpp)
+    void emitFutureCreate(int32_t elementSize);                      // Create a new future
+    void emitFutureGet();                                            // Get value from future (blocks until ready)
+    void emitFutureSet();                                            // Set value on future (future in RAX, value in RCX)
+    void emitFutureIsReady();                                        // Check if future is ready (future in RAX, result in RAX)
+    
+    // Thread Pool helper methods (codegen_expr_advanced_concurrency.cpp)
+    void emitThreadPoolCreate(int64_t numWorkers);                   // Create a new thread pool
+    void emitThreadPoolSubmit();                                     // Submit task to pool (pool in RAX, task in RCX)
+    void emitThreadPoolShutdown();                                   // Shutdown thread pool (pool in RAX)
+    
+    // Timeout helper methods (codegen_expr_advanced_concurrency.cpp)
+    void emitChannelRecvTimeout(int64_t timeoutMs);                  // Receive with timeout (channel in RAX)
+    
+    // Cancellation helper methods (codegen_expr_advanced_concurrency.cpp)
+    void emitCancelTokenCreate();                                    // Create a new cancel token
+    void emitCancel();                                               // Cancel a token (token in RAX)
+    void emitIsCancelled();                                          // Check if cancelled (token in RAX, result in RAX)
+    
+    // Async Runtime helper methods (codegen_expr_advanced_concurrency.cpp)
+    void emitAsyncRuntimeInit(int64_t numWorkers);                   // Initialize async runtime
+    void emitAsyncRuntimeRun();                                      // Run the event loop
+    void emitAsyncRuntimeShutdown();                                 // Shutdown the runtime
+    void emitAsyncSpawn();                                           // Spawn async task (task fn in RAX)
+    void emitAsyncSleep(int64_t durationMs);                         // Sleep for duration
+    void emitAsyncYield();                                           // Yield to other tasks
+    
+    // Smart pointer helper methods (codegen_expr_smart_ptr.cpp)
+    void emitBoxDeref();                                             // Dereference Box (box ptr in RAX, value in RAX)
+    void emitRcDeref();                                              // Dereference Rc (rc ptr in RAX, value in RAX)
+    void emitArcDeref();                                             // Dereference Arc (arc ptr in RAX, value in RAX)
+    void emitRcClone();                                              // Clone Rc (rc ptr in RAX, returns same ptr with incremented refcount)
+    void emitArcClone();                                             // Clone Arc (arc ptr in RAX, returns same ptr with atomic increment)
+    void emitWeakUpgrade();                                          // Upgrade Weak to Rc/Arc (weak ptr in RAX, returns Rc/Arc or nil)
+    void emitWeakDowngrade(bool isAtomic);                           // Downgrade Rc/Arc to Weak (rc/arc ptr in RAX, returns weak ptr)
+    void emitCellGet();                                              // Get Cell value (cell ptr in RAX, value in RAX)
+    void emitCellSet();                                              // Set Cell value (cell ptr in RAX, value in RCX)
+    void emitRefCellBorrow();                                        // Borrow RefCell (refcell ptr in RAX, returns ptr to value)
+    void emitRefCellBorrowMut();                                     // Mutable borrow RefCell (refcell ptr in RAX, returns ptr to value)
+    void emitRefCellRelease();                                       // Release RefCell borrow (refcell ptr in RAX)
+    void emitBoxDrop();                                              // Drop Box (box ptr in RAX)
+    void emitRcDrop();                                               // Drop Rc (rc ptr in RAX, decrements refcount, frees if 0)
+    void emitArcDrop();                                              // Drop Arc (arc ptr in RAX, atomic decrement, frees if 0)
     
     // Callback/trampoline helpers
     void emitCallbackTrampoline(const std::string& fnName, const CallbackInfo& info);
@@ -312,6 +466,8 @@ private:
     // Modular expression helpers (codegen_expr_index.cpp)
     void emitMapIndexAccess(IndexExpr& node, StringLiteral* strKey);
     void emitFixedArrayIndexAccess(IndexExpr& node, const FixedArrayInfo& info);
+    void emitStringSlice(IndexExpr& node, Expression* startExpr, Expression* endExpr, bool inclusive);
+    bool getNestedFixedArrayInfo(IndexExpr* indexExpr, FixedArrayInfo& outInfo);
     
     // Modular statement helpers (codegen_stmt_vardecl.cpp)
     void emitUninitializedVarDecl(VarDecl& node);
@@ -328,6 +484,10 @@ private:
     void emitIndexAssign(IndexExpr* indexExpr, AssignStmt& node);
     void emitFixedArrayAssign(IndexExpr* indexExpr, AssignStmt& node, const FixedArrayInfo& info);
     void emitMemberAssign(MemberExpr* member, AssignStmt& node);
+    
+    // Refinement type helpers
+    void emitRefinementCheck(const RefinementTypeInfo& info, SourceLocation loc);
+    bool tryEvalRefinementConstraint(const RefinementTypeInfo& info, int64_t value);  // Compile-time constraint check
     
     // Modular builtin helpers (codegen_call_builtins_system.cpp)
     void emitSystemExit(CallExpr& node);
@@ -456,6 +616,28 @@ private:
     void emitMathIsNan(CallExpr& node);
     void emitMathIsInf(CallExpr& node);
     
+    // Complex number builtins (call/codegen_call_builtins_complex.cpp)
+    void emitComplexCreate(CallExpr& node);
+    void emitComplexReal(CallExpr& node);
+    void emitComplexImag(CallExpr& node);
+    
+    // Extended numeric type builtins (call/codegen_call_builtins_numeric.cpp)
+    void emitBigIntNew(CallExpr& node);
+    void emitBigIntAdd(CallExpr& node);
+    void emitBigIntToInt(CallExpr& node);
+    void emitRationalNew(CallExpr& node);
+    void emitRationalAdd(CallExpr& node);
+    void emitRationalToFloat(CallExpr& node);
+    void emitFixedNew(CallExpr& node);
+    void emitFixedAdd(CallExpr& node);
+    void emitFixedSub(CallExpr& node);
+    void emitFixedMul(CallExpr& node);
+    void emitFixedToFloat(CallExpr& node);
+    void emitVec3New(CallExpr& node);
+    void emitVec3Add(CallExpr& node);
+    void emitVec3Dot(CallExpr& node);
+    void emitVec3Length(CallExpr& node);
+    
     // Extended list builtins (call/codegen_call_builtins_list_ext.cpp)
     void emitListFirst(CallExpr& node);
     void emitListLast(CallExpr& node);
@@ -498,7 +680,7 @@ private:
     void emitGCShutdown();                                 // Emit GC shutdown at program end
     void emitGCAlloc(size_t size, GCObjectType type);      // Emit GC allocation call
     void emitGCAllocList(size_t capacity);                 // Emit list allocation via GC
-    void emitGCAllocRecord(size_t fieldCount);             // Emit record allocation via GC
+    void emitGCAllocRecord(size_t fieldCount, uint64_t typeId = 0);  // Emit record allocation via GC (typeId for RTTI)
     void emitGCAllocClosure(size_t captureCount);          // Emit closure allocation via GC
     void emitGCAllocString(size_t len);                    // Emit string allocation via GC
     void emitGCAllocMap(size_t capacity);                  // Emit map allocation via GC
@@ -508,9 +690,16 @@ private:
     void emitGCPopFrame();                                 // Emit stack frame pop for GC
     void emitGCCollectRoutine();                           // Emit the GC collection routine (mark-and-sweep)
     
+    // Ownership system helpers
+    void emitListClone();                                  // Deep copy a list (RAX = source, returns new list in RAX)
+    void emitConstListClone(size_t count);                 // Deep copy a constant list (RAX = source data ptr, count = element count)
+    void emitRecordClone(const std::string& typeName);     // Deep copy a record (RAX = source, returns new record in RAX)
+    
     void visit(IntegerLiteral& node) override;
     void visit(FloatLiteral& node) override;
     void visit(StringLiteral& node) override;
+    void visit(CharLiteral& node) override;
+    void visit(ByteStringLiteral& node) override;
     void visit(InterpolatedString& node) override;
     void visit(BoolLiteral& node) override;
     void visit(NilLiteral& node) override;
@@ -535,6 +724,7 @@ private:
     void visit(TernaryExpr& node) override;
     void visit(ListCompExpr& node) override;
     void visit(AddressOfExpr& node) override;
+    void visit(BorrowExpr& node) override;
     void visit(DerefExpr& node) override;
     void visit(NewExpr& node) override;
     void visit(CastExpr& node) override;
@@ -561,6 +751,49 @@ private:
     void visit(SemAcquireExpr& node) override;
     void visit(SemReleaseExpr& node) override;
     void visit(SemTryAcquireExpr& node) override;
+    void visit(MakeAtomicExpr& node) override;
+    void visit(AtomicLoadExpr& node) override;
+    void visit(AtomicStoreExpr& node) override;
+    void visit(AtomicSwapExpr& node) override;
+    void visit(AtomicCasExpr& node) override;
+    void visit(AtomicAddExpr& node) override;
+    void visit(AtomicSubExpr& node) override;
+    void visit(AtomicAndExpr& node) override;
+    void visit(AtomicOrExpr& node) override;
+    void visit(AtomicXorExpr& node) override;
+    // Smart Pointer expressions
+    void visit(MakeBoxExpr& node) override;
+    void visit(MakeRcExpr& node) override;
+    void visit(MakeArcExpr& node) override;
+    void visit(MakeWeakExpr& node) override;
+    void visit(MakeCellExpr& node) override;
+    void visit(MakeRefCellExpr& node) override;
+    // Advanced Concurrency - Future/Promise
+    void visit(MakeFutureExpr& node) override;
+    void visit(FutureGetExpr& node) override;
+    void visit(FutureSetExpr& node) override;
+    void visit(FutureIsReadyExpr& node) override;
+    // Advanced Concurrency - Thread Pool
+    void visit(MakeThreadPoolExpr& node) override;
+    void visit(ThreadPoolSubmitExpr& node) override;
+    void visit(ThreadPoolShutdownExpr& node) override;
+    // Advanced Concurrency - Select
+    void visit(SelectExpr& node) override;
+    // Advanced Concurrency - Timeout
+    void visit(TimeoutExpr& node) override;
+    void visit(ChanRecvTimeoutExpr& node) override;
+    void visit(ChanSendTimeoutExpr& node) override;
+    // Advanced Concurrency - Cancellation
+    void visit(MakeCancelTokenExpr& node) override;
+    void visit(CancelExpr& node) override;
+    void visit(IsCancelledExpr& node) override;
+    // Async Runtime - Event Loop and Task Management
+    void visit(AsyncRuntimeInitExpr& node) override;
+    void visit(AsyncRuntimeRunExpr& node) override;
+    void visit(AsyncRuntimeShutdownExpr& node) override;
+    void visit(AsyncSpawnExpr& node) override;
+    void visit(AsyncSleepExpr& node) override;
+    void visit(AsyncYieldExpr& node) override;
     void visit(ExprStmt& node) override;
     void visit(VarDecl& node) override;
     void visit(DestructuringDecl& node) override;
@@ -592,9 +825,27 @@ private:
     void visit(DeleteStmt& node) override;
     void visit(LockStmt& node) override;
     void visit(AsmStmt& node) override;
+    // Syntax Redesign - New Expression Visitors
+    void visit(PlaceholderExpr& node) override;
+    void visit(InclusiveRangeExpr& node) override;
+    void visit(SafeNavExpr& node) override;
+    void visit(TypeCheckExpr& node) override;
+    // Syntax Redesign - New Statement Visitors
+    void visit(LoopStmt& node) override;
+    void visit(WithStmt& node) override;
+    void visit(ScopeStmt& node) override;
+    void visit(RequireStmt& node) override;
+    void visit(EnsureStmt& node) override;
+    void visit(InvariantStmt& node) override;
+    void visit(ComptimeBlock& node) override;
+    // Algebraic Effects
+    void visit(EffectDecl& node) override;
+    void visit(PerformEffectExpr& node) override;
+    void visit(HandleExpr& node) override;
+    void visit(ResumeExpr& node) override;
     void visit(Program& node) override;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_NATIVE_CODEGEN_H
+#endif // TYL_NATIVE_CODEGEN_H

@@ -1,0 +1,47 @@
+// Test Drop Trait for Custom Cleanup
+
+// A resource that needs cleanup
+record Resource:
+    name: str
+    handle: int
+
+// Implement Drop for Resource
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping resource: {self.name}")
+        // In real code, would close handle here
+
+fn create_resource name: str -> Resource:
+    return Resource { name: name, handle: 42 }
+
+fn use_resource r: &Resource:
+    print("Using resource: {r.name}")
+
+fn main():
+    print("=== Drop Trait Tests ===")
+    
+    // Test 1: Automatic drop at scope exit
+    print("\n--- Test 1: Scope exit drop ---")
+    scope:
+        let r1 = create_resource("file1")
+        use_resource(&r1)
+        print("About to exit scope...")
+    // r1.drop() called automatically here
+    print("Scope exited")
+    
+    // Test 2: Drop on reassignment
+    print("\n--- Test 2: Reassignment drop ---")
+    mut r2 = create_resource("file2")
+    use_resource(&r2)
+    r2 = create_resource("file3")  // Old r2 dropped here
+    use_resource(&r2)
+    
+    // Test 3: No drop on move
+    print("\n--- Test 3: Move (no drop) ---")
+    let r3 = create_resource("file4")
+    let r4 = r3  // Move, not drop
+    use_resource(&r4)
+    // r3 is moved, r4 will be dropped at end
+    
+    print("\n=== Drop tests complete ===")
+    // r2 and r4 dropped here

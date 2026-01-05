@@ -1,0 +1,15 @@
+// Test list element printing - direct vs variable
+
+fn main -> int:
+    let words = ["aa", "bb"]
+    
+    print("Direct print: ")
+    print(words[1])
+    print("\n")
+    
+    let e1 = words[1]
+    print("Via variable: ")
+    print(e1)
+    print("\n")
+    
+    return 0

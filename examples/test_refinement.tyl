@@ -1,0 +1,16 @@
+// Test refinement types
+
+type Positive = int where _ > 0
+type NonNegative = int where _ >= 0
+type Percentage = int where _ >= 0 and _ <= 100
+
+fn main():
+    // Test valid positive value
+    let x: Positive = 42
+    print("x = " + str(x))
+    
+    // Test valid non-negative value
+    let y: NonNegative = 0
+    print("y = " + str(y))
+    
+    print("Refinement type tests passed!")

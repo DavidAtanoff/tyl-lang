@@ -1,0 +1,39 @@
+// Test algebraic effects - perform and handle
+
+// Define a simple exception-like effect
+effect Fail:
+    fn fail msg: str -> never
+
+// Define a reader effect
+effect Reader:
+    fn ask -> int
+
+// A function that might fail
+fn divide a: int, b: int -> int:
+    if b == 0:
+        perform Fail.fail("Division by zero!")
+    return a / b
+
+// A function that reads from environment
+fn double_env -> int:
+    let x = perform Reader.ask()
+    return x * 2
+
+// Main function
+fn main -> int:
+    print("Testing perform and handle...")
+    
+    // Test 1: Handle with no effect performed (just returns the value)
+    let r1 = handle 10 + 5:
+        Fail.fail(msg) => -1
+    print("Test 1 - No effect performed:")
+    print(r1)
+    
+    // Test 2: Handle Reader effect - provide a value
+    let r2 = handle double_env():
+        Reader.ask() => 21
+    print("Test 2 - Reader effect handled:")
+    print(r2)
+    
+    print("All perform/handle tests passed!")
+    return 0

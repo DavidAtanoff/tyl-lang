@@ -1,9 +1,9 @@
-// Flex Compiler - Object File Implementation
+// Tyl Compiler - Object File Implementation
 #include "object_file.h"
 #include <iostream>
 #include <cstring>
 
-namespace flex {
+namespace tyl {
 
 void ObjectFile::addSymbol(const ObjSymbol& sym) {
     symbolIndex[sym.name] = symbols.size();
@@ -70,7 +70,7 @@ bool ObjectFile::write(const std::string& filename) {
     std::vector<std::pair<uint32_t, uint32_t>> importOffsets;
     for (auto& imp : imports) importOffsets.push_back({addStr(imp.dll), addStr(imp.function)});
     ObjectFileHeader header;
-    header.magic = FLEX_OBJ_MAGIC; header.version = FLEX_OBJ_VERSION; header.flags = 0;
+    header.magic = TYL_OBJ_MAGIC; header.version = TYL_OBJ_VERSION; header.flags = 0;
     header.codeSize = (uint32_t)codeSection.size(); header.dataSize = (uint32_t)dataSection.size();
     header.rodataSize = (uint32_t)rodataSection.size(); header.symbolCount = (uint32_t)symbols.size();
     header.codeRelocCount = (uint32_t)codeRelocations.size(); header.dataRelocCount = (uint32_t)dataRelocations.size();
@@ -84,7 +84,9 @@ bool ObjectFile::write(const std::string& filename) {
         auto& sym = symbols[i]; uint32_t nameOff = symbolNameOffsets[i];
         file.write(reinterpret_cast<char*>(&nameOff), 4);
         file.write(reinterpret_cast<char*>(&sym.type), 1);
-        uint8_t flags = sym.isExported ? 1 : 0; file.write(reinterpret_cast<char*>(&flags), 1);
+        // Flags: bit 0 = isExported, bit 1 = isHidden, bit 2 = isWeak
+        uint8_t flags = (sym.isExported ? 1 : 0) | (sym.isHidden ? 2 : 0) | (sym.isWeak ? 4 : 0);
+        file.write(reinterpret_cast<char*>(&flags), 1);
         uint16_t pad = 0; file.write(reinterpret_cast<char*>(&pad), 2);
         file.write(reinterpret_cast<char*>(&sym.section), 4);
         file.write(reinterpret_cast<char*>(&sym.offset), 4);
@@ -121,7 +123,7 @@ bool ObjectFile::read(const std::string& filename) {
     if (!file) return false;
     ObjectFileHeader header;
     file.read(reinterpret_cast<char*>(&header), sizeof(header));
-    if (header.magic != FLEX_OBJ_MAGIC || header.version != FLEX_OBJ_VERSION) return false;
+    if (header.magic != TYL_OBJ_MAGIC || header.version != TYL_OBJ_VERSION) return false;
     codeSection.resize(header.codeSize);
     if (header.codeSize > 0) file.read(reinterpret_cast<char*>(codeSection.data()), header.codeSize);
     dataSection.resize(header.dataSize);
@@ -146,7 +148,11 @@ bool ObjectFile::read(const std::string& filename) {
     symbols.clear(); symbolIndex.clear();
     for (auto& raw : rawSymbols) {
         ObjSymbol sym; sym.name = getString(raw.nameOff); sym.type = static_cast<ObjSymbolType>(raw.type);
-        sym.isExported = (raw.flags & 1) != 0; sym.section = raw.section; sym.offset = raw.offset; sym.size = raw.size;
+        // Flags: bit 0 = isExported, bit 1 = isHidden, bit 2 = isWeak
+        sym.isExported = (raw.flags & 1) != 0;
+        sym.isHidden = (raw.flags & 2) != 0;
+        sym.isWeak = (raw.flags & 4) != 0;
+        sym.section = raw.section; sym.offset = raw.offset; sym.size = raw.size;
         addSymbol(sym);
     }
     codeRelocations.clear();
@@ -172,4 +178,4 @@ void ObjectFile::dump() const {
     for (auto& imp : imports) std::cout << "  " << imp.dll << "::" << imp.function << "\n";
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,0 +1,19 @@
+// Test algebraic effects - minimal dispatch test
+
+// Define a Reader effect
+effect Reader:
+    fn ask -> int
+
+// Main function
+fn main -> int:
+    print("Testing effect dispatch...")
+    
+    // Simple test: handle with no actual perform
+    let result = handle 42:
+        Reader.ask() => 100
+    
+    print("Result (should be 42):")
+    print(result)
+    
+    print("Done!")
+    return 0

@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Binary Expressions
+// Tyl Compiler - Native Code Generator Binary Expressions
 // Handles: BinaryExpr, UnaryExpr with optimizations
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(BinaryExpr& node) {
     // Check if this is a float operation
@@ -314,4 +314,4 @@ void NativeCodeGen::visit(TernaryExpr& node) {
     asm_.label(endLabel);
 }
 
-} // namespace flex
+} // namespace tyl

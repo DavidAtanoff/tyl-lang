@@ -1,7 +1,7 @@
-// Flex Compiler - Diagnostic System
+// Tyl Compiler - Diagnostic System
 // Rust/Clang-style error reporting with source context and suggestions
-#ifndef FLEX_DIAGNOSTICS_H
-#define FLEX_DIAGNOSTICS_H
+#ifndef TYL_DIAGNOSTICS_H
+#define TYL_DIAGNOSTICS_H
 
 #include <string>
 #include <vector>
@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <memory>
 
-namespace flex {
+namespace tyl {
 
 // Error severity levels
 enum class DiagnosticLevel {
@@ -311,6 +311,6 @@ inline DiagnosticCollector& diagnostics() {
     return collector;
 }
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_DIAGNOSTICS_H
+#endif // TYL_DIAGNOSTICS_H

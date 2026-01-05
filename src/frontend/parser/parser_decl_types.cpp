@@ -1,10 +1,10 @@
-// Flex Compiler - Parser Type Declarations
+// Tyl Compiler - Parser Type Declarations
 // Handles: record, union, enum, type alias declarations
 
 #include "parser_base.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 StmtPtr Parser::recordDeclaration() {
     auto loc = previous().location;
@@ -124,18 +124,47 @@ StmtPtr Parser::enumDeclaration() {
 StmtPtr Parser::typeAliasDeclaration() {
     auto loc = previous().location;
     auto name = consume(TokenType::IDENTIFIER, "Expected type name").lexeme;
+    
+    auto alias = std::make_unique<TypeAlias>(name, "", loc);
+    
+    // Parse type parameters: type Vector[T, N: int] = ...
+    if (match(TokenType::LBRACKET)) {
+        do {
+            auto paramName = consume(TokenType::IDENTIFIER, "Expected type parameter name").lexeme;
+            
+            // Check if this is a value parameter: N: int
+            if (match(TokenType::COLON)) {
+                auto paramType = parseType();
+                alias->typeParams.emplace_back(paramName, paramType, true);  // isValue = true
+            } else {
+                alias->typeParams.emplace_back(paramName, "type", false);  // Regular type param
+            }
+        } while (match(TokenType::COMMA));
+        consume(TokenType::RBRACKET, "Expected ']' after type parameters");
+    }
+    
     consume(TokenType::ASSIGN, "Expected '=' after type name");
     
     // Check for opaque type: type Handle = opaque
     if (check(TokenType::IDENTIFIER) && peek().lexeme == "opaque") {
         advance();  // consume 'opaque'
         match(TokenType::NEWLINE);
-        return std::make_unique<TypeAlias>(name, "opaque", loc);
+        alias->targetType = "opaque";
+        return alias;
     }
     
-    auto target = parseType();
+    alias->targetType = parseType();
+    
+    // Parse where clause: type NonEmpty[T] = [T] where len(_) > 0
+    if (check(TokenType::IDENTIFIER) && peek().lexeme == "where") {
+        advance();  // consume 'where'
+        inConstraintContext_ = true;  // Don't transform placeholders in constraints
+        alias->constraint = expression();
+        inConstraintContext_ = false;
+    }
+    
     match(TokenType::NEWLINE);
-    return std::make_unique<TypeAlias>(name, target, loc);
+    return alias;
 }
 
-} // namespace flex
+} // namespace tyl

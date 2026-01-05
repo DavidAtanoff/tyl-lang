@@ -1,10 +1,10 @@
-// Flex Compiler - Loop Optimizer Implementation
+// Tyl Compiler - Loop Optimizer Implementation
 // Loop unrolling, LICM, and strength reduction
 #include "loop_optimizer.h"
 #include <algorithm>
 #include <cmath>
 
-namespace flex {
+namespace tyl {
 
 // Helper function to check if a statement contains break or continue
 static bool containsBreakOrContinue(Statement* stmt) {
@@ -48,7 +48,8 @@ void LoopUnrollingPass::processStatements(std::vector<StmtPtr>& stmts) {
         if (auto* forLoop = dynamic_cast<ForStmt*>(stmt)) {
             LoopInfo info;
             bool wasUnrolled = false;
-            if (analyzeLoop(forLoop, info)) {
+            // Don't unroll labeled loops - they may have break/continue targeting them
+            if (forLoop->label.empty() && analyzeLoop(forLoop, info)) {
                 if (info.boundsKnown && 
                     info.tripCount >= minTripCount_ && 
                     info.tripCount <= maxTripCount_) {
@@ -110,6 +111,7 @@ bool LoopUnrollingPass::analyzeLoop(ForStmt* loop, LoopInfo& info) {
     }
     
     // Try to get bounds from range expression
+    // RangeExpr (using ..) is INCLUSIVE - includes both start and end
     if (auto* range = dynamic_cast<RangeExpr*>(loop->iterable.get())) {
         auto* startLit = dynamic_cast<IntegerLiteral*>(range->start.get());
         auto* endLit = dynamic_cast<IntegerLiteral*>(range->end.get());
@@ -118,13 +120,27 @@ bool LoopUnrollingPass::analyzeLoop(ForStmt* loop, LoopInfo& info) {
             info.startValue = startLit->value;
             info.endValue = endLit->value;
             info.stepValue = 1;  // Default step
+            
+            // Check for step value (by keyword)
+            if (range->step) {
+                if (auto* stepLit = dynamic_cast<IntegerLiteral*>(range->step.get())) {
+                    info.stepValue = stepLit->value;
+                }
+            }
+            
             info.boundsKnown = true;
-            info.tripCount = info.endValue - info.startValue;
+            if (info.stepValue != 0) {
+                info.tripCount = (info.endValue - info.startValue) / info.stepValue + 1;  // +1 for inclusive
+            } else {
+                info.tripCount = 0;
+            }
+            info.isInclusive = true;  // Mark as inclusive range
             return true;
         }
     }
     
     // Try to get bounds from range() call
+    // range() function is EXCLUSIVE (like Python) - does NOT include end value
     if (auto* call = dynamic_cast<CallExpr*>(loop->iterable.get())) {
         if (auto* id = dynamic_cast<Identifier*>(call->callee.get())) {
             if (id->name == "range") {
@@ -135,6 +151,7 @@ bool LoopUnrollingPass::analyzeLoop(ForStmt* loop, LoopInfo& info) {
                         info.stepValue = 1;
                         info.boundsKnown = true;
                         info.tripCount = info.endValue;
+                        info.isInclusive = false;  // range() is exclusive
                         return true;
                     }
                 }
@@ -152,6 +169,7 @@ bool LoopUnrollingPass::analyzeLoop(ForStmt* loop, LoopInfo& info) {
                         }
                         info.boundsKnown = true;
                         info.tripCount = (info.endValue - info.startValue) / info.stepValue;
+                        info.isInclusive = false;  // range() is exclusive
                         return true;
                     }
                 }
@@ -169,7 +187,10 @@ StmtPtr LoopUnrollingPass::unrollLoop(ForStmt* loop, const LoopInfo& info) {
     if (info.tripCount <= unrollFactor_) {
         auto block = std::make_unique<Block>(loc);
         
-        for (int64_t i = info.startValue; i < info.endValue; i += info.stepValue) {
+        // Use <= for inclusive ranges (RangeExpr), < for exclusive (range() function)
+        for (int64_t i = info.startValue; 
+             info.isInclusive ? (i <= info.endValue) : (i < info.endValue); 
+             i += info.stepValue) {
             // Clone the loop body with the induction variable replaced
             auto cloned = cloneStatement(loop->body.get(), info.inductionVar, i);
             if (cloned) {
@@ -190,7 +211,10 @@ StmtPtr LoopUnrollingPass::unrollLoop(ForStmt* loop, const LoopInfo& info) {
     // (Partial unrolling with a loop is more complex and not implemented correctly yet)
     auto block = std::make_unique<Block>(loc);
     
-    for (int64_t i = info.startValue; i < info.endValue; i += info.stepValue) {
+    // Use <= for inclusive ranges (RangeExpr), < for exclusive (range() function)
+    for (int64_t i = info.startValue; 
+         info.isInclusive ? (i <= info.endValue) : (i < info.endValue); 
+         i += info.stepValue) {
         auto cloned = cloneStatement(loop->body.get(), info.inductionVar, i);
         if (cloned) {
             if (auto* clonedBlock = dynamic_cast<Block*>(cloned.get())) {
@@ -911,4 +935,4 @@ void LoopOptimizationPass::run(Program& ast) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

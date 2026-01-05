@@ -1,6 +1,6 @@
-// Flex Compiler - Object File Format
-#ifndef FLEX_OBJECT_FILE_H
-#define FLEX_OBJECT_FILE_H
+// Tyl Compiler - Object File Format
+#ifndef TYL_OBJECT_FILE_H
+#define TYL_OBJECT_FILE_H
 
 #include <vector>
 #include <string>
@@ -8,10 +8,10 @@
 #include <map>
 #include <fstream>
 
-namespace flex {
+namespace tyl {
 
-constexpr uint32_t FLEX_OBJ_MAGIC = 0x4F584C46;
-constexpr uint16_t FLEX_OBJ_VERSION = 1;
+constexpr uint32_t TYL_OBJ_MAGIC = 0x4F584C46;
+constexpr uint16_t TYL_OBJ_VERSION = 1;
 
 enum class ObjSymbolType : uint8_t { UNDEFINED = 0, FUNCTION = 1, DATA = 2, CONST = 3, LOCAL = 4 };
 enum class RelocType : uint8_t { REL32 = 0, RIP32 = 1, ABS64 = 2, ABS32 = 3 };
@@ -23,9 +23,11 @@ struct ObjSymbol {
     uint32_t offset;
     uint32_t size;
     bool isExported;
-    ObjSymbol() : type(ObjSymbolType::UNDEFINED), section(0), offset(0), size(0), isExported(false) {}
-    ObjSymbol(std::string n, ObjSymbolType t, uint32_t sec, uint32_t off, uint32_t sz, bool exp = true)
-        : name(std::move(n)), type(t), section(sec), offset(off), size(sz), isExported(exp) {}
+    bool isHidden;      // Symbol not visible outside module
+    bool isWeak;        // Weak symbol - can be overridden
+    ObjSymbol() : type(ObjSymbolType::UNDEFINED), section(0), offset(0), size(0), isExported(false), isHidden(false), isWeak(false) {}
+    ObjSymbol(std::string n, ObjSymbolType t, uint32_t sec, uint32_t off, uint32_t sz, bool exp = true, bool hidden = false, bool weak = false)
+        : name(std::move(n)), type(t), section(sec), offset(off), size(sz), isExported(exp), isHidden(hidden), isWeak(weak) {}
 };
 
 struct Relocation {
@@ -86,6 +88,6 @@ struct ObjectFileHeader {
     uint32_t stringTableSize;
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_OBJECT_FILE_H
+#endif // TYL_OBJECT_FILE_H

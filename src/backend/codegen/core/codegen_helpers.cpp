@@ -1,4 +1,4 @@
-// Flex Compiler - Native Code Generator Helpers
+// Tyl Compiler - Native Code Generator Helpers
 // Stack calculations and utility functions
 // Note: Constant evaluation moved to codegen_const_eval.cpp
 // Note: Type utilities moved to codegen_type_utils.cpp
@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace flex {
+namespace tyl {
 
 std::string NativeCodeGen::newLabel(const std::string& prefix) {
     return prefix + std::to_string(labelCounter++);
@@ -164,4 +164,4 @@ bool NativeCodeGen::endsWithTerminator(Statement* stmt) {
     return false;
 }
 
-} // namespace flex
+} // namespace tyl

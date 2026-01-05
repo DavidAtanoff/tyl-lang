@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(flex VERSION 1.0.0 LANGUAGES CXX)
+project(tyl VERSION 1.0.0 LANGUAGES CXX)
 
 # Use C++17 for VS 2022 Insiders compatibility
 # VS 18 Insiders has bugs with C++20 ranges/concepts in STL headers
@@ -44,6 +44,8 @@ set(SEMANTIC_SOURCES
     src/semantic/types/types.cpp
     # Symbols
     src/semantic/symbols/symbol_table.cpp
+    # Ownership system
+    src/semantic/ownership/ownership.cpp
     # Module system
     src/semantic/module/module_system.cpp
     # Generics / Monomorphization
@@ -79,17 +81,6 @@ set(CLI_SOURCES
     src/cli/ast_printer.cpp
 )
 
-set(STDLIB_SOURCES
-    src/stdlib/stdlib_core.cpp
-    src/stdlib/string/string.cpp
-    src/stdlib/math/math.cpp
-    src/stdlib/list/list.cpp
-    src/stdlib/map/map.cpp
-    src/stdlib/time/time.cpp
-    src/stdlib/system/system.cpp
-    src/stdlib/json/json.cpp
-)
-
 set(BACKEND_SOURCES
     # x64 native code generation - Core
     src/backend/x64/x64_assembler.cpp
@@ -118,9 +109,11 @@ set(BACKEND_SOURCES
     src/backend/codegen/expr/codegen_expr_async.cpp
     src/backend/codegen/expr/codegen_expr_channel.cpp
     src/backend/codegen/expr/codegen_expr_sync.cpp
+    src/backend/codegen/expr/codegen_expr_advanced_concurrency.cpp
     src/backend/codegen/expr/codegen_expr_index.cpp
     src/backend/codegen/expr/codegen_expr_list.cpp
     src/backend/codegen/expr/codegen_expr_record.cpp
+    src/backend/codegen/expr/codegen_expr_smart_ptr.cpp
     # Modular native codegen - Calls
     src/backend/codegen/call/codegen_call_core.cpp
     src/backend/codegen/call/codegen_call_dispatch.cpp
@@ -133,12 +126,14 @@ set(BACKEND_SOURCES
     src/backend/codegen/call/codegen_call_builtins_result.cpp
     src/backend/codegen/call/codegen_call_builtins_memory.cpp
     src/backend/codegen/call/codegen_call_builtins_gc.cpp
-    # Extended builtins (ported from stdlib)
+    # Extended builtins
     src/backend/codegen/call/codegen_call_builtins_string_ext.cpp
     src/backend/codegen/call/codegen_call_builtins_math_ext.cpp
     src/backend/codegen/call/codegen_call_builtins_list_ext.cpp
     src/backend/codegen/call/codegen_call_builtins_time_ext.cpp
     src/backend/codegen/call/codegen_call_builtins_system_ext.cpp
+    src/backend/codegen/call/codegen_call_builtins_complex.cpp
+    src/backend/codegen/call/codegen_call_builtins_numeric.cpp
     # Modular native codegen - Statements
     src/backend/codegen/stmt/codegen_stmt_control.cpp
     src/backend/codegen/stmt/codegen_stmt_vars.cpp
@@ -157,20 +152,12 @@ set(BACKEND_SOURCES
     src/backend/codegen/register_allocator.cpp
     src/backend/codegen/global_register_allocator.cpp
     src/backend/codegen/vectorizer.cpp
-    # Modular bytecode compiler
-    src/backend/bytecode/compiler_core.cpp
-    src/backend/bytecode/compiler_expr.cpp
-    src/backend/bytecode/compiler_stmt.cpp
-    src/backend/bytecode/compiler_decl.cpp
-    # Modular VM
-    src/backend/vm/vm_core.cpp
-    src/backend/vm/vm_execute.cpp
-    src/backend/vm/vm_builtins.cpp
     # Modular linker
     src/backend/linker/linker_core.cpp
     src/backend/linker/linker_symbols.cpp
     src/backend/linker/linker_layout.cpp
     src/backend/linker/linker_output.cpp
+    src/backend/linker/linker_dll.cpp
 )
 
 set(ALL_SOURCES
@@ -178,7 +165,6 @@ set(ALL_SOURCES
     ${SEMANTIC_SOURCES}
     ${BACKEND_SOURCES}
     ${CLI_SOURCES}
-    ${STDLIB_SOURCES}
     src/main.cpp
 )
 
@@ -202,6 +188,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/semantic/module
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer
     ${CMAKE_SOURCE_DIR}/src/semantic/generics
+    ${CMAKE_SOURCE_DIR}/src/semantic/ownership
     # Backend
     ${CMAKE_SOURCE_DIR}/src/backend
     ${CMAKE_SOURCE_DIR}/src/backend/x64
@@ -214,20 +201,16 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/backend/codegen/call
     ${CMAKE_SOURCE_DIR}/src/backend/codegen/stmt
     ${CMAKE_SOURCE_DIR}/src/backend/codegen/decl
-    ${CMAKE_SOURCE_DIR}/src/backend/bytecode
-    ${CMAKE_SOURCE_DIR}/src/backend/vm
     ${CMAKE_SOURCE_DIR}/src/backend/linker
     # CLI
     ${CMAKE_SOURCE_DIR}/src/cli
-    # Standard Library
-    ${CMAKE_SOURCE_DIR}/src/stdlib
 )
 
 # Main executable
-add_executable(flex ${ALL_SOURCES})
+add_executable(tyl ${ALL_SOURCES})
 
 # Installation
-install(TARGETS flex DESTINATION bin)
+install(TARGETS tyl DESTINATION bin)
 
 # Tests (optional)
 option(BUILD_TESTS "Build tests" OFF)

@@ -1,4 +1,4 @@
-// Flex Compiler - Custom Allocator Implementation
+// Tyl Compiler - Custom Allocator Implementation
 #include "allocator.h"
 #include <cstdlib>
 #include <cstring>
@@ -15,7 +15,7 @@
 #include <windows.h>
 #endif
 
-namespace flex {
+namespace tyl {
 
 // ============================================================================
 // System Allocator Implementation
@@ -280,7 +280,7 @@ static AllocatorStats g_runtimeStats = {0, 0, 0, 0, 0};
 
 extern "C" {
 
-void flex_set_allocator(AllocFn alloc, FreeFn free, ReallocFn realloc, void* userData) {
+void TYL_set_allocator(AllocFn alloc, FreeFn free, ReallocFn realloc, void* userData) {
     g_runtimeAllocator.alloc = alloc;
     g_runtimeAllocator.free = free;
     g_runtimeAllocator.realloc = realloc;
@@ -288,7 +288,7 @@ void flex_set_allocator(AllocFn alloc, FreeFn free, ReallocFn realloc, void* use
     g_runtimeAllocator.name = "custom";
 }
 
-void flex_reset_allocator() {
+void TYL_reset_allocator() {
     g_runtimeAllocator.alloc = nullptr;
     g_runtimeAllocator.free = nullptr;
     g_runtimeAllocator.realloc = nullptr;
@@ -296,11 +296,11 @@ void flex_reset_allocator() {
     g_runtimeAllocator.name = "default";
 }
 
-void* flex_alloc(size_t size) {
-    return flex_alloc_aligned(size, 8);
+void* TYL_alloc(size_t size) {
+    return TYL_alloc_aligned(size, 8);
 }
 
-void* flex_alloc_aligned(size_t size, size_t alignment) {
+void* TYL_alloc_aligned(size_t size, size_t alignment) {
     void* ptr = nullptr;
     
     if (g_runtimeAllocator.alloc) {
@@ -321,7 +321,7 @@ void* flex_alloc_aligned(size_t size, size_t alignment) {
     return ptr;
 }
 
-void flex_free(void* ptr, size_t size) {
+void TYL_free(void* ptr, size_t size) {
     if (!ptr) return;
     
     if (g_runtimeAllocator.free) {
@@ -335,7 +335,7 @@ void flex_free(void* ptr, size_t size) {
     g_runtimeStats.currentObjects--;
 }
 
-void* flex_realloc(void* ptr, size_t oldSize, size_t newSize) {
+void* TYL_realloc(void* ptr, size_t oldSize, size_t newSize) {
     if (g_runtimeAllocator.realloc) {
         void* newPtr = g_runtimeAllocator.realloc(ptr, oldSize, newSize, 8);
         if (newPtr) {
@@ -348,23 +348,23 @@ void* flex_realloc(void* ptr, size_t oldSize, size_t newSize) {
     }
     
     // Fallback
-    void* newPtr = flex_alloc(newSize);
+    void* newPtr = TYL_alloc(newSize);
     if (newPtr && ptr) {
         size_t copySize = oldSize < newSize ? oldSize : newSize;
         std::memcpy(newPtr, ptr, copySize);
-        flex_free(ptr, oldSize);
+        TYL_free(ptr, oldSize);
     }
     return newPtr;
 }
 
-size_t flex_allocator_total_allocated() {
+size_t TYL_allocator_total_allocated() {
     return g_runtimeStats.totalAllocated;
 }
 
-size_t flex_allocator_peak_usage() {
+size_t TYL_allocator_peak_usage() {
     return g_runtimeStats.peakUsage;
 }
 
 }  // extern "C"
 
-} // namespace flex
+} // namespace tyl

@@ -1,10 +1,10 @@
-// Flex Compiler - Macro Expander Core
+// Tyl Compiler - Macro Expander Core
 // Main expand entry point and collection
 
 #include "expander_base.h"
 #include "frontend/macro/syntax_macro.h"
 
-namespace flex {
+namespace tyl {
 
 void MacroExpander::expand(Program& program) {
     collectMacros(program);
@@ -127,4 +127,4 @@ void MacroExpander::error(const std::string& msg, SourceLocation loc) {
     errors_.push_back("Macro expansion error at line " + std::to_string(loc.line) + ": " + msg);
 }
 
-} // namespace flex
+} // namespace tyl

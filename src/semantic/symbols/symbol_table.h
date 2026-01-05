@@ -1,8 +1,9 @@
-// Flex Compiler - Symbol Table
-#ifndef FLEX_SYMBOL_TABLE_H
-#define FLEX_SYMBOL_TABLE_H
+// Tyl Compiler - Symbol Table
+#ifndef TYL_SYMBOL_TABLE_H
+#define TYL_SYMBOL_TABLE_H
 
 #include "semantic/types/types.h"
+#include "semantic/ownership/ownership.h"
 #include "common/common.h"  // For SourceLocation
 #include <string>
 #include <vector>
@@ -10,10 +11,12 @@
 #include <memory>
 #include <cstdint>
 
-namespace flex {
+namespace tyl {
 
 enum class SymbolKind { VARIABLE, FUNCTION, PARAMETER, TYPE, RECORD_FIELD, MODULE, MACRO, LAYER };
 enum class StorageClass { LOCAL, GLOBAL, HEAP, REGISTER };
+
+// OwnershipState is now defined in ownership.h
 
 struct Symbol {
     std::string name;
@@ -32,8 +35,24 @@ struct Symbol {
     int line = 0;
     int column = 0;
     SourceLocation location;       // Full source location for warnings
+    
+    // Ownership tracking
+    OwnershipState ownershipState = OwnershipState::UNINITIALIZED;
+    SourceLocation moveLocation;   // Where the value was moved (if moved)
+    bool isCopyType = false;       // Is this a Copy type (primitives)?
+    bool needsDrop = false;        // Does this need cleanup on scope exit?
+    int borrowCount = 0;           // Number of active borrows
+    bool hasMutableBorrow = false; // Is there an active mutable borrow?
+    
     Symbol() = default;
     Symbol(std::string n, SymbolKind k, TypePtr t) : name(std::move(n)), kind(k), type(std::move(t)) {}
+    
+    // Ownership helpers
+    bool isOwned() const { return ownershipState == OwnershipState::OWNED; }
+    bool isMoved() const { return ownershipState == OwnershipState::MOVED; }
+    bool canMove() const { return isOwned() && borrowCount == 0; }
+    bool canBorrowShared() const { return !isMoved() && ownershipState != OwnershipState::UNINITIALIZED && !hasMutableBorrow; }
+    bool canBorrowMut() const { return isOwned() && borrowCount == 0; }
 };
 
 class Scope {
@@ -75,12 +94,14 @@ public:
     bool inLoop() const;
     bool inUnsafe() const;
     Scope* enclosingFunction();
+    int scopeDepth() const { return scopeDepth_; }  // Get current scope depth for lifetime tracking
 private:
     Scope global_;
     Scope* current_;
     std::vector<std::unique_ptr<Scope>> scopes_;
+    int scopeDepth_ = 0;  // Track scope depth for lifetime analysis
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_SYMBOL_TABLE_H
+#endif // TYL_SYMBOL_TABLE_H

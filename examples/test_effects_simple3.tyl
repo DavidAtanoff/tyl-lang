@@ -1,0 +1,12 @@
+// Test handle with literal - no perform
+
+effect Reader:
+    fn ask -> int
+
+fn main -> int:
+    print("Before handle")
+    let result = handle 42:
+        Reader.ask() => 100
+    print("After handle, result =")
+    print(result)
+    return 0

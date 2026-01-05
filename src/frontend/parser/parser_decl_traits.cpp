@@ -1,10 +1,10 @@
-// Flex Compiler - Parser Trait/Impl Declarations
+// Tyl Compiler - Parser Trait/Impl Declarations
 // Handles: trait, impl declarations
 
 #include "parser_base.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 StmtPtr Parser::traitDeclaration() {
     auto loc = previous().location;
@@ -101,4 +101,4 @@ StmtPtr Parser::implDeclaration() {
     return impl;
 }
 
-} // namespace flex
+} // namespace tyl

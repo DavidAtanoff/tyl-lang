@@ -1,0 +1,12 @@
+// Test just a function call without handle
+
+fn get_value -> int:
+    print("Inside get_value")
+    return 42
+
+fn main -> int:
+    print("Before call")
+    let x = get_value()
+    print("After call, x =")
+    print(x)
+    return 0

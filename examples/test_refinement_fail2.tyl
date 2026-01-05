@@ -1,0 +1,9 @@
+// Test refinement type failure with SmallInt
+// This should fail at runtime because 150 is not < 100
+
+type SmallInt = int where _ < 100
+
+fn main:
+    print("About to create invalid SmallInt...\n")
+    let x: SmallInt = 150  // Should fail: 150 is not < 100
+    print("This should not print!\n")

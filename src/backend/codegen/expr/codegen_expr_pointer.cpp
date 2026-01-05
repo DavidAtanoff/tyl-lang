@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Pointer Expressions
+// Tyl Compiler - Native Code Generator Pointer Expressions
 // Handles: AddressOfExpr, DerefExpr, NewExpr, CastExpr
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(AddressOfExpr& node) {
     if (auto* id = dynamic_cast<Identifier*>(node.operand.get())) {
@@ -91,6 +91,75 @@ void NativeCodeGen::visit(AddressOfExpr& node) {
     lastExprWasFloat_ = false;
 }
 
+void NativeCodeGen::visit(BorrowExpr& node) {
+    // BorrowExpr generates the same code as AddressOfExpr - get address of operand
+    // The difference is in type checking (BorrowExpr is safe, AddressOfExpr requires unsafe)
+    if (auto* id = dynamic_cast<Identifier*>(node.operand.get())) {
+        auto localIt = locals.find(id->name);
+        auto regIt = varRegisters_.find(id->name);
+        auto globalRegIt = globalVarRegisters_.find(id->name);
+        
+        // If variable is in a register, spill it to stack first
+        if (regIt != varRegisters_.end() && regIt->second != VarRegister::NONE) {
+            if (localIt == locals.end()) {
+                allocLocal(id->name);
+                localIt = locals.find(id->name);
+            }
+            int32_t off = localIt->second;
+            
+            switch (regIt->second) {
+                case VarRegister::RBX: asm_.mov_rax_rbx(); break;
+                case VarRegister::R12: asm_.mov_rax_r12(); break;
+                case VarRegister::R13: asm_.mov_rax_r13(); break;
+                case VarRegister::R14: asm_.mov_rax_r14(); break;
+                case VarRegister::R15: asm_.mov_rax_r15(); break;
+                default: break;
+            }
+            asm_.mov_mem_rbp_rax(off);
+            varRegisters_[id->name] = VarRegister::NONE;
+            asm_.lea_rax_rbp(off);
+        } else if (globalRegIt != globalVarRegisters_.end() && globalRegIt->second != VarRegister::NONE) {
+            if (localIt == locals.end()) {
+                allocLocal(id->name);
+                localIt = locals.find(id->name);
+            }
+            int32_t off = localIt->second;
+            
+            switch (globalRegIt->second) {
+                case VarRegister::RBX: asm_.mov_rax_rbx(); break;
+                case VarRegister::R12: asm_.mov_rax_r12(); break;
+                case VarRegister::R13: asm_.mov_rax_r13(); break;
+                case VarRegister::R14: asm_.mov_rax_r14(); break;
+                case VarRegister::R15: asm_.mov_rax_r15(); break;
+                default: break;
+            }
+            asm_.mov_mem_rbp_rax(off);
+            globalVarRegisters_[id->name] = VarRegister::NONE;
+            asm_.lea_rax_rbp(off);
+        } else if (localIt != locals.end()) {
+            asm_.lea_rax_rbp(localIt->second);
+        } else {
+            allocLocal(id->name);
+            asm_.lea_rax_rbp(locals[id->name]);
+        }
+    } else if (auto* indexExpr = dynamic_cast<IndexExpr*>(node.operand.get())) {
+        // Borrow of list element
+        indexExpr->index->accept(*this);
+        asm_.dec_rax();
+        asm_.push_rax();
+        indexExpr->object->accept(*this);
+        asm_.add_rax_imm32(16);
+        asm_.pop_rcx();
+        asm_.code.push_back(0x48); asm_.code.push_back(0xC1);
+        asm_.code.push_back(0xE1); asm_.code.push_back(0x03);
+        asm_.add_rax_rcx();
+    } else {
+        node.operand->accept(*this);
+    }
+    
+    lastExprWasFloat_ = false;
+}
+
 void NativeCodeGen::visit(DerefExpr& node) {
     node.operand->accept(*this);
     asm_.mov_rax_mem_rax();
@@ -129,8 +198,7 @@ void NativeCodeGen::visit(CastExpr& node) {
     node.expr->accept(*this);
     
     bool sourceIsFloat = lastExprWasFloat_;
-    bool targetIsFloat = (node.targetType == "float" || node.targetType == "f32" || 
-                          node.targetType == "f64");
+    bool targetIsFloat = isFloatTypeName(node.targetType);
     bool targetIsInt = (node.targetType == "int" || node.targetType == "i8" || 
                         node.targetType == "i16" || node.targetType == "i32" || 
                         node.targetType == "i64" || node.targetType == "u8" ||
@@ -150,4 +218,4 @@ void NativeCodeGen::visit(CastExpr& node) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

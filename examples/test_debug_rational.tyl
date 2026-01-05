@@ -1,0 +1,41 @@
+// Debug rational issue
+fn main() {
+    print("Test 1: Simple rational\n")
+    let r1 = rational(1, 2)
+    let f1 = rational_to_float(r1)
+    print("1/2 = ")
+    print(f1)
+    print("\n")
+    
+    print("\nTest 2: BigInt then rational\n")
+    let b1 = bigint(100)
+    let b2 = bigint(200)
+    let bs = bigint_add(b1, b2)
+    let bi = bigint_to_int(bs)
+    print("BigInt result: ")
+    print(bi)
+    print("\n")
+    
+    print("\nTest 3: Rational after BigInt\n")
+    let r2 = rational(1, 4)
+    let f2 = rational_to_float(r2)
+    print("1/4 = ")
+    print(f2)
+    print("\n")
+    
+    print("\nTest 4: Another BigInt\n")
+    let b3 = bigint(-50)
+    let b4 = bigint(150)
+    let bs2 = bigint_add(b3, b4)
+    let bi2 = bigint_to_int(bs2)
+    print("BigInt result: ")
+    print(bi2)
+    print("\n")
+    
+    print("\nTest 5: Rational after second BigInt\n")
+    let r3 = rational(1, 3)
+    let f3 = rational_to_float(r3)
+    print("1/3 = ")
+    print(f3)
+    print("\n")
+}

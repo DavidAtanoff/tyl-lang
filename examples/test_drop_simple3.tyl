@@ -1,0 +1,17 @@
+// Test: Drop with move - only r2 should be dropped
+
+record Resource:
+    id: int
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping id=")
+        print(self.id)
+
+fn main():
+    print("Start")
+    let r1 = Resource { id: 42 }
+    print("Created r1")
+    let r2 = r1
+    print("Moved r1 to r2")
+    print("End - only r2 should drop")

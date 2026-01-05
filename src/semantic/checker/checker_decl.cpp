@@ -1,9 +1,9 @@
-// Flex Compiler - Type Checker Declaration Visitors
+// Tyl Compiler - Type Checker Declaration Visitors
 // Declaration type checking
 
 #include "checker_base.h"
 
-namespace flex {
+namespace tyl {
 
 void TypeChecker::visit(FnDecl& node) {
     auto& reg = TypeRegistry::instance();
@@ -21,10 +21,101 @@ void TypeChecker::visit(FnDecl& node) {
         currentTypeParams_[tp] = tpType;
     }
     
+    // =========================================================================
+    // Lifetime Elision Rules
+    // =========================================================================
+    // Apply lifetime elision rules for common patterns:
+    // 1. Single input lifetime → output gets same lifetime
+    // 2. &self method → output gets self's lifetime  
+    // 3. Multiple inputs without &self → require explicit annotation (error)
+    //
+    // These rules allow omitting lifetime annotations in common cases.
+    // =========================================================================
+    
+    // Count reference parameters and track their lifetimes
+    std::vector<std::string> inputLifetimes;
+    std::string selfLifetime;
+    bool hasSelfParam = false;
+    
+    for (auto& p : node.params) {
+        // Check if this is a reference parameter
+        if (p.second.length() > 0 && p.second[0] == '&') {
+            // Extract lifetime if present (e.g., "&'a T" -> "'a")
+            std::string lifetime;
+            size_t pos = 1;
+            if (pos < p.second.length() && p.second[pos] == '\'') {
+                // Has explicit lifetime
+                size_t end = p.second.find(' ', pos);
+                if (end == std::string::npos) end = p.second.length();
+                lifetime = p.second.substr(pos, end - pos);
+            } else {
+                // No explicit lifetime - generate one for elision
+                lifetime = "'_param" + std::to_string(inputLifetimes.size());
+            }
+            inputLifetimes.push_back(lifetime);
+            
+            // Check for self parameter
+            if (p.first == "self") {
+                hasSelfParam = true;
+                selfLifetime = lifetime;
+            }
+        }
+    }
+    
+    // Check if return type is a reference that needs lifetime elision
+    bool returnIsRef = node.returnType.length() > 0 && node.returnType[0] == '&';
+    bool returnHasExplicitLifetime = returnIsRef && node.returnType.length() > 1 && node.returnType[1] == '\'';
+    
+    // Apply elision rules if return type is a reference without explicit lifetime
+    if (returnIsRef && !returnHasExplicitLifetime && !node.lifetimeParams.empty() == false) {
+        if (hasSelfParam) {
+            // Rule 2: &self method → output gets self's lifetime
+            // This is the most common case for methods
+            // The return type implicitly has self's lifetime
+        } else if (inputLifetimes.size() == 1) {
+            // Rule 1: Single input lifetime → output gets same lifetime
+            // The return type implicitly has the same lifetime as the single input
+        } else if (inputLifetimes.size() > 1) {
+            // Rule 3: Multiple inputs without &self → require explicit annotation
+            // Only warn if there are explicit lifetime params expected
+            if (node.lifetimeParams.empty()) {
+                warning("function returns a reference but has multiple input lifetimes; "
+                        "consider adding explicit lifetime annotations", node.location);
+            }
+        }
+    }
+    
+    // Parse parameters and track ownership modes
+    std::vector<ParamOwnershipInfo> paramOwnership;
     for (auto& p : node.params) {
         TypePtr paramType = parseTypeAnnotation(p.second);
         if (paramType->kind == TypeKind::UNKNOWN) paramType = reg.anyType();
         fnType->params.push_back(std::make_pair(p.first, paramType));
+        
+        // Determine parameter passing mode from type annotation
+        ParamOwnershipInfo poi;
+        poi.name = p.first;
+        poi.typeName = p.second;
+        poi.mode = parseParamMode(p.second);
+        
+        // Set lifetime for borrowed parameters
+        if (poi.mode == ParamMode::BORROW || poi.mode == ParamMode::BORROW_MUT) {
+            // Find the corresponding input lifetime
+            size_t refIndex = 0;
+            for (size_t i = 0; i < node.params.size(); i++) {
+                if (node.params[i].second.length() > 0 && node.params[i].second[0] == '&') {
+                    if (node.params[i].first == p.first) {
+                        if (refIndex < inputLifetimes.size()) {
+                            poi.lifetime.name = inputLifetimes[refIndex];
+                        }
+                        break;
+                    }
+                    refIndex++;
+                }
+            }
+        }
+        
+        paramOwnership.push_back(poi);
     }
     fnType->returnType = parseTypeAnnotation(node.returnType);
     if (fnType->returnType->kind == TypeKind::UNKNOWN) fnType->returnType = reg.anyType();
@@ -33,6 +124,13 @@ void TypeChecker::visit(FnDecl& node) {
     symbols_.define(fnSym);
     
     symbols_.pushScope(Scope::Kind::FUNCTION);
+    
+    // Enter function for ownership tracking
+    if (borrowCheckEnabled_) {
+        ownership_.pushScope();
+        ownership_.enterFunction(paramOwnership);
+    }
+    
     for (size_t i = 0; i < node.params.size(); i++) {
         Symbol paramSym(node.params[i].first, SymbolKind::PARAMETER, fnType->params[i].second);
         paramSym.location = node.location;  // Use function location for params
@@ -44,6 +142,13 @@ void TypeChecker::visit(FnDecl& node) {
         node.body->accept(*this);
     }
     checkUnusedVariables(symbols_.currentScope());  // Check for unused variables/params
+    
+    // Exit function for ownership tracking
+    if (borrowCheckEnabled_) {
+        ownership_.exitFunction();
+        ownership_.popScope();
+    }
+    
     symbols_.popScope();
     
     // Restore type parameter scope
@@ -125,14 +230,94 @@ void TypeChecker::visit(EnumDecl& node) {
 }
 
 void TypeChecker::visit(TypeAlias& node) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Handle type parameters (including value parameters for dependent types)
+    std::vector<std::string> savedTypeParamNames = currentTypeParamNames_;
+    std::vector<std::pair<std::string, TypePtr>> depParams;
+    
+    for (const auto& tp : node.typeParams) {
+        currentTypeParamNames_.push_back(tp.name);
+        if (tp.isValue) {
+            // Value parameter (e.g., N: int)
+            TypePtr valueType = parseTypeAnnotation(tp.kind);
+            auto vpType = reg.valueParamType(tp.name, valueType);
+            currentTypeParams_[tp.name] = vpType;
+            depParams.push_back({tp.name, valueType});
+        } else {
+            // Regular type parameter
+            auto tpType = std::make_shared<TypeParamType>(tp.name);
+            currentTypeParams_[tp.name] = tpType;
+            depParams.push_back({tp.name, nullptr});  // nullptr indicates type param
+        }
+    }
+    
     TypePtr targetType;
     if (node.targetType == "opaque") {
         // Opaque types are treated as void* for FFI purposes
-        targetType = TypeRegistry::instance().ptrType(TypeRegistry::instance().voidType(), true);
+        targetType = reg.ptrType(reg.voidType(), true);
     } else {
         targetType = parseTypeAnnotation(node.targetType);
     }
-    symbols_.registerType(node.name, targetType);
+    
+    // Check if this is a dependent type (has value parameters)
+    bool hasDependentParams = false;
+    for (const auto& tp : node.typeParams) {
+        if (tp.isValue) {
+            hasDependentParams = true;
+            break;
+        }
+    }
+    
+    // Check if this is a refined type (has constraint)
+    if (node.constraint) {
+        // Create a refined type
+        // For now, we store the constraint as a string representation
+        std::string constraintStr;
+        // Simple constraint stringification - in a full implementation,
+        // we'd have a proper AST-to-string converter
+        if (auto* binExpr = dynamic_cast<BinaryExpr*>(node.constraint.get())) {
+            if (auto* call = dynamic_cast<CallExpr*>(binExpr->left.get())) {
+                if (auto* id = dynamic_cast<Identifier*>(call->callee.get())) {
+                    constraintStr = id->name + "(_)";
+                }
+            }
+            constraintStr += " > ";
+            if (auto* intLit = dynamic_cast<IntegerLiteral*>(binExpr->right.get())) {
+                constraintStr += std::to_string(intLit->value);
+            }
+        }
+        
+        auto refinedType = reg.refinedType(node.name, targetType, constraintStr);
+        symbols_.registerType(node.name, refinedType);
+        reg.registerDependentType(node.name, refinedType);
+    } else if (hasDependentParams) {
+        // Create a dependent type
+        auto depType = std::dynamic_pointer_cast<DependentType>(reg.dependentType(node.name));
+        if (depType) {
+            depType->params = depParams;
+            depType->baseType = targetType;
+            symbols_.registerType(node.name, depType);
+            reg.registerDependentType(node.name, depType);
+        }
+    } else if (!node.typeParams.empty()) {
+        // Generic type alias (no value params)
+        auto genType = std::make_shared<GenericType>(node.name);
+        for (const auto& tp : node.typeParams) {
+            genType->typeArgs.push_back(reg.typeParamType(tp.name));
+        }
+        // Store the resolved type for later instantiation
+        symbols_.registerType(node.name, targetType);
+    } else {
+        // Simple type alias
+        symbols_.registerType(node.name, targetType);
+    }
+    
+    // Restore type parameter scope
+    for (const auto& tp : node.typeParams) {
+        currentTypeParams_.erase(tp.name);
+    }
+    currentTypeParamNames_ = savedTypeParamNames;
 }
 
 void TypeChecker::visit(TraitDecl& node) {
@@ -216,6 +401,19 @@ void TypeChecker::visit(ImplBlock& node) {
     if (!node.traitName.empty()) {
         // This is a trait implementation
         checkTraitImpl(node.traitName, node.typeName, node.methods, node.location);
+        
+        // Register Drop trait implementation in ownership system
+        if (node.traitName == "Drop") {
+            // Find the drop method
+            for (auto& method : node.methods) {
+                if (method->name == "drop") {
+                    // Register this type as having a custom drop
+                    std::string dropFnName = node.typeName + "_Drop_drop";
+                    OwnershipTracker::registerDropType(node.typeName, dropFnName);
+                    break;
+                }
+            }
+        }
     }
     
     // Type check all methods
@@ -324,4 +522,4 @@ void TypeChecker::visit(ModuleDecl& node) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

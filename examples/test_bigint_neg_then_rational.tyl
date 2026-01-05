@@ -1,0 +1,20 @@
+// Test negative BigInt then Rational
+fn main() {
+    print("--- BigInt Tests ---\n")
+    let big_neg = bigint(-100)
+    let big_pos = bigint(250)
+    let big_mixed = bigint_add(big_neg, big_pos)
+    let mixed_result = bigint_to_int(big_mixed)
+    print("BigInt: -100 + 250 = ")
+    print(mixed_result)
+    print("\n")
+    
+    print("\n--- Rational Tests ---\n")
+    let rat_half = rational(1, 2)
+    let rat_third = rational(1, 3)
+    let rat_sum = rational_add(rat_half, rat_third)
+    print("Rational: 1/2 + 1/3 = ")
+    let rat_result = rational_to_float(rat_sum)
+    print(rat_result)
+    print(" (expected ~0.833)\n")
+}

@@ -1,0 +1,10 @@
+// Test loop with mut variable
+
+fn main -> int:
+    mut i = 1
+    while i <= 3:
+        print("i = ")
+        print(i)
+        print("\n")
+        i = i + 1
+    return 0

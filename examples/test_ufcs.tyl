@@ -1,0 +1,20 @@
+// Test UFCS (Universal Function Call Syntax)
+// x.f(y) should be equivalent to f(x, y)
+
+fn double x: int -> int:
+    return x * 2
+
+fn add a: int, b: int -> int:
+    return a + b
+
+fn main:
+    // Traditional call
+    println(double(5))      // 10
+    println(add(3, 4))      // 7
+    
+    // UFCS style
+    println(5.double())     // 10
+    println(3.add(4))       // 7
+    
+    // Chained UFCS
+    println(5.double().double())  // 20

@@ -1,8 +1,8 @@
-// Flex Compiler - Function Inlining Implementation
+// Tyl Compiler - Function Inlining Implementation
 // Enhanced inlining with expression-level inlining for single-return functions
 #include "inlining.h"
 
-namespace flex {
+namespace tyl {
 
 std::string InliningPass::generateUniqueName(const std::string& base) {
     return "_inline_" + base + "_" + std::to_string(uniqueVarCounter_++);
@@ -897,4 +897,4 @@ StmtPtr InliningPass::cloneStatement(Statement* stmt, const std::map<std::string
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,15 +1,15 @@
-// Flex Compiler - Lexer Base Header
-#ifndef FLEX_LEXER_BASE_H
-#define FLEX_LEXER_BASE_H
+// Tyl Compiler - Lexer Base Header
+#ifndef TYL_LEXER_BASE_H
+#define TYL_LEXER_BASE_H
 
 #include "frontend/lexer/lexer.h"
 
-namespace flex {
+namespace tyl {
 
 // Lexer implementation is split across:
 // - lexer_core.cpp: Core methods, keywords, token creation
 // - lexer_scan.cpp: Token scanning (scanToken, scanNumber, scanIdentifier, etc.)
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_LEXER_BASE_H
+#endif // TYL_LEXER_BASE_H

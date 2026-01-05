@@ -1,0 +1,14 @@
+// Test destructuring
+fn main:
+    // Tuple destructuring
+    (a, b, c) = (1, 2, 3)
+    println(a)  // Expected: 1
+    println(b)  // Expected: 2
+    println(c)  // Expected: 3
+    
+    // Record destructuring from literal
+    {x, y} = {x: 10, y: 20}
+    println(x)  // Expected: 10
+    println(y)  // Expected: 20
+    
+    println("destructuring works")

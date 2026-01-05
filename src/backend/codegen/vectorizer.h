@@ -1,14 +1,14 @@
-// Flex Compiler - SIMD Vectorizer
+// Tyl Compiler - SIMD Vectorizer
 // Auto-vectorization for loops and array operations
-#ifndef FLEX_VECTORIZER_H
-#define FLEX_VECTORIZER_H
+#ifndef TYL_VECTORIZER_H
+#define TYL_VECTORIZER_H
 
 #include "frontend/ast/ast.h"
 #include <vector>
 #include <string>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 // Forward declarations
 class X64Assembler;
@@ -108,6 +108,6 @@ private:
     void generateHorizontalReduction(TokenType op, VectorWidth width, X64Assembler& asm_);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_VECTORIZER_H
+#endif // TYL_VECTORIZER_H

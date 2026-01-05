@@ -1,0 +1,9 @@
+// Test refinement type failure
+
+type Positive = int where _ > 0
+
+fn main():
+    // This should trigger a compile-time warning and runtime failure
+    let x: Positive = -5
+    print("x = " + str(x))
+    print("Should not reach here!")

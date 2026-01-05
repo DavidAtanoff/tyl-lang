@@ -1,10 +1,10 @@
-// Flex Compiler - Extended Math Builtins for Native Code Generation
+// Tyl Compiler - Extended Math Builtins for Native Code Generation
 // Additional math functions ported from stdlib/math/math.cpp
 
 #include "backend/codegen/codegen_base.h"
 #include <cmath>
 
-namespace flex {
+namespace tyl {
 
 // sin(x) -> float - Sine
 void NativeCodeGen::emitMathSin(CallExpr& node) {
@@ -565,4 +565,4 @@ void NativeCodeGen::emitMathIsInf(CallExpr& node) {
     lastExprWasFloat_ = false;
 }
 
-} // namespace flex
+} // namespace tyl

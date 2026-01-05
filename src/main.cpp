@@ -1,11 +1,9 @@
-// Flex Compiler - Main Entry Point
+// Tyl Compiler - Main Entry Point
 #include "frontend/lexer/lexer.h"
 #include "frontend/parser/parser_base.h"
 #include "semantic/expander/macro_expander.h"
 #include "semantic/checker/type_checker.h"
 #include "semantic/optimizer/optimizer.h"
-#include "backend/bytecode/compiler.h"
-#include "backend/vm/vm.h"
 #include "backend/codegen/native_codegen.h"
 #include "backend/object/object_file.h"
 #include "backend/linker/linker.h"
@@ -16,7 +14,7 @@
 #include <set>
 #include <filesystem>
 
-using namespace flex;
+using namespace tyl;
 namespace fs = std::filesystem;
 
 // Track imported files to avoid circular imports
@@ -25,20 +23,20 @@ std::set<std::string> importedFiles;
 std::vector<std::string> importChain;
 
 void printUsage(const char* prog) {
-    std::cout << "Flex Compiler v1.0\n";
+    std::cout << "Tyl Compiler v1.0\n";
     std::cout << "Usage: " << prog << " [options] <file.fx>\n";
     std::cout << "Options:\n";
-    std::cout << "  -r, --run       Run the program (default)\n";
-    std::cout << "  -c, --compile   Compile to native executable (.exe)\n";
-    std::cout << "  -S, --obj       Compile to object file (.o)\n";
     std::cout << "  -o <file>       Output file name\n";
-    std::cout << "  -l <file.o>     Link object file\n";
+    std::cout << "  -S, --obj       Compile to object file (.o/.obj)\n";
+    std::cout << "  --dll           Compile to dynamic library (.dll)\n";
+    std::cout << "  --def <file>    Use DEF file for DLL exports\n";
+    std::cout << "  --implib        Generate import library (.lib) for DLL\n";
+    std::cout << "  --export <sym>  Export symbol from DLL\n";
+    std::cout << "  -l <file>       Link static library (.lib/.a) or object file (.o/.obj)\n";
     std::cout << "  --link          Link mode (combine .o files into .exe)\n";
     std::cout << "  -t, --tokens    Print tokens\n";
     std::cout << "  -a, --ast       Print AST\n";
     std::cout << "  -s, --asm       Print generated assembly\n";
-    std::cout << "  -b, --bytecode  Print bytecode\n";
-    std::cout << "  -d, --debug     Debug mode (trace execution)\n";
     std::cout << "  -v, --verbose   Verbose output\n";
     std::cout << "  -O0             No optimization (fastest compile, debug friendly)\n";
     std::cout << "  -O1             Basic optimizations (constant folding, DCE)\n";
@@ -56,7 +54,7 @@ std::string readFile(const std::string& path) {
     std::ifstream file(path);
     if (!file) {
         auto diag = errors::cannotOpenFile(path);
-        throw FlexDiagnosticError(diag);
+        throw TylDiagnosticError(diag);
     }
     std::stringstream buffer;
     buffer << file.rdbuf();
@@ -153,9 +151,9 @@ void processImports(Program& program, const std::string& currentFile) {
                     for (auto& importedStmt : importedAST->statements) {
                         newStatements.push_back(std::move(importedStmt));
                     }
-                } catch (const FlexDiagnosticError& e) {
+                } catch (const TylDiagnosticError& e) {
                     e.render();
-                } catch (const FlexError& e) {
+                } catch (const TylError& e) {
                     std::cerr << "Error importing '" << useStmt->layerName << "': " << e.what() << "\n";
                 }
                 
@@ -181,54 +179,24 @@ std::unique_ptr<Program> parseFile(const std::string& filename) {
     return parser.parse();
 }
 
-void runRepl() {
-    std::cout << "Flex REPL v1.0 - Type 'exit' to quit\n";
-    
-    VM vm;
-    Compiler compiler;
-    
-    std::string line;
-    while (true) {
-        std::cout << ">>> ";
-        if (!std::getline(std::cin, line)) break;
-        if (line == "exit" || line == "quit") break;
-        if (line.empty()) continue;
-        
-        try {
-            Lexer lexer(line, "<repl>");
-            auto tokens = lexer.tokenize();
-            
-            Parser parser(std::move(tokens));
-            auto ast = parser.parse();
-            
-            auto chunk = compiler.compile(*ast);
-            vm.run(chunk);
-        } catch (const FlexDiagnosticError& e) {
-            e.render();
-        } catch (const FlexError& e) {
-            std::cerr << "Error: " << e.what() << "\n";
-        } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << "\n";
-        }
-    }
-}
-
 int main(int argc, char* argv[]) {
     bool showTokens = false;
     bool showAST = false;
     bool showAsm = false;
-    bool showBytecode = false;
-    bool debugMode = false;
-    bool compileNative = false;
     bool compileObject = false;
+    bool compileDll = false;
     bool linkMode = false;
     bool verbose = false;
     bool generateMap = false;
+    bool generateImplib = false;
     bool skipTypeCheck = false;
     OptLevel optLevel = OptLevel::O2;
     std::string filename;
     std::string outputFile;
+    std::string defFile;
     std::vector<std::string> objectFiles;
+    std::vector<std::string> staticLibs;
+    std::vector<std::string> exportSymbols;
     
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -241,16 +209,18 @@ int main(int argc, char* argv[]) {
             showAST = true;
         } else if (arg == "-s" || arg == "--asm") {
             showAsm = true;
-        } else if (arg == "-b" || arg == "--bytecode") {
-            showBytecode = true;
-        } else if (arg == "-d" || arg == "--debug") {
-            debugMode = true;
         } else if (arg == "-v" || arg == "--verbose") {
             verbose = true;
-        } else if (arg == "-c" || arg == "--compile") {
-            compileNative = true;
         } else if (arg == "-S" || arg == "--obj") {
             compileObject = true;
+        } else if (arg == "--dll") {
+            compileDll = true;
+        } else if (arg == "--def" && i + 1 < argc) {
+            defFile = argv[++i];
+        } else if (arg == "--implib") {
+            generateImplib = true;
+        } else if (arg == "--export" && i + 1 < argc) {
+            exportSymbols.push_back(argv[++i]);
         } else if (arg == "--link") {
             linkMode = true;
         } else if (arg == "--map") {
@@ -274,19 +244,41 @@ int main(int argc, char* argv[]) {
         } else if (arg == "-o" && i + 1 < argc) {
             outputFile = argv[++i];
         } else if (arg == "-l" && i + 1 < argc) {
-            objectFiles.push_back(argv[++i]);
+            std::string libArg = argv[++i];
+            // Check if it's a static library (.lib/.a) or object file (.o/.obj)
+            std::string ext;
+            size_t dotPos = libArg.rfind('.');
+            if (dotPos != std::string::npos) {
+                ext = libArg.substr(dotPos);
+                for (char& c : ext) c = (char)tolower(c);
+            }
+            if (ext == ".lib" || ext == ".a") {
+                staticLibs.push_back(libArg);
+            } else {
+                objectFiles.push_back(libArg);
+            }
         } else if (arg[0] != '-') {
-            // Check if it's an object file
-            if (arg.size() > 2 && arg.substr(arg.size() - 2) == ".o") {
+            // Check file extension
+            std::string ext;
+            size_t dotPos = arg.rfind('.');
+            if (dotPos != std::string::npos) {
+                ext = arg.substr(dotPos);
+                for (char& c : ext) c = (char)tolower(c);
+            }
+            if (ext == ".o" || ext == ".obj") {
                 objectFiles.push_back(arg);
+            } else if (ext == ".lib" || ext == ".a") {
+                staticLibs.push_back(arg);
             } else {
                 filename = arg;
             }
         }
     }
     
-    // Link mode - combine object files
-    if (linkMode || (!filename.empty() && filename.substr(filename.size() - 2) == ".o")) {
+    // Link mode - combine object files (supports both EXE and DLL)
+    if (linkMode || compileDll || (!filename.empty() && (filename.size() > 2 && 
+        (filename.substr(filename.size() - 2) == ".o" || 
+         filename.substr(filename.size() - 4) == ".obj")))) {
         if (objectFiles.empty() && !filename.empty()) {
             objectFiles.push_back(filename);
         }
@@ -297,13 +289,18 @@ int main(int argc, char* argv[]) {
         }
         
         if (outputFile.empty()) {
-            outputFile = "a.exe";
+            outputFile = compileDll ? "a.dll" : "a.exe";
         }
         
         Linker linker;
         linker.config().outputFile = outputFile;
         linker.config().verbose = verbose;
         linker.config().generateMap = generateMap;
+        linker.config().generateDll = compileDll;
+        linker.config().generateImportLib = generateImplib;
+        linker.config().defFile = defFile;
+        linker.config().staticLibs = staticLibs;
+        linker.config().exportSymbols = exportSymbols;
         
         for (auto& objFile : objectFiles) {
             if (!linker.addObjectFile(objFile)) {
@@ -313,7 +310,11 @@ int main(int argc, char* argv[]) {
         }
         
         if (linker.link()) {
-            std::cout << "Linked: " << outputFile << "\n";
+            if (compileDll) {
+                std::cout << "Created DLL: " << outputFile << "\n";
+            } else {
+                std::cout << "Linked: " << outputFile << "\n";
+            }
             return 0;
         } else {
             std::cerr << "Link failed:\n";
@@ -325,8 +326,8 @@ int main(int argc, char* argv[]) {
     }
     
     if (filename.empty()) {
-        runRepl();
-        return 0;
+        printUsage(argv[0]);
+        return 1;
     }
     
     try {
@@ -342,8 +343,8 @@ int main(int argc, char* argv[]) {
             // If canonical fails, use the filename as-is
         }
         
-        importedFiles.insert(normalizedFilename);  // Mark main file as imported
-        importChain.push_back(normalizedFilename);  // Add to import chain
+        importedFiles.insert(normalizedFilename);
+        importChain.push_back(normalizedFilename);
         
         // Parse the main file
         auto ast = parseFile(filename);
@@ -395,7 +396,7 @@ int main(int argc, char* argv[]) {
             }
         }
         
-        // Optimization passes (Tier 2)
+        // Optimization passes
         if (optLevel != OptLevel::O0) {
             Optimizer optimizer;
             optimizer.setOptLevel(optLevel);
@@ -421,11 +422,30 @@ int main(int argc, char* argv[]) {
                 outputFile += ".o";
             }
             
-            // TODO: Implement object file generation
-            std::cerr << "Object file generation not yet implemented\n";
-            return 1;
-        } else if (compileNative) {
-            // Native compilation
+            NativeCodeGen nativeCompiler;
+            
+            // Set codegen optimization level
+            switch (optLevel) {
+                case OptLevel::O0: nativeCompiler.setOptLevel(CodeGenOptLevel::O0); break;
+                case OptLevel::O1: nativeCompiler.setOptLevel(CodeGenOptLevel::O1); break;
+                case OptLevel::O2: nativeCompiler.setOptLevel(CodeGenOptLevel::O2); break;
+                case OptLevel::O3: nativeCompiler.setOptLevel(CodeGenOptLevel::O3); break;
+                case OptLevel::Os: nativeCompiler.setOptLevel(CodeGenOptLevel::Os); break;
+                case OptLevel::Oz: nativeCompiler.setOptLevel(CodeGenOptLevel::Oz); break;
+                case OptLevel::Ofast: nativeCompiler.setOptLevel(CodeGenOptLevel::Ofast); break;
+            }
+            
+            if (nativeCompiler.compileToObject(*ast, outputFile)) {
+                if (showAsm) {
+                    nativeCompiler.dumpAssembly(std::cout);
+                }
+                std::cout << "Compiled to object file: " << outputFile << "\n";
+            } else {
+                std::cerr << "Failed to compile to object file\n";
+                return 1;
+            }
+        } else {
+            // Default: Native compilation to executable
             if (outputFile.empty()) {
                 outputFile = filename;
                 size_t dot = outputFile.rfind('.');
@@ -437,7 +457,7 @@ int main(int argc, char* argv[]) {
             
             NativeCodeGen nativeCompiler;
             
-            // Set codegen optimization level based on optimizer level
+            // Set codegen optimization level
             switch (optLevel) {
                 case OptLevel::O0: nativeCompiler.setOptLevel(CodeGenOptLevel::O0); break;
                 case OptLevel::O1: nativeCompiler.setOptLevel(CodeGenOptLevel::O1); break;
@@ -457,25 +477,12 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Failed to compile to native executable\n";
                 return 1;
             }
-        } else {
-            // Bytecode compilation and VM execution
-            Compiler compiler;
-            auto chunk = compiler.compile(*ast);
-            
-            if (showBytecode) {
-                printBytecode(chunk);
-            }
-            
-            // Running
-            VM vm;
-            vm.setDebug(debugMode);
-            vm.run(chunk);
         }
         
-    } catch (const FlexDiagnosticError& e) {
+    } catch (const TylDiagnosticError& e) {
         e.render();
         return 1;
-    } catch (const FlexError& e) {
+    } catch (const TylError& e) {
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
     } catch (const std::exception& e) {

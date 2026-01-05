@@ -1,0 +1,13 @@
+// Channel recv no print test
+
+fn test_channel:
+    let ch = chan[int, 1]
+    ch <- 100
+    let value = <- ch
+    print("Received value: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel()
+    return 0

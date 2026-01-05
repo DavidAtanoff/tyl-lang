@@ -1,9 +1,9 @@
-// Flex Compiler - PE Generator Implementation
+// Tyl Compiler - PE Generator Implementation
 #include "pe_generator.h"
 #include <cstring>
 #include <iostream>
 
-namespace flex {
+namespace tyl {
 
 void PEGenerator::addCode(const std::vector<uint8_t>& code) {
     codeSection.insert(codeSection.end(), code.begin(), code.end());
@@ -287,4 +287,4 @@ bool PEGenerator::write(const std::string& filename) {
     return true;
 }
 
-} // namespace flex
+} // namespace tyl

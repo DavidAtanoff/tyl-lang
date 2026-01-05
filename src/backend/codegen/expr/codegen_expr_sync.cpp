@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Synchronization Expressions
+// Tyl Compiler - Native Code Generator Synchronization Expressions
 // Handles: Mutex, RWLock, Cond, Semaphore
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Mutex structure layout (allocated on heap):
 // Offset 0:  mutex handle (8 bytes) - Windows mutex handle
@@ -433,4 +433,489 @@ void NativeCodeGen::visit(LockStmt& node) {
     emitMutexUnlock();
 }
 
-} // namespace flex
+// Atomic integer structure layout (allocated on heap):
+// Offset 0:  value (8 bytes) - the atomic integer value
+// Total: 8 bytes
+// Note: On x64, aligned 8-byte reads/writes are atomic, and XCHG is always atomic
+
+void NativeCodeGen::emitAtomicCreate(int64_t initialValue) {
+    // Allocate atomic structure (8 bytes)
+    asm_.mov_rcx_imm64(8);
+    emitGCAllocRaw(8);
+    // RAX now contains pointer to atomic structure
+    
+    // Store initial value at offset 0
+    asm_.mov_rcx_imm64(initialValue);
+    asm_.mov_mem_rax_rcx(0);
+    
+    // Return atomic pointer (already in RAX)
+}
+
+void NativeCodeGen::emitAtomicLoad(MemoryOrder order) {
+    // Atomic pointer in RAX
+    // On x64, aligned 8-byte MOV is atomic
+    asm_.mov_rax_mem_rax();  // Load value atomically (rax = [rax])
+    
+    // Emit memory fence based on ordering
+    if (order == MemoryOrder::Acquire || order == MemoryOrder::AcqRel || order == MemoryOrder::SeqCst) {
+        // MFENCE for acquire/seqcst semantics
+        // 0F AE F0 = mfence
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicStore(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Emit memory fence based on ordering
+    if (order == MemoryOrder::Release || order == MemoryOrder::AcqRel || order == MemoryOrder::SeqCst) {
+        // MFENCE for release/seqcst semantics
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+    // On x64, aligned 8-byte MOV is atomic
+    asm_.mov_mem_rax_rcx();  // Store value atomically ([rax] = rcx)
+}
+
+void NativeCodeGen::emitAtomicSwap(MemoryOrder order) {
+    // Atomic pointer in RAX, new value in RCX
+    // XCHG is always atomic on x64 (implicit LOCK prefix)
+    // xchg [rax], rcx - exchanges value at [rax] with rcx
+    // Result (old value) ends up in RCX, then we move to RAX
+    
+    // 48 87 08 = xchg [rax], rcx
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x87);
+    asm_.code.push_back(0x08);
+    
+    // Move old value from RCX to RAX
+    asm_.mov_rax_rcx();
+    
+    // XCHG has implicit full barrier, but add fence for SeqCst
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicCas(MemoryOrder successOrder, MemoryOrder failureOrder) {
+    // Input: RAX = atomic pointer, RCX = expected, RDX = desired
+    // Returns 1 if successful (value was expected), 0 otherwise
+    // CMPXCHG [mem], reg: compares [mem] with RAX, if equal stores reg to [mem]
+    
+    // Save atomic pointer to a temp location
+    // We need: RAX = expected, RCX = atomic pointer, RDX = desired
+    // Currently: RAX = atomic pointer, RCX = expected, RDX = desired
+    
+    // Swap RAX and RCX: RAX should have expected, RCX should have atomic pointer
+    asm_.push_rax();          // Save atomic pointer
+    asm_.mov_rax_rcx();       // RAX = expected
+    asm_.pop_rcx();           // RCX = atomic pointer
+    
+    // Now: RAX = expected, RCX = atomic pointer, RDX = desired
+    // LOCK CMPXCHG [rcx], rdx
+    // If [rcx] == rax, then [rcx] = rdx and ZF=1
+    // If [rcx] != rax, then rax = [rcx] and ZF=0
+    asm_.code.push_back(0xF0);  // LOCK prefix
+    asm_.code.push_back(0x48);  // REX.W
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xB1);
+    asm_.code.push_back(0x11);  // ModRM: [rcx], rdx
+    
+    // Set result based on ZF: 1 if equal (success), 0 if not equal (failure)
+    // setz al; movzx rax, al
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0x94);
+    asm_.code.push_back(0xC0);  // setz al
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xB6);
+    asm_.code.push_back(0xC0);  // movzx rax, al
+    
+    // Memory fence for SeqCst
+    if (successOrder == MemoryOrder::SeqCst || failureOrder == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicAdd(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Returns old value in RAX
+    // Uses LOCK XADD instruction
+    
+    // LOCK XADD [rax], rcx - atomically adds rcx to [rax], old value goes to rcx
+    // F0 48 0F C1 08 = lock xadd [rax], rcx
+    asm_.code.push_back(0xF0);  // LOCK prefix
+    asm_.code.push_back(0x48);  // REX.W
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xC1);
+    asm_.code.push_back(0x08);  // ModRM: [rax], rcx
+    
+    // Move old value from RCX to RAX
+    asm_.mov_rax_rcx();
+    
+    // Memory fence for SeqCst
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicSub(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Returns old value in RAX
+    // Negate RCX and use XADD
+    
+    // neg rcx
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0xF7);
+    asm_.code.push_back(0xD9);
+    
+    // LOCK XADD [rax], rcx
+    asm_.code.push_back(0xF0);
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xC1);
+    asm_.code.push_back(0x08);
+    
+    // Move old value from RCX to RAX
+    asm_.mov_rax_rcx();
+    
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicAnd(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Returns old value in RAX
+    // Use CAS loop since there's no LOCK AND that returns old value
+    
+    std::string loopLabel = newLabel("atomic_and_loop");
+    
+    // Save atomic pointer and mask value
+    asm_.push_rax();  // [rsp+8] = atomic pointer
+    asm_.push_rcx();  // [rsp+0] = mask value
+    
+    asm_.label(loopLabel);
+    // Load current value from atomic
+    asm_.mov_rax_mem_rsp(8);  // rax = atomic pointer
+    asm_.mov_rax_mem_rax();   // rax = current value
+    asm_.mov_rdx_rax();       // rdx = expected (save current)
+    
+    // Compute desired = current AND mask
+    asm_.mov_rax_mem_rsp(0);  // rax = mask
+    asm_.mov_rcx_rax();       // rcx = mask
+    asm_.mov_rax_rdx();       // rax = current
+    asm_.and_rax_rcx();       // rax = current AND mask (desired)
+    asm_.push_rax();          // [rsp+0] = desired, [rsp+8] = mask, [rsp+16] = atomic ptr
+    
+    // Setup for CMPXCHG: rax = expected, rcx = atomic ptr, rdx = desired
+    asm_.mov_rax_rdx();       // rax = expected
+    asm_.mov_rax_mem_rsp(16); // rax = atomic pointer
+    asm_.mov_rcx_rax();       // rcx = atomic pointer
+    asm_.mov_rax_rdx();       // rax = expected (for cmpxchg comparison)
+    asm_.mov_rax_mem_rsp(0);  // rax = desired
+    asm_.mov_rdx_rax();       // rdx = desired
+    asm_.pop_rax();           // pop desired, restore stack
+    asm_.push_rdx();          // save desired again
+    asm_.mov_rax_mem_rsp(16); // rax = atomic pointer
+    asm_.mov_rcx_rax();       // rcx = atomic pointer
+    asm_.mov_rax_mem_rsp(8);  // rax = atomic pointer (reload)
+    asm_.mov_rax_mem_rax();   // rax = current value (expected)
+    asm_.pop_rdx();           // rdx = desired
+    
+    // LOCK CMPXCHG [rcx], rdx
+    asm_.code.push_back(0xF0);  // LOCK
+    asm_.code.push_back(0x48);  // REX.W
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xB1);
+    asm_.code.push_back(0x11);  // ModRM: [rcx], rdx
+    
+    // If ZF=0 (failed), retry
+    asm_.jnz_rel32(loopLabel);
+    
+    // Success - rax contains the old value (from cmpxchg)
+    asm_.add_rsp_imm32(16);   // clean up stack
+    
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);  // mfence
+    }
+}
+
+void NativeCodeGen::emitAtomicOr(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Returns old value in RAX
+    // Use CAS loop
+    
+    std::string loopLabel = newLabel("atomic_or_loop");
+    
+    asm_.push_rax();  // [rsp+8] = atomic pointer
+    asm_.push_rcx();  // [rsp+0] = or value
+    
+    asm_.label(loopLabel);
+    // Load current value
+    asm_.mov_rax_mem_rsp(8);  // rax = atomic pointer
+    asm_.mov_rax_mem_rax();   // rax = current value
+    asm_.mov_rdx_rax();       // rdx = expected
+    
+    // Compute desired = current OR value
+    asm_.mov_rax_mem_rsp(0);  // rax = or value
+    asm_.mov_rcx_rax();       // rcx = or value
+    asm_.mov_rax_rdx();       // rax = current
+    asm_.or_rax_rcx();        // rax = current OR value (desired)
+    asm_.push_rax();          // save desired
+    
+    // Setup for CMPXCHG
+    asm_.mov_rax_mem_rsp(16); // rax = atomic pointer
+    asm_.mov_rcx_rax();       // rcx = atomic pointer
+    asm_.mov_rax_mem_rax();   // rax = current (expected)
+    asm_.pop_rdx();           // rdx = desired
+    
+    // LOCK CMPXCHG [rcx], rdx
+    asm_.code.push_back(0xF0);
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xB1);
+    asm_.code.push_back(0x11);
+    
+    asm_.jnz_rel32(loopLabel);
+    
+    asm_.add_rsp_imm32(16);
+    
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitAtomicXor(MemoryOrder order) {
+    // Atomic pointer in RAX, value in RCX
+    // Returns old value in RAX
+    // Use CAS loop
+    
+    std::string loopLabel = newLabel("atomic_xor_loop");
+    
+    asm_.push_rax();  // [rsp+8] = atomic pointer
+    asm_.push_rcx();  // [rsp+0] = xor value
+    
+    asm_.label(loopLabel);
+    // Load current value
+    asm_.mov_rax_mem_rsp(8);  // rax = atomic pointer
+    asm_.mov_rax_mem_rax();   // rax = current value
+    asm_.mov_rdx_rax();       // rdx = expected
+    
+    // Compute desired = current XOR value
+    asm_.mov_rax_mem_rsp(0);  // rax = xor value
+    asm_.mov_rcx_rax();       // rcx = xor value
+    asm_.mov_rax_rdx();       // rax = current
+    // xor rax, rcx
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x31);
+    asm_.code.push_back(0xC8);  // xor rax, rcx
+    asm_.push_rax();          // save desired
+    
+    // Setup for CMPXCHG
+    asm_.mov_rax_mem_rsp(16); // rax = atomic pointer
+    asm_.mov_rcx_rax();       // rcx = atomic pointer
+    asm_.mov_rax_mem_rax();   // rax = current (expected)
+    asm_.pop_rdx();           // rdx = desired
+    
+    // LOCK CMPXCHG [rcx], rdx
+    asm_.code.push_back(0xF0);
+    asm_.code.push_back(0x48);
+    asm_.code.push_back(0x0F);
+    asm_.code.push_back(0xB1);
+    asm_.code.push_back(0x11);
+    
+    asm_.jnz_rel32(loopLabel);
+    
+    asm_.add_rsp_imm32(16);
+    
+    if (order == MemoryOrder::SeqCst) {
+        asm_.code.push_back(0x0F);
+        asm_.code.push_back(0xAE);
+        asm_.code.push_back(0xF0);
+    }
+}
+
+void NativeCodeGen::emitMemoryFence(MemoryOrder order) {
+    switch (order) {
+        case MemoryOrder::Relaxed:
+            // No fence needed
+            break;
+        case MemoryOrder::Acquire:
+        case MemoryOrder::Release:
+        case MemoryOrder::AcqRel:
+            // LFENCE for acquire, SFENCE for release
+            // For simplicity, use MFENCE for all
+            asm_.code.push_back(0x0F);
+            asm_.code.push_back(0xAE);
+            asm_.code.push_back(0xF0);
+            break;
+        case MemoryOrder::SeqCst:
+            // Full memory fence
+            asm_.code.push_back(0x0F);
+            asm_.code.push_back(0xAE);
+            asm_.code.push_back(0xF0);
+            break;
+    }
+}
+
+void NativeCodeGen::visit(MakeAtomicExpr& node) {
+    // Evaluate initial value
+    if (node.initialValue) {
+        node.initialValue->accept(*this);
+        asm_.push_rax();  // Save initial value
+        
+        // Allocate atomic structure (8 bytes)
+        asm_.mov_rcx_imm64(8);
+        emitGCAllocRaw(8);
+        // RAX now contains pointer to atomic structure
+        
+        // Store initial value at offset 0
+        asm_.pop_rcx();  // Restore initial value
+        asm_.mov_mem_rax_rcx(0);
+    } else {
+        // No initial value, default to 0
+        emitAtomicCreate(0);
+    }
+    
+    // Track the variable type if this is being assigned
+    // (handled by VarDecl visitor)
+}
+
+void NativeCodeGen::visit(AtomicLoadExpr& node) {
+    node.atomic->accept(*this);
+    emitAtomicLoad(node.order);
+}
+
+void NativeCodeGen::visit(AtomicStoreExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicStore(node.order);
+}
+
+void NativeCodeGen::visit(AtomicSwapExpr& node) {
+    // Evaluate new value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save new value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore new value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicSwap(node.order);
+}
+
+void NativeCodeGen::visit(AtomicCasExpr& node) {
+    // Evaluate desired value first
+    node.desired->accept(*this);
+    asm_.push_rax();  // Save desired
+    
+    // Evaluate expected value
+    node.expected->accept(*this);
+    asm_.push_rax();  // Save expected
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore expected to RCX, desired to RDX
+    asm_.pop_rcx();  // expected
+    asm_.pop_rdx();  // desired
+    
+    emitAtomicCas(node.successOrder, node.failureOrder);
+}
+
+void NativeCodeGen::visit(AtomicAddExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicAdd(node.order);
+}
+
+void NativeCodeGen::visit(AtomicSubExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicSub(node.order);
+}
+
+void NativeCodeGen::visit(AtomicAndExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicAnd(node.order);
+}
+
+void NativeCodeGen::visit(AtomicOrExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicOr(node.order);
+}
+
+void NativeCodeGen::visit(AtomicXorExpr& node) {
+    // Evaluate value first
+    node.value->accept(*this);
+    asm_.push_rax();  // Save value
+    
+    // Evaluate atomic pointer
+    node.atomic->accept(*this);
+    
+    // Restore value to RCX
+    asm_.pop_rcx();
+    
+    emitAtomicXor(node.order);
+}
+
+} // namespace tyl

@@ -1,0 +1,7 @@
+// Test inclusive range ..=
+
+fn main:
+    print("Testing inclusive range 1..=5:")
+    for i in 1..=5:
+        print(i)
+    print("Done!")

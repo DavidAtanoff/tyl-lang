@@ -1,14 +1,14 @@
-// Flex Compiler - Custom Allocator Interface
+// Tyl Compiler - Custom Allocator Interface
 // Allows users to specify alternative memory allocators
-#ifndef FLEX_ALLOCATOR_H
-#define FLEX_ALLOCATOR_H
+#ifndef TYL_ALLOCATOR_H
+#define TYL_ALLOCATOR_H
 
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Allocator function signatures
 using AllocFn = void* (*)(size_t size, size_t alignment);
@@ -130,26 +130,26 @@ private:
 // Runtime allocator functions (called from generated code)
 extern "C" {
     // Set custom allocator functions
-    void flex_set_allocator(AllocFn alloc, FreeFn free, ReallocFn realloc, void* userData);
+    void TYL_set_allocator(AllocFn alloc, FreeFn free, ReallocFn realloc, void* userData);
     
     // Reset to default system allocator
-    void flex_reset_allocator();
+    void TYL_reset_allocator();
     
     // Allocate using current allocator
-    void* flex_alloc(size_t size);
-    void* flex_alloc_aligned(size_t size, size_t alignment);
+    void* TYL_alloc(size_t size);
+    void* TYL_alloc_aligned(size_t size, size_t alignment);
     
     // Free using current allocator
-    void flex_free(void* ptr, size_t size);
+    void TYL_free(void* ptr, size_t size);
     
     // Reallocate using current allocator
-    void* flex_realloc(void* ptr, size_t oldSize, size_t newSize);
+    void* TYL_realloc(void* ptr, size_t oldSize, size_t newSize);
     
     // Get allocator stats
-    size_t flex_allocator_total_allocated();
-    size_t flex_allocator_peak_usage();
+    size_t TYL_allocator_total_allocated();
+    size_t TYL_allocator_peak_usage();
 }
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_ALLOCATOR_H
+#endif // TYL_ALLOCATOR_H

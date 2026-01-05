@@ -1,0 +1,7 @@
+// No Variable Test - don't store is_ready result
+
+fn main -> int:
+    let f = make_future[int]()
+    future_is_ready(f)
+    future_set(f, 42)
+    return 0

@@ -1,12 +1,12 @@
-// Flex Compiler - Peephole Optimizer for x64 Code
+// Tyl Compiler - Peephole Optimizer for x64 Code
 // Performs local optimizations on generated machine code
-#ifndef FLEX_PEEPHOLE_H
-#define FLEX_PEEPHOLE_H
+#ifndef TYL_PEEPHOLE_H
+#define TYL_PEEPHOLE_H
 
 #include <vector>
 #include <cstdint>
 
-namespace flex {
+namespace tyl {
 
 // Peephole optimizer that works on raw x64 machine code
 class PeepholeOptimizer {
@@ -54,6 +54,6 @@ private:
                       const std::vector<uint8_t>& replacement, size_t oldLen);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_PEEPHOLE_H
+#endif // TYL_PEEPHOLE_H

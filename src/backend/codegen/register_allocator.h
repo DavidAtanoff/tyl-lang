@@ -1,7 +1,7 @@
-// Flex Compiler - Register Allocator
+// Tyl Compiler - Register Allocator
 // Linear Scan Register Allocation for local variables
-#ifndef FLEX_REGISTER_ALLOCATOR_H
-#define FLEX_REGISTER_ALLOCATOR_H
+#ifndef TYL_REGISTER_ALLOCATOR_H
+#define TYL_REGISTER_ALLOCATOR_H
 
 #include "frontend/ast/ast.h"
 #include <map>
@@ -9,7 +9,7 @@
 #include <vector>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Available callee-saved registers for variable allocation
 // Windows x64: RBX, R12, R13, R14, R15 are callee-saved
@@ -74,6 +74,6 @@ private:
     void allocateRegisters();
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_REGISTER_ALLOCATOR_H
+#endif // TYL_REGISTER_ALLOCATOR_H

@@ -1,0 +1,13 @@
+// Channel recv in function
+
+fn test_recv:
+    let ch = chan[int, 1]
+    ch <- 42
+    let v = <- ch
+    print("Recv value: ")
+    print(v)
+    print("\n")
+
+fn main -> int:
+    test_recv()
+    return 0

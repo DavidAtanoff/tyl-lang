@@ -1,7 +1,7 @@
-// Flex Compiler - Global Register Allocator
+// Tyl Compiler - Global Register Allocator
 // Top-level register allocation for program-wide optimization
-#ifndef FLEX_GLOBAL_REGISTER_ALLOCATOR_H
-#define FLEX_GLOBAL_REGISTER_ALLOCATOR_H
+#ifndef TYL_GLOBAL_REGISTER_ALLOCATOR_H
+#define TYL_GLOBAL_REGISTER_ALLOCATOR_H
 
 #include "frontend/ast/ast.h"
 #include "register_allocator.h"
@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 
-namespace flex {
+namespace tyl {
 
 // Global variable info
 struct GlobalVarInfo {
@@ -118,6 +118,6 @@ private:
     void allocateRegisters();
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_GLOBAL_REGISTER_ALLOCATOR_H
+#endif // TYL_GLOBAL_REGISTER_ALLOCATOR_H

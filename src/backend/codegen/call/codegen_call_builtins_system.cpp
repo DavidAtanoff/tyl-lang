@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator System Builtin Calls
+// Tyl Compiler - Native Code Generator System Builtin Calls
 // Handles: exit, sleep, platform, arch, hostname, username, cpu_count, time functions
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // System builtin implementations extracted from codegen_call_core.cpp
 
@@ -220,4 +220,4 @@ void NativeCodeGen::emitGetLocalTimeField(int32_t fieldOffset) {
     asm_.code.push_back((offset >> 24) & 0xFF);
 }
 
-} // namespace flex
+} // namespace tyl

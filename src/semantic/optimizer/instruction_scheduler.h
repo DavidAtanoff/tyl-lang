@@ -1,7 +1,7 @@
-// Flex Compiler - Instruction Scheduler
+// Tyl Compiler - Instruction Scheduler
 // Reorders instructions to hide latencies and improve pipeline utilization
-#ifndef FLEX_INSTRUCTION_SCHEDULER_H
-#define FLEX_INSTRUCTION_SCHEDULER_H
+#ifndef TYL_INSTRUCTION_SCHEDULER_H
+#define TYL_INSTRUCTION_SCHEDULER_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -9,7 +9,7 @@
 #include <set>
 #include <map>
 
-namespace flex {
+namespace tyl {
 
 // Instruction latency information for x64
 struct InstructionLatency {
@@ -98,6 +98,6 @@ private:
     bool canReorder(const std::vector<uint8_t>& code, size_t i1, size_t i2);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_INSTRUCTION_SCHEDULER_H
+#endif // TYL_INSTRUCTION_SCHEDULER_H

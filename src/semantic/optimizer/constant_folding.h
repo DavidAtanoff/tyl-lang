@@ -1,14 +1,14 @@
-// Flex Compiler - Constant Folding Optimization Pass
+// Tyl Compiler - Constant Folding Optimization Pass
 // Evaluates constant expressions at compile time
-#ifndef FLEX_CONSTANT_FOLDING_H
-#define FLEX_CONSTANT_FOLDING_H
+#ifndef TYL_CONSTANT_FOLDING_H
+#define TYL_CONSTANT_FOLDING_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
 #include <optional>
 #include <variant>
 
-namespace flex {
+namespace tyl {
 
 // Result of constant evaluation
 using ConstValue = std::variant<std::monostate, int64_t, double, bool, std::string>;
@@ -39,6 +39,6 @@ private:
     void processBlock(std::vector<StmtPtr>& statements);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_CONSTANT_FOLDING_H
+#endif // TYL_CONSTANT_FOLDING_H

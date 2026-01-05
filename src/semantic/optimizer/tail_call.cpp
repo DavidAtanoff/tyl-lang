@@ -1,8 +1,8 @@
-// Flex Compiler - Tail Call Optimization Implementation
+// Tyl Compiler - Tail Call Optimization Implementation
 // Transforms tail-recursive functions into iterative loops
 #include "tail_call.h"
 
-namespace flex {
+namespace tyl {
 
 std::string TailCallOptimizationPass::newLabel(const std::string& prefix) {
     return "$tco_" + prefix + "_" + std::to_string(labelCounter_++);
@@ -376,4 +376,4 @@ ExprPtr TailCallOptimizationPass::transformExpression(Expression* expr) {
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

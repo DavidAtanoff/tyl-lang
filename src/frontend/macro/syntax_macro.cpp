@@ -1,7 +1,7 @@
-// Flex Compiler - Syntax Macro System Implementation
+// Tyl Compiler - Syntax Macro System Implementation
 #include "syntax_macro.h"
 
-namespace flex {
+namespace tyl {
 
 SyntaxMacroRegistry& SyntaxMacroRegistry::instance() {
     static SyntaxMacroRegistry reg;
@@ -135,4 +135,4 @@ StmtPtr parseRegex(const std::vector<Token>& tokens) {
 }
 
 } // namespace dsl
-} // namespace flex
+} // namespace tyl

@@ -1,8 +1,8 @@
-# Flex Programming Language
+# Tyl Programming Language - OUTDATED README
 
 A modern, statically-typed programming language with Python-like syntax that compiles directly to native machine code. Built from scratch in C++ without LLVM.
 
-```flex
+```tyl
 // Hello World
 println("Hello, World!")
 
@@ -65,35 +65,35 @@ match day:
 cmake -B build
 cmake --build build --config Release
 
-# The compiler is at build/Release/flex.exe
+# The compiler is at build/Release/tyl.exe
 ```
 
 ### Running Programs
 
 ```bash
 # Compile and run (bytecode VM)
-flex program.fx
+tyl program.tyl
 
 # Compile to native executable
-flex -c program.fx -o program.exe
+tyl -c program.tyl -o program.exe
 
 # Run with optimizations
-flex -c program.fx -o program.exe -O3
+tyl -c program.tyl -o program.exe -O3
 
 # Show AST
-flex -a program.fx
+tyl -a program.tyl
 
 # Show tokens
-flex -t program.fx
+tyl -t program.tyl
 ```
 
 ---
 
 ## Language Syntax
 
-Flex uses Python-like indentation for blocks. No semicolons, no braces.
+Tyl uses Python-like indentation for blocks. No semicolons, no braces.
 
-```flex
+```tyl
 // Single-line comment
 
 /* Multi-line
@@ -167,7 +167,7 @@ async await spawn unsafe extern
 
 ### Compound Types
 
-```flex
+```tyl
 [T]                 // List of T
 {K: V}              // Map from K to V
 (T1, T2, T3)        // Tuple
@@ -182,7 +182,7 @@ fn(T1, T2) -> R     // Function type
 
 Types are inferred when possible:
 
-```flex
+```tyl
 x = 42              // Inferred as int
 pi = 3.14           // Inferred as float
 name = "Alice"      // Inferred as str
@@ -202,7 +202,7 @@ items: [str] = []
 
 Variables are immutable by default. No keyword needed.
 
-```flex
+```tyl
 x = 42
 name = "Alice"
 numbers = [1, 2, 3]
@@ -215,7 +215,7 @@ numbers = [1, 2, 3]
 
 Use `mut` for variables that need to change:
 
-```flex
+```tyl
 mut counter = 0
 counter += 1
 counter = counter * 2
@@ -228,7 +228,7 @@ items = push(items, "new item")
 
 Use `::` for values computed at compile time:
 
-```flex
+```tyl
 PI :: 3.14159
 MAX_SIZE :: 1024
 GREETING :: "Hello"
@@ -239,7 +239,7 @@ DOUBLED :: MAX_SIZE * 2
 
 ### Compound Assignment
 
-```flex
+```tyl
 mut x = 10
 x += 5      // x = x + 5
 x -= 3      // x = x - 3
@@ -254,7 +254,7 @@ x %= 3      // x = x % 3
 
 ### Standard Functions
 
-```flex
+```tyl
 // Multi-line function (no parentheses around parameters)
 fn greet name:
     println("Hello, {name}!")
@@ -276,7 +276,7 @@ fn say_hello:
 
 Use `=>` for functions with a single expression (implicit return):
 
-```flex
+```tyl
 fn square x => x * x
 fn double x => x * 2
 fn max a, b => a if a > b else b
@@ -285,7 +285,7 @@ fn is_even n => n % 2 == 0
 
 ### Default Parameters
 
-```flex
+```tyl
 fn greet name, greeting = "Hello":
     println("{greeting}, {name}!")
 
@@ -295,7 +295,7 @@ greet("Bob", "Hi")          // "Hi, Bob!"
 
 ### Named Arguments
 
-```flex
+```tyl
 fn create_user name, age, active = true:
     // ...
 
@@ -305,7 +305,7 @@ create_user(age: 25, name: "Bob", active: false)
 
 ### Recursion
 
-```flex
+```tyl
 fn factorial n:
     if n <= 1:
         return 1
@@ -319,7 +319,7 @@ fn fibonacci n:
 
 ### Nested Functions
 
-```flex
+```tyl
 fn outer x:
     fn inner y:
         return x + y
@@ -334,7 +334,7 @@ result = outer(5)  // 15
 
 Lambdas are anonymous functions using `|params| => expression`:
 
-```flex
+```tyl
 // Single parameter
 double = |x| => x * 2
 
@@ -351,7 +351,7 @@ sum = add(3, 4)         // 7
 
 ### Higher-Order Functions
 
-```flex
+```tyl
 numbers = [1, 2, 3, 4, 5]
 
 // Map
@@ -368,7 +368,7 @@ sum = reduce(numbers, 0, |acc, x| => acc + x)
 
 Lambdas capture variables from their enclosing scope:
 
-```flex
+```tyl
 fn make_adder n:
     return |x| => x + n
 
@@ -382,7 +382,7 @@ result = add_five(10)   // 15
 
 ### If/Elif/Else
 
-```flex
+```tyl
 if score >= 90:
     println("A")
 elif score >= 80:
@@ -395,20 +395,20 @@ else:
 
 ### Conditional Expression
 
-```flex
+```tyl
 result = "positive" if x > 0 else "non-positive"
 max_val = a if a > b else b
 ```
 
 ### Ternary Operator
 
-```flex
+```tyl
 result = condition ? value_if_true : value_if_false
 ```
 
 ### While Loop
 
-```flex
+```tyl
 mut i = 0
 while i < 10:
     println(i)
@@ -417,7 +417,7 @@ while i < 10:
 
 ### For Loop with Range
 
-```flex
+```tyl
 // Exclusive range (0 to 9)
 for i in 0..10:
     println(i)
@@ -436,7 +436,7 @@ for i in range(5, 10):
 
 ### For Loop with Collection
 
-```flex
+```tyl
 names = ["Alice", "Bob", "Charlie"]
 for name in names:
     println("Hello, {name}!")
@@ -448,7 +448,7 @@ for n in numbers:
 
 ### Break and Continue
 
-```flex
+```tyl
 for i in 0..100:
     if i == 50:
         break           // Exit loop
@@ -463,7 +463,7 @@ for i in 0..100:
 
 ### Lists
 
-```flex
+```tyl
 // Creation
 numbers = [1, 2, 3, 4, 5]
 empty = []
@@ -483,7 +483,7 @@ for n in numbers:
 
 ### List Comprehensions
 
-```flex
+```tyl
 // Basic comprehension
 squares = [x * x for x in 0..10]
 
@@ -496,7 +496,7 @@ big_squares = [x * x for x in 0..100 if x * x > 50]
 
 ### List Operations
 
-```flex
+```tyl
 numbers = [1, 2, 3]
 
 // Push (returns new list)
@@ -511,7 +511,7 @@ size = len(numbers)
 
 ### Records (Anonymous Structs)
 
-```flex
+```tyl
 // Creation
 point = {x: 10, y: 20}
 person = {name: "Alice", age: 30, active: true}
@@ -523,7 +523,7 @@ println(person.name)    // "Alice"
 
 ### Maps
 
-```flex
+```tyl
 // Creation
 scores = {"alice": 100, "bob": 85}
 
@@ -540,7 +540,7 @@ scores["charlie"] = 90
 
 ### Basic Match
 
-```flex
+```tyl
 match value:
     0 -> println("zero")
     1 -> println("one")
@@ -550,7 +550,7 @@ match value:
 
 ### Match with Blocks
 
-```flex
+```tyl
 match command:
     "start" ->
         println("Starting...")
@@ -564,7 +564,7 @@ match command:
 
 ### Match with Guards
 
-```flex
+```tyl
 match n:
     x if x < 0 -> println("negative")
     x if x == 0 -> println("zero")
@@ -573,7 +573,7 @@ match n:
 
 ### Match on Types
 
-```flex
+```tyl
 match result:
     Ok(value) -> println("Success: {value}")
     Err(msg) -> println("Error: {msg}")
@@ -585,7 +585,7 @@ match result:
 
 ### Nullable Types
 
-```flex
+```tyl
 // Nullable declaration
 value: int? = nil
 value = 42
@@ -600,9 +600,9 @@ if value != nil:
 
 ### Result Type
 
-Flex provides built-in functions for Result-style error handling:
+Tyl provides built-in functions for Result-style error handling:
 
-```flex
+```tyl
 // Create success and error results
 ok_val = Ok(42)        // Success with value 42
 err_val = Err(0)       // Error
@@ -620,7 +620,7 @@ unwrap_or(err_val, 0)  // Returns 0 (the default)
 
 Example with functions:
 
-```flex
+```tyl
 fn divide a, b:
     if b == 0:
         return Err(0)
@@ -650,7 +650,7 @@ safe_result = unwrap_or(divide(10, 0), 0)  // Returns 0 on error
 
 ### Try Expression
 
-```flex
+```tyl
 // Try with default
 value = try risky_operation() else 0
 
@@ -664,7 +664,7 @@ value = risky_operation() ?? 0
 
 ### Records (Structs)
 
-```flex
+```tyl
 record Point:
     x: float
     y: float
@@ -685,7 +685,7 @@ println(hero.health)        // 100 (default)
 
 ### Enums
 
-```flex
+```tyl
 enum Color:
     Red
     Green
@@ -703,7 +703,7 @@ status = Status.Ok
 
 ### Type Aliases
 
-```flex
+```tyl
 type UserID = int
 type Handler = fn(int) -> bool
 type Point2D = {x: float, y: float}
@@ -719,7 +719,7 @@ id: UserID = 12345
 
 Traits define shared behavior:
 
-```flex
+```tyl
 trait Printable:
     fn to_string self -> str
 
@@ -732,7 +732,7 @@ trait Hashable:
 
 ### Implementing Traits
 
-```flex
+```tyl
 impl Printable for Point:
     fn to_string self -> str:
         return "({self.x}, {self.y})"
@@ -746,7 +746,7 @@ impl Comparable for Point:
 
 ### Generics
 
-```flex
+```tyl
 // Generic function
 fn swap[T] a: T, b: T -> (T, T):
     return (b, a)
@@ -768,8 +768,8 @@ fn print_all[T: Printable] items: [T]:
 
 ### File Imports
 
-```flex
-// math_utils.fx
+```tyl
+// math_utils.tyl
 PI :: 3.14159
 
 fn square x => x * x
@@ -778,9 +778,9 @@ fn circle_area r:
     return PI * r * r
 ```
 
-```flex
-// main.fx
-use "math_utils.fx"
+```tyl
+// main.tyl
+use "math_utils.tyl"
 
 println(PI)                 // 3.14159
 println(square(5))          // 25
@@ -789,8 +789,8 @@ println(circle_area(10))    // 314.159
 
 ### Import with Alias
 
-```flex
-use "math_utils.fx" as math
+```tyl
+use "math_utils.tyl" as math
 
 println(math.PI)
 println(math.square(5))
@@ -798,8 +798,8 @@ println(math.square(5))
 
 ### Selective Imports
 
-```flex
-use "math_utils.fx"::{PI, square}
+```tyl
+use "math_utils.tyl"::{PI, square}
 
 println(PI)
 println(square(5))
@@ -807,7 +807,7 @@ println(square(5))
 
 ### Inline Modules
 
-```flex
+```tyl
 module math:
     PI :: 3.14159
     
@@ -831,7 +831,7 @@ squared = math.square(6)
 
 ### Expression Macros
 
-```flex
+```tyl
 macro debug expr:
     println("DEBUG: {expr}")
 
@@ -848,7 +848,7 @@ assert(x > 0)
 
 Define custom infix operators:
 
-```flex
+```tyl
 // Power operator
 macro infix ** precedence 8:
     mut result = 1
@@ -864,7 +864,7 @@ x = 2 ** 10     // 1024
 
 Create embedded domain-specific languages:
 
-```flex
+```tyl
 // Define SQL DSL
 syntax sql:
     => db.query(content)
@@ -889,7 +889,7 @@ page = html:
 
 Group related macros that can be enabled/disabled:
 
-```flex
+```tyl
 // Define a debug layer
 layer debug:
     macro log msg:
@@ -917,9 +917,9 @@ assert(x > 0, "x must be positive")
 
 ### Safe Mode (Default)
 
-By default, Flex uses automatic memory management:
+By default, Tyl uses automatic memory management:
 
-```flex
+```tyl
 // Memory is automatically managed
 person = {name: "Alice", age: 30}
 numbers = [1, 2, 3, 4, 5]
@@ -931,7 +931,7 @@ numbers = [1, 2, 3, 4, 5]
 
 For low-level control, use `unsafe` blocks:
 
-```flex
+```tyl
 unsafe:
     // Raw pointer allocation
     ptr = new int
@@ -949,7 +949,7 @@ unsafe:
 
 ### Pointer Operations
 
-```flex
+```tyl
 unsafe:
     x = 42
     ptr = &x            // Address-of
@@ -963,7 +963,7 @@ unsafe:
 
 ### Memory Functions
 
-```flex
+```tyl
 unsafe:
     // Allocate raw memory
     buffer = alloc(1024)
@@ -980,7 +980,7 @@ unsafe:
 
 ### Stack Allocation
 
-```flex
+```tyl
 unsafe:
     // Allocate memory on the stack (faster, auto-freed on function return)
     buffer = stackalloc(256)
@@ -990,7 +990,7 @@ unsafe:
 
 ### Placement New
 
-```flex
+```tyl
 unsafe:
     // Allocate raw memory
     ptr = alloc(8)
@@ -1007,7 +1007,7 @@ unsafe:
 
 ### GC Pinning
 
-```flex
+```tyl
 unsafe:
     // Create a GC-managed object
     data = [1, 2, 3, 4, 5]
@@ -1024,7 +1024,7 @@ unsafe:
 
 ### GC Root Registration
 
-```flex
+```tyl
 unsafe:
     // Register an external pointer as a GC root
     // Useful when storing GC pointers in non-GC memory
@@ -1040,9 +1040,9 @@ unsafe:
 
 ### Custom Allocators
 
-Flex supports custom memory allocators for specialized use cases like arena allocation, pool allocation, or integration with external memory managers.
+Tyl supports custom memory allocators for specialized use cases like arena allocation, pool allocation, or integration with external memory managers.
 
-```flex
+```tyl
 // Define custom allocator functions
 fn my_alloc size, alignment:
     // Custom allocation logic
@@ -1073,7 +1073,7 @@ peak = allocator_peak()      // Peak memory usage
 
 ### Async Functions
 
-```flex
+```tyl
 async fn fetch_data url:
     response = await http_get(url)
     return response.body
@@ -1090,7 +1090,7 @@ async fn process_all urls:
 
 Run tasks concurrently:
 
-```flex
+```tyl
 async fn main:
     // Spawn concurrent tasks
     task1 = spawn fetch_data("http://api1.com")
@@ -1105,7 +1105,7 @@ async fn main:
 
 ### Parallel Processing
 
-```flex
+```tyl
 async fn parallel_map items, fn:
     tasks = [spawn fn(item) for item in items]
     return [await task for task in tasks]
@@ -1113,15 +1113,110 @@ async fn parallel_map items, fn:
 
 > **Note**: Functions used with `spawn` must have at least one parameter (parser limitation). Use a dummy parameter if needed: `fn worker x: return 42`
 
+### Future/Promise
+
+Futures provide a way to represent values that will be available later:
+
+```tyl
+// Create a future
+future: Future[int] = Future[int]()
+
+// Set the value (from another thread)
+future.set(42)
+
+// Check if ready
+if future.is_ready():
+    println("Value is ready!")
+
+// Get the value (blocks until ready)
+result = future.get()
+```
+
+### Thread Pool
+
+Thread pools manage a set of worker threads for parallel task execution:
+
+```tyl
+// Create a pool with 4 workers
+pool: ThreadPool = ThreadPool(4)
+
+// Submit a task
+fn compute x:
+    return x * x
+
+pool.submit(&compute)
+
+// Shutdown when done
+pool.shutdown()
+```
+
+### Select (Wait on Multiple Channels)
+
+Select allows waiting on multiple channel operations:
+
+```tyl
+ch1: chan[int] = chan[int]
+ch2: chan[str] = chan[str]
+
+select:
+    <- ch1 ->
+        println("Received from ch1")
+    <- ch2 ->
+        println("Received from ch2")
+    default ->
+        println("No channel ready")
+```
+
+### Timeout Operations
+
+Perform channel operations with timeouts:
+
+```tyl
+ch: chan[int] = chan[int, 1]
+
+// Receive with 1 second timeout
+value = ch.recv_timeout(1000)
+if value == nil:
+    println("Timeout!")
+else:
+    println("Got: {value}")
+
+// Send with timeout
+success = ch.send_timeout(42, 1000)
+if success:
+    println("Sent successfully")
+else:
+    println("Send timed out")
+```
+
+### Cancellation
+
+Cancel running tasks using cancellation tokens:
+
+```tyl
+// Create a cancellation token
+token: CancelToken = CancelToken()
+
+// Pass to a long-running task
+fn long_task token:
+    while not token.is_cancelled():
+        // Do work...
+        sleep(100)
+    println("Task cancelled")
+
+// Cancel from another thread
+token.cancel()
+```
+
 ---
 
 ## External Functions (C/FFI Interop)
 
-Flex supports calling external C functions through the `extern` keyword. This enables interoperability with system libraries, DLLs, and C code.
+Tyl supports calling external C functions through the `extern` keyword. This enables interoperability with system libraries, DLLs, and C code.
 
 ### Basic DLL Imports
 
-```flex
+```tyl
 // Import functions from Windows DLLs
 extern "kernel32.dll":
     fn GetStdHandle(nStdHandle: int) -> int
@@ -1137,9 +1232,9 @@ println("Elapsed: {elapsed}ms")
 
 ### Pointer Types
 
-Flex supports C-style pointer syntax for FFI:
+Tyl supports C-style pointer syntax for FFI:
 
-```flex
+```tyl
 // Pointer type declarations
 let p: *int = 0           // Pointer to int
 let s: *str = 0           // Pointer to string  
@@ -1154,7 +1249,7 @@ extern "kernel32.dll":
 
 For functions that will be linked later (static linking):
 
-```flex
+```tyl
 // Forward declarations without library
 extern "C":
     fn my_c_function(x: int, y: int) -> int
@@ -1163,7 +1258,7 @@ extern "C":
 
 ### Calling Conventions
 
-```flex
+```tyl
 // Windows x64 calling convention (default)
 extern "kernel32.dll":
     fn ExitProcess(code: int)
@@ -1177,7 +1272,7 @@ extern "cdecl" "msvcrt.dll":
 
 ### Variadic Functions
 
-```flex
+```tyl
 extern "C":
     fn printf(fmt: *str, ...) -> int
 ```
@@ -1186,12 +1281,12 @@ extern "C":
 
 Both parenthesized and space-separated parameter styles are supported:
 
-```flex
+```tyl
 extern "kernel32.dll":
     // Parenthesized style (C-like)
     fn Sleep(dwMilliseconds: int)
     
-    // Space-separated style (Flex-like)  
+    // Space-separated style (Tyl-like)  
     fn GetStdHandle nStdHandle: int -> int
 ```
 
@@ -1274,7 +1369,7 @@ File modes:
 - `"rw"` - Read/Write (creates if needed)
 
 Example:
-```flex
+```tyl
 // Write to file
 h = open("output.txt", "w")
 write(h, "Hello, World!\n")
@@ -1295,7 +1390,7 @@ close(h)
 ### Compilation Pipeline
 
 ```
-Source Code (.fx)
+Source Code (.tyl)
        │
        ▼
 ┌─────────────────┐
@@ -1433,18 +1528,6 @@ src/
 │   └── object/                # Object file format
 │       └── object_file.*      # .o file generation
 │
-├── stdlib/                     # Standard library
-│   ├── flex_stdlib.h          # Stdlib interface
-│   ├── stdlib_core.cpp        # Core functions
-│   ├── io/                    # I/O functions
-│   ├── string/                # String functions
-│   ├── math/                  # Math functions
-│   ├── list/                  # List functions
-│   ├── map/                   # Map functions
-│   ├── time/                  # Time functions
-│   ├── system/                # System functions
-│   └── json/                  # JSON parsing
-│
 └── cli/                        # CLI utilities
     ├── ast_printer.h          # AST visualization
     └── ast_printer.cpp        # Pretty printing
@@ -1504,7 +1587,7 @@ src/
 
 ### Optimization Examples
 
-```flex
+```tyl
 // Before optimization
 fn example:
     x = 2 + 3           // Constant folding
@@ -1519,7 +1602,7 @@ fn example:
     return 10           // All computed at compile time
 ```
 
-```flex
+```tyl
 // Tail call optimization
 fn factorial n, acc = 1:
     if n <= 1:
@@ -1541,7 +1624,7 @@ fn factorial n, acc = 1:
 ### Basic Usage
 
 ```bash
-flex [options] <file.fx>
+tyl [options] <file.tyl>
 ```
 
 ### Options
@@ -1580,34 +1663,34 @@ flex [options] <file.fx>
 
 ```bash
 # Run a program (bytecode VM)
-flex program.fx
+tyl program.tyl
 
 # Compile to executable
-flex -c program.fx -o program.exe
+tyl -c program.tyl -o program.exe
 
 # Compile with maximum optimization
-flex -c program.fx -o program.exe -O3
+tyl -c program.tyl -o program.exe -O3
 
 # Show AST
-flex -a program.fx
+tyl -a program.tyl
 
 # Show tokens
-flex -t program.fx
+tyl -t program.tyl
 
 # Show generated assembly
-flex -c program.fx -o program.exe -s
+tyl -c program.tyl -o program.exe -s
 
 # Compile without type checking (faster, less safe)
-flex -c program.fx -o program.exe --no-typecheck
+tyl -c program.tyl -o program.exe --no-typecheck
 
 # Verbose compilation
-flex -c program.fx -o program.exe -v
+tyl -c program.tyl -o program.exe -v
 
 # Link multiple object files
-flex --link file1.o file2.o -o program.exe
+tyl --link file1.o file2.o -o program.exe
 
 # Interactive REPL
-flex
+tyl
 ```
 
 ---
@@ -1639,7 +1722,7 @@ flex
 | Records | ✅ Complete | Anonymous structs |
 | Enums | ✅ Complete | With values |
 | Modules | ✅ Complete | Inline modules |
-| File Imports | ✅ Complete | `use "file.fx"` |
+| File Imports | ✅ Complete | `use "file.tyl"` |
 | Extern Functions | ✅ Complete | Windows DLL calls |
 | Built-in Functions | ✅ Complete | print, len, time, etc. |
 | Result Types | ✅ Complete | Ok, Err, is_ok, is_err, unwrap, unwrap_or |
@@ -1826,7 +1909,7 @@ flex
 
 ### Ultimate Vision
 
-Flex aims to be a **universal programming language** that:
+Tyl aims to be a **universal programming language** that:
 
 1. **Compiles everywhere**: x64, ARM64, WASM, and future architectures
 2. **Runs fast**: Native performance comparable to C/C++
@@ -1862,4 +1945,4 @@ MIT License
 
 ---
 
-*Flex: Write less. Run fast.*
+*Tyl: Write less. Run fast.*

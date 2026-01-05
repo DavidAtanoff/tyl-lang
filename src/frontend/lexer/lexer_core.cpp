@@ -1,9 +1,9 @@
-// Flex Compiler - Lexer Core
+// Tyl Compiler - Lexer Core
 // Keywords, token creation, core methods
 
 #include "lexer_base.h"
 
-namespace flex {
+namespace tyl {
 
 const std::unordered_map<std::string, TokenType> Lexer::keywords = {
     {"fn", TokenType::FN}, {"if", TokenType::IF}, {"else", TokenType::ELSE},
@@ -30,7 +30,42 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords = {
     {"RWLock", TokenType::RWLOCK},
     {"Cond", TokenType::COND},
     {"Semaphore", TokenType::SEMAPHORE},
-    {"lock", TokenType::LOCK}
+    {"lock", TokenType::LOCK},
+    {"Atomic", TokenType::ATOMIC},
+    // Smart pointer keywords
+    {"Box", TokenType::BOX},
+    {"Rc", TokenType::RC},
+    {"Arc", TokenType::ARC},
+    {"Weak", TokenType::WEAK_PTR},
+    {"Cell", TokenType::CELL},
+    {"RefCell", TokenType::REFCELL},
+    // New syntax redesign keywords
+    {"loop", TokenType::LOOP},
+    {"unless", TokenType::UNLESS},
+    {"export", TokenType::EXPORT},
+    {"inline", TokenType::INLINE},
+    {"noinline", TokenType::NOINLINE},
+    {"packed", TokenType::PACKED},
+    {"align", TokenType::ALIGN},
+    {"repr", TokenType::REPR},
+    {"hidden", TokenType::HIDDEN},
+    {"cdecl", TokenType::CDECL},
+    {"stdcall", TokenType::STDCALL},
+    {"fastcall", TokenType::FASTCALL},
+    {"naked", TokenType::NAKED},
+    {"comptime", TokenType::COMPTIME},
+    {"require", TokenType::REQUIRE},
+    {"ensure", TokenType::ENSURE},
+    {"invariant", TokenType::INVARIANT},
+    {"scope", TokenType::SCOPE},
+    {"with", TokenType::WITH},
+    {"is", TokenType::IS},
+    {"from", TokenType::FROM},
+    // Algebraic effects keywords
+    {"effect", TokenType::EFFECT},
+    {"handle", TokenType::HANDLE},
+    {"perform", TokenType::PERFORM},
+    {"resume", TokenType::RESUME}
 };
 
 Lexer::Lexer(const std::string& src, const std::string& fname)
@@ -76,4 +111,4 @@ void Lexer::addToken(TokenType type, const std::string& value) {
     tokens.emplace_back(type, text, SourceLocation{filename, line, (int)(start - lineStart + 1)}, value);
 }
 
-} // namespace flex
+} // namespace tyl

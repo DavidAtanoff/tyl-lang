@@ -1,0 +1,7 @@
+fn main -> int:
+    let a = ["x"]
+    print("len = ")
+    print(len(a))
+    print("\n")
+    print(join(a, ","))
+    return 0

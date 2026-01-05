@@ -1,0 +1,10 @@
+// Simple BigInt test
+fn main() {
+    print("Testing BigInt...\n")
+    let b = bigint(42)
+    print("Created BigInt\n")
+    let result = bigint_to_int(b)
+    print("Result: ")
+    print(result)
+    print("\n")
+}

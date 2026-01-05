@@ -1,9 +1,9 @@
-// Flex Compiler - Extended List Builtins for Native Code Generation
+// Tyl Compiler - Extended List Builtins for Native Code Generation
 // Additional list functions ported from stdlib/list/list.cpp
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // first(list) -> value - Get first element
 void NativeCodeGen::emitListFirst(CallExpr& node) {
@@ -314,4 +314,4 @@ void NativeCodeGen::emitListMaxOf(CallExpr& node) {
     }
 }
 
-} // namespace flex
+} // namespace tyl

@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Memory Builtin Calls
+// Tyl Compiler - Native Code Generator Memory Builtin Calls
 // Handles: alloc, free, stackalloc, sizeof, alignof, offsetof, placement_new, memcpy, memset, memmove, memcmp
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::emitMemAlloc(CallExpr& node) {
     node.args[0]->accept(*this);
@@ -294,4 +294,4 @@ void NativeCodeGen::emitMemcmp(CallExpr& node) {
     asm_.add_rsp_imm32(16);
 }
 
-} // namespace flex
+} // namespace tyl

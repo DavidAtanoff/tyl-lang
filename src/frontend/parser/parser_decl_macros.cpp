@@ -1,10 +1,10 @@
-// Flex Compiler - Parser Macro Declarations
+// Tyl Compiler - Parser Macro Declarations
 // Handles: macro, syntax macro, layer, unsafe, asm declarations
 
 #include "parser_base.h"
 #include "common/errors.h"
 
-namespace flex {
+namespace tyl {
 
 StmtPtr Parser::macroDeclaration() {
     auto loc = previous().location;
@@ -192,4 +192,4 @@ StmtPtr Parser::asmStatement() {
     return std::make_unique<AsmStmt>(asmCode, loc);
 }
 
-} // namespace flex
+} // namespace tyl

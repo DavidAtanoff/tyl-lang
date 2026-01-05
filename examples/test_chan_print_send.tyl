@@ -1,0 +1,16 @@
+// Channel with print after send
+
+fn test_channel:
+    print("Creating...\n")
+    let ch = chan[int, 1]
+    print("Created\n")
+    ch <- 100
+    print("Sent\n")
+    let value = <- ch
+    print("Received value: ")
+    print(value)
+    print("\n")
+
+fn main -> int:
+    test_channel()
+    return 0

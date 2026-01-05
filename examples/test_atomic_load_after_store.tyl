@@ -1,0 +1,11 @@
+// Test load after store
+
+fn main:
+    let counter: Atomic[int] = Atomic[int](0)
+    counter.store(42)
+    let val: int = counter.load()
+    print(val)
+    println("")
+    return 0
+
+main()

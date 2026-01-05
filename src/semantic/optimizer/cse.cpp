@@ -1,9 +1,9 @@
-// Flex Compiler - Common Subexpression Elimination Implementation
+// Tyl Compiler - Common Subexpression Elimination Implementation
 #include "cse.h"
 #include <sstream>
 #include <algorithm>
 
-namespace flex {
+namespace tyl {
 
 void CSEPass::run(Program& ast) {
     transformations_ = 0;
@@ -429,4 +429,4 @@ ExprPtr CSEPass::processExpression(ExprPtr& expr, std::vector<StmtPtr>& insertBe
     return nullptr;
 }
 
-} // namespace flex
+} // namespace tyl

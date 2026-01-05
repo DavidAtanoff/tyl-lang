@@ -1,7 +1,7 @@
-// Flex Compiler - Common Subexpression Elimination (CSE)
+// Tyl Compiler - Common Subexpression Elimination (CSE)
 // Identifies and eliminates redundant computations
-#ifndef FLEX_CSE_H
-#define FLEX_CSE_H
+#ifndef TYL_CSE_H
+#define TYL_CSE_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -10,7 +10,7 @@
 #include <string>
 #include <functional>
 
-namespace flex {
+namespace tyl {
 
 // Hash for expressions to identify common subexpressions
 struct ExprHash {
@@ -63,6 +63,6 @@ private:
     void invalidateVar(const std::string& varName);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_CSE_H
+#endif // TYL_CSE_H

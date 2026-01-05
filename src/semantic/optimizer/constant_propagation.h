@@ -1,7 +1,7 @@
-// Flex Compiler - Constant Propagation Optimization Pass
+// Tyl Compiler - Constant Propagation Optimization Pass
 // Tracks variable values through the program and eliminates redundant comparisons
-#ifndef FLEX_CONSTANT_PROPAGATION_H
-#define FLEX_CONSTANT_PROPAGATION_H
+#ifndef TYL_CONSTANT_PROPAGATION_H
+#define TYL_CONSTANT_PROPAGATION_H
 
 #include "optimizer.h"
 #include "frontend/ast/ast.h"
@@ -10,7 +10,7 @@
 #include <variant>
 #include <set>
 
-namespace flex {
+namespace tyl {
 
 // Value that can be tracked for a variable
 using PropValue = std::variant<std::monostate, int64_t, double, bool, std::string>;
@@ -60,6 +60,6 @@ private:
     void eliminateDeadStores(std::vector<StmtPtr>& statements);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_CONSTANT_PROPAGATION_H
+#endif // TYL_CONSTANT_PROPAGATION_H

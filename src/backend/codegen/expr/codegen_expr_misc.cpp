@@ -1,4 +1,4 @@
-// Flex Compiler - Native Code Generator Miscellaneous Expressions
+// Tyl Compiler - Native Code Generator Miscellaneous Expressions
 // Note: AssignExpr moved to codegen_expr_assign.cpp
 // Note: LambdaExpr moved to codegen_expr_lambda.cpp
 // Note: AddressOfExpr, DerefExpr, NewExpr, CastExpr moved to codegen_expr_pointer.cpp
@@ -6,7 +6,7 @@
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // All visitor methods have been moved to modular files:
 // - codegen_expr_assign.cpp: AssignExpr
@@ -14,4 +14,4 @@ namespace flex {
 // - codegen_expr_pointer.cpp: AddressOfExpr, DerefExpr, NewExpr, CastExpr
 // - codegen_expr_async.cpp: AwaitExpr, SpawnExpr, PropagateExpr, DSLBlock
 
-} // namespace flex
+} // namespace tyl

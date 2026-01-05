@@ -1,12 +1,12 @@
-// Flex Compiler - GC Runtime Header
+// Tyl Compiler - GC Runtime Header
 // Lightweight garbage collection runtime for generated executables
-#ifndef FLEX_GC_RUNTIME_H
-#define FLEX_GC_RUNTIME_H
+#ifndef TYL_GC_RUNTIME_H
+#define TYL_GC_RUNTIME_H
 
 #include <cstdint>
 #include <cstddef>
 
-namespace flex {
+namespace tyl {
 namespace gc_runtime {
 
 // Object header layout (16 bytes, placed before user data)
@@ -60,6 +60,6 @@ inline void* get_user_ptr(ObjectHeader* header) {
 }
 
 } // namespace gc_runtime
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_GC_RUNTIME_H
+#endif // TYL_GC_RUNTIME_H

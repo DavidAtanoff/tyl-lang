@@ -1,0 +1,40 @@
+// Test String Enhancements: char, byte strings
+
+fn main():
+    // Test character literals
+    let c1 = 'A'
+    let c2 = '\n'
+    let c3 = '\t'
+    let c4 = '\\'
+    let c5 = '\''
+    
+    print("=== Character Literals ===")
+    print("c1 (A): {c1}")
+    print("c2 (newline): {c2}")
+    print("c3 (tab): {c3}")
+    print("c4 (backslash): {c4}")
+    print("c5 (quote): {c5}")
+    
+    // Test hex escape in char
+    let hex_char = '\x41'  // 'A' in hex
+    print("hex_char (\\x41 = A): {hex_char}")
+    
+    // Test Unicode escape
+    let emoji = '\u{1F600}'  // Grinning face emoji
+    print("emoji code point: {emoji}")
+    
+    // Test byte strings (just verify they compile)
+    let _bs1 = b"hello"
+    let _bs2 = b"world\n"
+    let _bs3 = b"\x00\xFF"
+    
+    print("\n=== Byte Strings ===")
+    print("bs1 (hello): byte string created")
+    print("bs2 (world\\n): byte string created")
+    print("bs3 (\\x00\\xFF): byte string created")
+    
+    // Test raw byte strings
+    let _rbs1 = br"raw\nstring"
+    print("rbs1 (raw): raw byte string created")
+    
+    print("\n=== All tests passed! ===")

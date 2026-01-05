@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Call Dispatch Helpers
+// Tyl Compiler - Native Code Generator Call Dispatch Helpers
 // Handles: standard function calls, float function calls, function pointer calls, closure calls
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::emitStandardFunctionCall(CallExpr& node, const std::string& callTarget) {
     for (int i = (int)node.args.size() - 1; i >= 0; i--) {
@@ -177,4 +177,4 @@ void NativeCodeGen::emitClosureCall(CallExpr& node) {
     if (!stackAllocated_) asm_.add_rsp_imm32(0x20);
 }
 
-} // namespace flex
+} // namespace tyl

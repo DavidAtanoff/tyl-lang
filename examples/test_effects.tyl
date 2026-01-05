@@ -1,0 +1,36 @@
+// Test algebraic effects in Flex
+
+// Define an effect for logging
+effect Logger:
+    fn log msg: str -> void
+
+// Define an effect for state
+effect Counter:
+    fn get -> int
+    fn inc -> void
+
+// Main function to test effects
+fn main -> int:
+    print("Testing algebraic effects...")
+    
+    // Test 1: Basic effect declaration
+    print("Test 1: Effect declarations work")
+    
+    // Test 2: Handle expression with simple handler
+    // The handler intercepts Logger.log and prints the message
+    let result = handle 42:
+        Logger.log(msg) => print(msg)
+    
+    print("Test 2: Handle expression returned:")
+    print(result)
+    
+    // Test 3: Handle with different return value
+    let val = handle 100:
+        Counter.get() => 999
+        Counter.inc() => 0
+    
+    print("Test 3: Handle returned:")
+    print(val)
+    
+    print("All effect tests passed!")
+    return 0

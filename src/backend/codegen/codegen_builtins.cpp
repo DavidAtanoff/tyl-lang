@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Built-in Functions
+// Tyl Compiler - Native Code Generator Built-in Functions
 // Handles: print, println, str, itoa, runtime helpers
 
 #include "codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 // Check if itoa should be inlined based on optimization level
 bool NativeCodeGen::shouldInlineItoa() const {
@@ -84,7 +84,7 @@ void NativeCodeGen::emitRuntimeRoutines() {
     
     runtimeRoutinesEmitted_ = true;
     
-    // === __flex_itoa routine ===
+    // === __TYL_itoa routine ===
     // Input: rax = integer value
     // Output: rax = string pointer, rcx = length
     // Preserves: rdi (stdout handle)
@@ -232,7 +232,7 @@ void NativeCodeGen::emitRuntimeRoutines() {
     
     asm_.ret();
     
-    // === __flex_print_int routine ===
+    // === __TYL_print_int routine ===
     // Input: rax = integer value
     // Uses cached stdout handle in rdi
     // This routine needs its own stack frame for WriteConsoleA
@@ -449,4 +449,4 @@ void NativeCodeGen::emitItoa() {
     asm_.code.push_back(0x4C); asm_.code.push_back(0x29); asm_.code.push_back(0xC1);
 }
 
-} // namespace flex
+} // namespace tyl

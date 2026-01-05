@@ -1,13 +1,13 @@
-// Flex Compiler - x86-64 Assembler
-#ifndef FLEX_X64_ASSEMBLER_H
-#define FLEX_X64_ASSEMBLER_H
+// Tyl Compiler - x86-64 Assembler
+#ifndef TYL_X64_ASSEMBLER_H
+#define TYL_X64_ASSEMBLER_H
 
 #include <vector>
 #include <string>
 #include <map>
 #include <cstdint>
 
-namespace flex {
+namespace tyl {
 
 class X64Assembler {
 public:
@@ -104,6 +104,7 @@ public:
     // Comparison
     void cmp_rax_rcx();
     void cmp_rax_imm32(int32_t val);
+    void cmp_rax_imm8(int8_t val);   // Compare RAX with 8-bit sign-extended immediate
     void cmp_rax_mem_rbp(int32_t offset);
     void cmp_rcx_rdx();  // compare rcx with rdx
     void test_rax_rax();
@@ -201,7 +202,9 @@ public:
     // Control flow
     void jmp_rel32(const std::string& label);
     void jz_rel32(const std::string& label);
+    void je_rel32(const std::string& label);   // Jump if equal (same as jz)
     void jnz_rel32(const std::string& label);
+    void jne_rel32(const std::string& label);  // Jump if not equal (same as jnz)
     void jge_rel32(const std::string& label);
     void jl_rel32(const std::string& label);
     void jle_rel32(const std::string& label);
@@ -400,6 +403,11 @@ public:
     void mov_rax_rdi();
     void mov_rcx_rdi();
     void mov_mem_rdi_rax();                        // [rdi] = rax
+    void mov_rsi_rax();                            // rsi = rax
+    void mov_rsi_rcx();                            // rsi = rcx
+    void mov_rsi_mem_rbp(int32_t offset);          // rsi = [rbp + offset]
+    void mov_rsi_mem_rax(int32_t offset);          // rsi = [rax + offset]
+    void mov_rdi_mem_rbp(int32_t offset);          // rdi = [rbp + offset]
     
     // Additional arithmetic with rcx
     void add_rcx_imm32(int32_t val);               // rcx += imm32
@@ -410,6 +418,6 @@ private:
     void emit64(int64_t val);
 };
 
-} // namespace flex
+} // namespace tyl
 
-#endif // FLEX_X64_ASSEMBLER_H
+#endif // TYL_X64_ASSEMBLER_H

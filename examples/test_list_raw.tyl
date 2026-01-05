@@ -1,0 +1,24 @@
+// Test raw list access
+
+fn main -> int:
+    let words = ["aa", "bb", "cc"]
+    
+    // len() should read count from [list+0]
+    print("len(words) = ")
+    print(len(words))
+    print("\n")
+    
+    // Direct element access
+    print("words[1] = ")
+    print(words[1])
+    print("\n")
+    
+    print("words[2] = ")
+    print(words[2])
+    print("\n")
+    
+    print("words[3] = ")
+    print(words[3])
+    print("\n")
+    
+    return 0

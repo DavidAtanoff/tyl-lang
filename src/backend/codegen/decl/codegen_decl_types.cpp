@@ -1,9 +1,9 @@
-// Flex Compiler - Native Code Generator Type Declarations
+// Tyl Compiler - Native Code Generator Type Declarations
 // Handles: RecordDecl, EnumDecl, TraitDecl, ImplBlock, TypeAlias, ExternDecl
 
 #include "backend/codegen/codegen_base.h"
 
-namespace flex {
+namespace tyl {
 
 void NativeCodeGen::visit(RecordDecl& node) {
     // Store record type information for field access
@@ -60,7 +60,36 @@ void NativeCodeGen::visit(EnumDecl& node) {
         nextValue = actualValue + 1;
     }
 }
-void NativeCodeGen::visit(TypeAlias& node) { (void)node; }
+void NativeCodeGen::visit(TypeAlias& node) {
+    // Check if this is a refinement type (has a constraint)
+    if (node.constraint) {
+        RefinementTypeInfo info;
+        info.name = node.name;
+        info.baseType = node.targetType;
+        info.constraint = node.constraint.get();
+        refinementTypes_[node.name] = info;
+    }
+    
+    // Check if this is a dependent type (has value parameters)
+    bool hasDependentParams = false;
+    for (const auto& tp : node.typeParams) {
+        if (tp.isValue) {
+            hasDependentParams = true;
+            break;
+        }
+    }
+    
+    if (hasDependentParams) {
+        // Store dependent type information for later instantiation
+        DependentTypeInfo info;
+        info.name = node.name;
+        info.baseType = node.targetType;
+        for (const auto& tp : node.typeParams) {
+            info.params.push_back({tp.name, tp.kind, tp.isValue});
+        }
+        dependentTypes_[node.name] = info;
+    }
+}
 
 void NativeCodeGen::visit(TraitDecl& node) {
     TraitInfo info;
@@ -311,4 +340,4 @@ void NativeCodeGen::collectCapturedVariablesStmt(Statement* stmt, const std::set
     }
 }
 
-} // namespace flex
+} // namespace tyl

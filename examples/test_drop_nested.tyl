@@ -1,0 +1,28 @@
+// Test Drop Trait with nested scopes
+
+record Resource:
+    id: int
+
+impl Drop for Resource:
+    fn drop(self):
+        print("Dropping ")
+        print(self.id)
+
+fn main():
+    print("Start")
+    
+    let r1 = Resource { id: 1 }
+    print("Created r1")
+    
+    // Nested scope - r2 should be dropped when scope exits
+    // Note: scope blocks are not yet implemented, so this is just a comment
+    // for future testing
+    
+    let r2 = Resource { id: 2 }
+    print("Created r2")
+    
+    let r3 = Resource { id: 3 }
+    print("Created r3")
+    
+    print("End of main")
+    // Expected drop order: r3, r2, r1 (reverse declaration order)
