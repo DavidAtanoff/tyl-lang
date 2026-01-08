@@ -30,6 +30,7 @@ set(FRONTEND_SOURCES
     src/frontend/parser/parser_types.cpp
     # Modular parser - Declarations
     src/frontend/parser/parser_declarations.cpp
+    src/frontend/parser/parser_decl_traits.cpp
     # Modular parser - Statements
     src/frontend/parser/parser_statements.cpp
     # Modular parser - Expressions (Pratt parser)
@@ -51,6 +52,8 @@ set(SEMANTIC_SOURCES
     # Generics / Monomorphization
     src/semantic/generics/monomorphizer.cpp
     src/semantic/generics/ast_cloner.cpp
+    # CTFE (Compile-Time Function Evaluation)
+    src/semantic/ctfe/ctfe_interpreter.cpp
     # Modular type checker
     src/semantic/checker/checker_core.cpp
     src/semantic/checker/checker_expr.cpp
@@ -189,6 +192,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer
     ${CMAKE_SOURCE_DIR}/src/semantic/generics
     ${CMAKE_SOURCE_DIR}/src/semantic/ownership
+    ${CMAKE_SOURCE_DIR}/src/semantic/ctfe
     # Backend
     ${CMAKE_SOURCE_DIR}/src/backend
     ${CMAKE_SOURCE_DIR}/src/backend/x64

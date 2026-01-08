@@ -39,6 +39,7 @@ private:
     // Generic type context
     std::unordered_map<std::string, TypePtr> currentTypeParams_;  // Active type parameter bindings
     std::vector<std::string> currentTypeParamNames_;              // Type params in scope
+    std::unordered_map<std::string, std::vector<std::string>> typeParamConstraints_;  // Type param -> concept names
     
     TypePtr inferType(Expression* expr);
     TypePtr unify(TypePtr a, TypePtr b, const SourceLocation& loc);
@@ -66,6 +67,11 @@ private:
     TypePtr instantiateGenericFunction(FunctionType* fnType, const std::vector<TypePtr>& typeArgs, const SourceLocation& loc);
     void checkTraitImpl(const std::string& traitName, const std::string& typeName, 
                         const std::vector<std::unique_ptr<FnDecl>>& methods, const SourceLocation& loc);
+    
+    // Concept constraint checking
+    bool typeParamSupportsOperation(const std::string& typeParamName, const std::string& opName);
+    bool typeParamIsNumeric(const std::string& typeParamName);
+    bool typeParamIsOrderable(const std::string& typeParamName);
     
     void visit(IntegerLiteral& node) override;
     void visit(FloatLiteral& node) override;
@@ -174,6 +180,7 @@ private:
     void visit(EnumDecl& node) override;
     void visit(TypeAlias& node) override;
     void visit(TraitDecl& node) override;
+    void visit(ConceptDecl& node) override;
     void visit(ImplBlock& node) override;
     void visit(UnsafeBlock& node) override;
     void visit(ImportStmt& node) override;

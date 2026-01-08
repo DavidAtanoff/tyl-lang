@@ -119,9 +119,18 @@ void DeadCodeEliminationPass::collectCallsFromExpression(Expression* expr, std::
         }
         collectCallsFromExpression(call->callee.get(), calls);
         for (auto& arg : call->args) {
+            // If an argument is a bare identifier, it might be a function name
+            // being passed as a function pointer (e.g., call_fn(double_it))
+            if (auto* argId = dynamic_cast<Identifier*>(arg.get())) {
+                calls.insert(argId->name);
+            }
             collectCallsFromExpression(arg.get(), calls);
         }
         for (auto& namedArg : call->namedArgs) {
+            // Same for named arguments
+            if (auto* argId = dynamic_cast<Identifier*>(namedArg.second.get())) {
+                calls.insert(argId->name);
+            }
             collectCallsFromExpression(namedArg.second.get(), calls);
         }
     }

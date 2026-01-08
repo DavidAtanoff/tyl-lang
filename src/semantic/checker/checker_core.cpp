@@ -1178,12 +1178,26 @@ void TypeChecker::checkTraitImpl(const std::string& traitName, const std::string
             if (implMethod->name == traitMethod->name) {
                 found = true;
                 
+                // Add method type parameters to scope before parsing types
+                std::vector<std::string> savedTypeParamNames = currentTypeParamNames_;
+                auto savedTypeParams = currentTypeParams_;
+                
+                for (const auto& tp : implMethod->typeParams) {
+                    currentTypeParamNames_.push_back(tp);
+                    auto tpType = std::make_shared<TypeParamType>(tp);
+                    currentTypeParams_[tp] = tpType;
+                }
+                
                 // Check method signature matches
                 auto implFnType = std::make_shared<FunctionType>();
                 for (const auto& p : implMethod->params) {
                     implFnType->params.push_back({p.first, parseTypeAnnotation(p.second)});
                 }
                 implFnType->returnType = parseTypeAnnotation(implMethod->returnType);
+                
+                // Restore type parameter scope
+                currentTypeParamNames_ = savedTypeParamNames;
+                currentTypeParams_ = savedTypeParams;
                 
                 // Compare signatures (simplified - just check param count and return type)
                 if (implFnType->params.size() != traitMethod->signature->params.size()) {
@@ -1209,12 +1223,27 @@ void TypeChecker::checkTraitImpl(const std::string& traitName, const std::string
     impl.traitName = traitName;
     impl.typeName = typeName;
     for (const auto& method : methods) {
+        // Add method type parameters to scope before parsing types
+        std::vector<std::string> savedTypeParamNames = currentTypeParamNames_;
+        auto savedTypeParams = currentTypeParams_;
+        
+        for (const auto& tp : method->typeParams) {
+            currentTypeParamNames_.push_back(tp);
+            auto tpType = std::make_shared<TypeParamType>(tp);
+            currentTypeParams_[tp] = tpType;
+        }
+        
         auto fnType = std::make_shared<FunctionType>();
+        fnType->typeParams = method->typeParams;
         for (const auto& p : method->params) {
             fnType->params.push_back({p.first, parseTypeAnnotation(p.second)});
         }
         fnType->returnType = parseTypeAnnotation(method->returnType);
         impl.methods[method->name] = fnType;
+        
+        // Restore type parameter scope
+        currentTypeParamNames_ = savedTypeParamNames;
+        currentTypeParams_ = savedTypeParams;
     }
     reg.registerTraitImpl(impl);
 }
@@ -1346,6 +1375,126 @@ std::string TypeChecker::stripBorrowPrefix(const std::string& typeName) {
 
 void TypeChecker::emitOwnershipError(const std::string& msg, const SourceLocation& loc) {
     error(msg, loc);
+}
+
+// ===== Concept Constraint Checking =====
+
+bool TypeChecker::typeParamSupportsOperation(const std::string& typeParamName, const std::string& opName) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Check if this type parameter has any constraints
+    auto it = typeParamConstraints_.find(typeParamName);
+    if (it == typeParamConstraints_.end()) {
+        return false;  // No constraints, can't assume any operations
+    }
+    
+    // Check each concept constraint
+    for (const auto& conceptName : it->second) {
+        ConceptPtr concept = reg.lookupConcept(conceptName);
+        if (!concept) continue;
+        
+        // Check if the concept has a requirement with this operation name
+        for (const auto& req : concept->requirements) {
+            if (req.name == opName) {
+                return true;
+            }
+        }
+        
+        // Also check super concepts recursively
+        for (const auto& superConceptName : concept->superConcepts) {
+            ConceptPtr superConcept = reg.lookupConcept(superConceptName);
+            if (!superConcept) continue;
+            for (const auto& req : superConcept->requirements) {
+                if (req.name == opName) {
+                    return true;
+                }
+            }
+        }
+    }
+    
+    return false;
+}
+
+bool TypeChecker::typeParamIsNumeric(const std::string& typeParamName) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Check if this type parameter has any constraints
+    auto it = typeParamConstraints_.find(typeParamName);
+    if (it == typeParamConstraints_.end()) {
+        return false;  // No constraints, can't assume numeric
+    }
+    
+    // Check each concept constraint for numeric-like operations
+    for (const auto& conceptName : it->second) {
+        // Common numeric concept names
+        if (conceptName == "Numeric" || conceptName == "Number" || 
+            conceptName == "Addable" || conceptName == "Arithmetic") {
+            return true;
+        }
+        
+        // Check if the concept has add/mul operations (indicates numeric)
+        ConceptPtr concept = reg.lookupConcept(conceptName);
+        if (!concept) continue;
+        
+        bool hasAdd = false, hasMul = false;
+        for (const auto& req : concept->requirements) {
+            if (req.name == "add") hasAdd = true;
+            if (req.name == "mul") hasMul = true;
+        }
+        
+        // If concept has both add and mul, treat as numeric
+        if (hasAdd && hasMul) {
+            return true;
+        }
+        
+        // Also check super concepts
+        for (const auto& superConceptName : concept->superConcepts) {
+            if (superConceptName == "Numeric" || superConceptName == "Number") {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+bool TypeChecker::typeParamIsOrderable(const std::string& typeParamName) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Check if this type parameter has any constraints
+    auto it = typeParamConstraints_.find(typeParamName);
+    if (it == typeParamConstraints_.end()) {
+        return false;  // No constraints, can't assume orderable
+    }
+    
+    // Check each concept constraint for orderable-like operations
+    for (const auto& conceptName : it->second) {
+        // Common orderable concept names
+        if (conceptName == "Orderable" || conceptName == "Ord" || 
+            conceptName == "Comparable" || conceptName == "PartialOrd") {
+            return true;
+        }
+        
+        // Check if the concept has compare/less_than operations
+        ConceptPtr concept = reg.lookupConcept(conceptName);
+        if (!concept) continue;
+        
+        for (const auto& req : concept->requirements) {
+            if (req.name == "compare" || req.name == "less_than" || req.name == "cmp") {
+                return true;
+            }
+        }
+        
+        // Also check super concepts
+        for (const auto& superConceptName : concept->superConcepts) {
+            if (superConceptName == "Orderable" || superConceptName == "Ord" || 
+                superConceptName == "Comparable") {
+                return true;
+            }
+        }
+    }
+    
+    return false;
 }
 
 } // namespace tyl

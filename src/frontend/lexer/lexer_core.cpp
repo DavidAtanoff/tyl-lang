@@ -65,7 +65,10 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords = {
     {"effect", TokenType::EFFECT},
     {"handle", TokenType::HANDLE},
     {"perform", TokenType::PERFORM},
-    {"resume", TokenType::RESUME}
+    {"resume", TokenType::RESUME},
+    // Type classes / concepts keywords
+    {"concept", TokenType::CONCEPT},
+    {"where", TokenType::WHERE}
 };
 
 Lexer::Lexer(const std::string& src, const std::string& fname)

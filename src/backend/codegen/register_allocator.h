@@ -55,11 +55,16 @@ public:
     // Reset for a new function
     void reset();
     
+    // Set function names to skip during register allocation
+    // These are function labels that should not be treated as variables
+    void setFunctionNames(const std::set<std::string>* fnNames) { functionNames_ = fnNames; }
+    
 private:
     std::vector<LiveRange> liveRanges_;
     std::map<std::string, VarRegister> assignments_;
     std::set<VarRegister> usedRegisters_;
     int currentPos_;
+    const std::set<std::string>* functionNames_ = nullptr;  // Function names to skip
     
     // Compute live ranges by scanning the AST
     void computeLiveRanges(Statement* body, const std::vector<std::pair<std::string, std::string>>& params);

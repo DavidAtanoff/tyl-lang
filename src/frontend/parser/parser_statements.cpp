@@ -143,13 +143,22 @@ StmtPtr Parser::expressionStatement() {
             return std::make_unique<ExprStmt>(std::move(call), loc);
         }
         
-        // name value  OR  name: type = value
+        // name value  OR  name: type = value  OR  name := value
         if (!isAtStatementBoundary() && !check(TokenType::ASSIGN) && 
             !check(TokenType::PLUS_ASSIGN) && !check(TokenType::MINUS_ASSIGN)) {
             std::string name = id->name;
             std::string typeName;
             
             if (match(TokenType::COLON)) {
+                // Check for := syntax (shorthand variable declaration)
+                if (match(TokenType::ASSIGN)) {
+                    auto init = expression();
+                    match(TokenType::NEWLINE);
+                    auto decl = std::make_unique<VarDecl>(name, "", std::move(init), loc);
+                    decl->isMutable = true;  // := creates mutable variable
+                    return decl;
+                }
+                // Otherwise it's name: type = value
                 typeName = parseType();
                 if (match(TokenType::ASSIGN)) {
                     auto init = expression();

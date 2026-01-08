@@ -191,7 +191,17 @@ std::string Parser::parseType() {
     // Named type or generic
     else if (check(TokenType::IDENTIFIER)) {
         type = advance().lexeme;
-        if (match(TokenType::LT)) {
+        // Handle generic type arguments with [] syntax: List[int], F[A], Map[str, int]
+        if (match(TokenType::LBRACKET)) {
+            type += "[" + parseType();
+            while (match(TokenType::COMMA)) {
+                type += ", " + parseType();
+            }
+            consume(TokenType::RBRACKET, "Expected ']' after generic type arguments");
+            type += "]";
+        }
+        // Also support <> syntax for compatibility
+        else if (match(TokenType::LT)) {
             type += "<" + parseType();
             while (match(TokenType::COMMA)) {
                 type += ", " + parseType();

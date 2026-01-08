@@ -52,7 +52,12 @@ enum class TypeKind {
     REFCELL,        // RefCell[T] - runtime borrow checking
     // Algebraic effects
     EFFECT,         // Effect type (e.g., Error[str], State[int])
-    EFFECTFUL       // Function type with effects (e.g., fn() -> int with Error[str])
+    EFFECTFUL,      // Function type with effects (e.g., fn() -> int with Error[str])
+    // Higher-Kinded Types
+    TYPE_CONSTRUCTOR,  // Type constructor (e.g., F[_] in trait Functor[F[_]])
+    HKT_APPLICATION,   // Higher-kinded type application (e.g., F[A] where F is a type constructor)
+    // Type Classes / Concepts
+    CONCEPT            // Concept type (type class constraint)
 };
 
 struct Type {
@@ -207,6 +212,27 @@ struct TraitObjectType : Type {
     bool equals(const Type* other) const override;
     TypePtr clone() const override;
 };
+
+// Concept requirement (function signature in a concept)
+struct ConceptRequirementType {
+    std::string name;
+    std::shared_ptr<FunctionType> signature;
+    bool isStatic = false;  // Static function (no self parameter)
+};
+
+// Concept type (type class / constrained generic)
+struct ConceptType : Type {
+    std::string name;
+    std::vector<std::string> typeParams;           // Type parameters [T]
+    std::vector<ConceptRequirementType> requirements;  // Required functions
+    std::vector<std::string> superConcepts;        // Inherited concepts
+    ConceptType(std::string n) : Type(TypeKind::CONCEPT), name(std::move(n)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+    const ConceptRequirementType* getRequirement(const std::string& reqName) const;
+};
+using ConceptPtr = std::shared_ptr<ConceptType>;
 
 // Generic type instantiation (e.g., Pair[int, str])
 struct GenericType : Type {
@@ -457,6 +483,32 @@ struct EffectfulType : Type {
     TypePtr clone() const override;
 };
 
+// Higher-Kinded Type: Type constructor parameter (e.g., F[_] in trait Functor[F[_]])
+// Represents a type that takes type parameters (like List, Option, Result)
+struct TypeConstructorType : Type {
+    std::string name;                              // Constructor name (e.g., "F")
+    size_t arity;                                  // Number of type parameters it expects (e.g., 1 for F[_], 2 for F[_, _])
+    std::vector<std::string> bounds;               // Trait bounds (e.g., F[_]: Functor)
+    TypeConstructorType(std::string n, size_t ar = 1) 
+        : Type(TypeKind::TYPE_CONSTRUCTOR), name(std::move(n)), arity(ar) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
+// Higher-Kinded Type Application (e.g., F[A] where F is a type constructor)
+// Represents applying a type constructor to concrete type arguments
+struct HKTApplicationType : Type {
+    std::string constructorName;                   // Name of the type constructor (e.g., "F")
+    TypePtr constructor;                           // The type constructor being applied (TypeConstructorType)
+    std::vector<TypePtr> typeArgs;                 // Type arguments being applied
+    HKTApplicationType(std::string name) 
+        : Type(TypeKind::HKT_APPLICATION), constructorName(std::move(name)) {}
+    std::string toString() const override;
+    bool equals(const Type* other) const override;
+    TypePtr clone() const override;
+};
+
 // Trait implementation record
 struct TraitImpl {
     std::string traitName;
@@ -556,12 +608,29 @@ public:
     void registerEffect(const std::string& name, std::shared_ptr<EffectType> effect);  // Register an effect
     std::shared_ptr<EffectType> lookupEffect(const std::string& name);    // Lookup an effect by name
     
+    // Higher-Kinded Types support
+    TypePtr typeConstructorType(const std::string& name, size_t arity = 1);  // Create type constructor (F[_])
+    TypePtr hktApplicationType(const std::string& constructorName, const std::vector<TypePtr>& typeArgs);  // Apply type constructor
+    void registerTypeConstructor(const std::string& name, TypePtr constructor);  // Register a type constructor
+    TypePtr lookupTypeConstructor(const std::string& name);  // Lookup a type constructor
+    bool isTypeConstructor(const std::string& name);  // Check if name is a registered type constructor
+    TypePtr applyTypeConstructor(TypePtr constructor, const std::vector<TypePtr>& args);  // Apply constructor to args
+    
+    // Type Classes / Concepts support
+    ConceptPtr conceptType(const std::string& name);  // Create/lookup concept type
+    void registerConcept(const std::string& name, ConceptPtr concept);  // Register a concept
+    ConceptPtr lookupConcept(const std::string& name);  // Lookup a concept by name
+    bool typeImplementsConcept(TypePtr type, const std::string& conceptName);  // Check if type satisfies concept
+    bool checkConceptConstraints(TypePtr type, const std::vector<std::string>& conceptNames);  // Check multiple concept constraints
+    
 private:
     TypeRegistry();
     std::unordered_map<std::string, TypePtr> namedTypes_;
     std::unordered_map<std::string, TraitPtr> traits_;
+    std::unordered_map<std::string, ConceptPtr> concepts_;  // Registered concepts
     std::unordered_map<std::string, TypePtr> dependentTypes_;  // Dependent type definitions
     std::unordered_map<std::string, std::shared_ptr<EffectType>> effects_;  // Registered effects
+    std::unordered_map<std::string, TypePtr> typeConstructors_;  // Higher-kinded type constructors
     std::vector<TraitImpl> traitImpls_;
     TypePtr void_, bool_, int_, int8_, int16_, int32_, int64_;
     TypePtr uint8_, uint16_, uint32_, uint64_;

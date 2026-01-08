@@ -62,6 +62,8 @@ enum class TokenType {
     HANDLE,         // handle keyword for effect handlers
     PERFORM,        // perform keyword for effect operations
     RESUME,         // resume keyword for continuing from handlers
+    CONCEPT,        // concept keyword for type classes/constraints
+    WHERE,          // where keyword for constraint clauses
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQ, NE, LT, GT, LE, GE,
     ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, PERCENT_ASSIGN,
@@ -149,6 +151,8 @@ inline std::string tokenTypeToString(TokenType type) {
         case TokenType::HANDLE: return "HANDLE";
         case TokenType::PERFORM: return "PERFORM";
         case TokenType::RESUME: return "RESUME";
+        case TokenType::CONCEPT: return "CONCEPT";
+        case TokenType::WHERE: return "WHERE";
         case TokenType::PERCENT_ASSIGN: return "PERCENT_ASSIGN";
         case TokenType::PLUS: return "PLUS"; case TokenType::MINUS: return "MINUS"; case TokenType::STAR: return "STAR";
         case TokenType::SLASH: return "SLASH"; case TokenType::PERCENT: return "PERCENT";

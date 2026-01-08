@@ -76,6 +76,15 @@ bool NativeCodeGen::isFloatExpression(Expression* expr) {
                 return true;
             }
             
+            // Check if this is a comptime function - use its declared return type
+            if (comptimeFunctions_.count(id->name)) {
+                FnDecl* fn = ctfe_.getComptimeFunction(id->name);
+                if (fn) {
+                    // Check the declared return type
+                    return isFloatTypeName(fn->returnType);
+                }
+            }
+            
             // Check if this is a generic function call that returns float
             auto it = genericFunctions_.find(id->name);
             if (it != genericFunctions_.end() && !call->args.empty()) {

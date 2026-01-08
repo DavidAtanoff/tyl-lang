@@ -133,11 +133,74 @@ void NativeCodeGen::visit(NilLiteral& node) {
 }
 
 void NativeCodeGen::visit(Identifier& node) {
+    // FIRST: Check if this is a function label (for function pointers)
+    // This must be checked before register lookup because function names
+    // might accidentally be in varRegisters_ due to register allocation
+    bool inLabels = asm_.labels.count(node.name) > 0;
+    bool inAllFn = allFunctionNames_.count(node.name) > 0;
+    
+    if (inLabels || inAllFn) {
+        // Register the label if not already present
+        if (asm_.labels.find(node.name) == asm_.labels.end()) {
+            asm_.labels[node.name] = 0;
+        }
+        
+        // Create a closure wrapper for the function pointer with a thunk
+        // This allows uniform calling convention for both lambdas and function references
+        // 
+        // Problem: Lambdas use calling convention: RCX=closure, RDX=arg0, R8=arg1, R9=arg2
+        // But regular functions use: RCX=arg0, RDX=arg1, R8=arg2, R9=arg3
+        // 
+        // Solution: Generate a thunk that shifts arguments:
+        //   thunk: mov rcx, rdx    ; arg0 -> rcx
+        //          mov rdx, r8     ; arg1 -> rdx  
+        //          mov r8, r9      ; arg2 -> r8
+        //          jmp target_fn
+        
+        // Check if we already have a thunk for this function
+        std::string thunkLabel = "__thunk_" + node.name;
+        if (asm_.labels.find(thunkLabel) == asm_.labels.end()) {
+            // Generate the thunk
+            std::string afterThunk = newLabel("after_thunk");
+            asm_.jmp_rel32(afterThunk);
+            
+            asm_.label(thunkLabel);
+            // mov rcx, rdx (shift arg0)
+            asm_.code.push_back(0x48); asm_.code.push_back(0x89); asm_.code.push_back(0xD1);
+            // mov rdx, r8 (shift arg1)
+            asm_.code.push_back(0x4C); asm_.code.push_back(0x89); asm_.code.push_back(0xC2);
+            // mov r8, r9 (shift arg2)
+            asm_.code.push_back(0x4D); asm_.code.push_back(0x89); asm_.code.push_back(0xC8);
+            // jmp to actual function
+            asm_.jmp_rel32(node.name);
+            
+            asm_.label(afterThunk);
+        }
+        
+        // Allocate closure (16 bytes minimum: fn_ptr + metadata)
+        emitGCAllocClosure(0);  // 0 captures
+        asm_.push_rax();  // Save closure pointer
+        
+        // Store thunk pointer at offset 0 (not the original function)
+        asm_.code.push_back(0x48); asm_.code.push_back(0x8D); asm_.code.push_back(0x0D);
+        asm_.fixupLabel(thunkLabel);  // lea rcx, [thunk_label]
+        
+        // mov [rax], rcx - store thunk ptr in closure
+        asm_.code.push_back(0x48); asm_.code.push_back(0x8B);
+        asm_.code.push_back(0x04); asm_.code.push_back(0x24);  // mov rax, [rsp]
+        asm_.code.push_back(0x48); asm_.code.push_back(0x89);
+        asm_.code.push_back(0x08);  // mov [rax], rcx
+        
+        asm_.pop_rax();  // Restore closure pointer as result
+        lastExprWasFloat_ = false;
+        return;
+    }
+    
     auto it = locals.find(node.name);
     auto regIt = varRegisters_.find(node.name);
     auto globalRegIt = globalVarRegisters_.find(node.name);
     
-    // Check if variable is in a function-local register (highest priority)
+    // Check if variable is in a function-local register
     if (regIt != varRegisters_.end() && regIt->second != VarRegister::NONE) {
         if (floatVars.count(node.name)) {
             switch (regIt->second) {
@@ -229,27 +292,6 @@ void NativeCodeGen::visit(Identifier& node) {
         asm_.mov_rax_imm64(u.i);
         asm_.movq_xmm0_rax();
         lastExprWasFloat_ = true;
-        return;
-    }
-    
-    // Check if this is a function label (for function pointers)
-    if (asm_.labels.count(node.name)) {
-        asm_.code.push_back(0x48); asm_.code.push_back(0x8D); asm_.code.push_back(0x05);
-        asm_.fixupLabel(node.name);
-        lastExprWasFloat_ = false;
-        return;
-    }
-    
-    // Fallback: check allFunctionNames_ in case label wasn't registered yet
-    // This can happen when referencing functions from within handle blocks
-    if (allFunctionNames_.count(node.name)) {
-        // Register the label if not already present
-        if (asm_.labels.find(node.name) == asm_.labels.end()) {
-            asm_.labels[node.name] = 0;
-        }
-        asm_.code.push_back(0x48); asm_.code.push_back(0x8D); asm_.code.push_back(0x05);
-        asm_.fixupLabel(node.name);
-        lastExprWasFloat_ = false;
         return;
     }
     

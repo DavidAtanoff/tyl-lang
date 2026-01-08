@@ -173,6 +173,11 @@ bool NativeCodeGen::compile(Program& program, const std::string& outputFile) {
             if (!fn->typeParams.empty()) {
                 genericFunctions_[fn->name] = fn;
             }
+            // Register comptime functions early so they can be used in constant evaluation
+            if (fn->isComptime) {
+                ctfe_.registerComptimeFunction(fn);
+                comptimeFunctions_.insert(fn->name);
+            }
         }
     }
     
@@ -217,20 +222,28 @@ bool NativeCodeGen::compile(Program& program, const std::string& outputFile) {
                 // Skip mutable variables for constant tracking
                 if (mutableVars.count(varDecl->name)) continue;
                 
-                // Check for float constants
-                double floatVal;
-                if (tryEvalConstantFloat(varDecl->initializer.get(), floatVal)) {
-                    if (dynamic_cast<FloatLiteral*>(varDecl->initializer.get()) ||
-                        isFloatExpression(varDecl->initializer.get())) {
-                        constFloatVars[varDecl->name] = floatVal;
-                        floatVars.insert(varDecl->name);
+                // Check for int constants FIRST (before float)
+                // This ensures integer comptime functions are stored as integers
+                int64_t intVal;
+                bool isFloatExpr = isFloatExpression(varDecl->initializer.get());
+                bool evalSuccess = tryEvalConstant(varDecl->initializer.get(), intVal);
+                
+                if (evalSuccess) {
+                    // Only store as int constant if it's NOT a float expression
+                    if (!isFloatExpr) {
+                        constVars[varDecl->name] = intVal;
                     }
                 }
                 
-                // Check for int constants
-                int64_t intVal;
-                if (tryEvalConstant(varDecl->initializer.get(), intVal)) {
-                    constVars[varDecl->name] = intVal;
+                // Check for float constants (only if not already stored as int)
+                if (constVars.find(varDecl->name) == constVars.end()) {
+                    double floatVal;
+                    if (tryEvalConstantFloat(varDecl->initializer.get(), floatVal)) {
+                        if (dynamic_cast<FloatLiteral*>(varDecl->initializer.get()) || isFloatExpr) {
+                            constFloatVars[varDecl->name] = floatVal;
+                            floatVars.insert(varDecl->name);
+                        }
+                    }
                 }
                 
                 // Check for string constants
@@ -470,18 +483,24 @@ bool NativeCodeGen::compileToObject(Program& program, const std::string& outputF
                 
                 if (mutableVars.count(varDecl->name)) continue;
                 
-                double floatVal;
-                if (tryEvalConstantFloat(varDecl->initializer.get(), floatVal)) {
-                    if (dynamic_cast<FloatLiteral*>(varDecl->initializer.get()) ||
-                        isFloatExpression(varDecl->initializer.get())) {
-                        constFloatVars[varDecl->name] = floatVal;
-                        floatVars.insert(varDecl->name);
+                // Check for int constants FIRST (before float)
+                int64_t intVal;
+                if (tryEvalConstant(varDecl->initializer.get(), intVal)) {
+                    if (!isFloatExpression(varDecl->initializer.get())) {
+                        constVars[varDecl->name] = intVal;
                     }
                 }
                 
-                int64_t intVal;
-                if (tryEvalConstant(varDecl->initializer.get(), intVal)) {
-                    constVars[varDecl->name] = intVal;
+                // Check for float constants (only if not already stored as int)
+                if (constVars.find(varDecl->name) == constVars.end()) {
+                    double floatVal;
+                    if (tryEvalConstantFloat(varDecl->initializer.get(), floatVal)) {
+                        if (dynamic_cast<FloatLiteral*>(varDecl->initializer.get()) ||
+                            isFloatExpression(varDecl->initializer.get())) {
+                            constFloatVars[varDecl->name] = floatVal;
+                            floatVars.insert(varDecl->name);
+                        }
+                    }
                 }
                 
                 std::string strVal;

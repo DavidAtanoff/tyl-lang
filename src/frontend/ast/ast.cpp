@@ -119,6 +119,7 @@ void UnionDecl::accept(ASTVisitor& v) { v.visit(*this); }
 void EnumDecl::accept(ASTVisitor& v) { v.visit(*this); }
 void TypeAlias::accept(ASTVisitor& v) { v.visit(*this); }
 void TraitDecl::accept(ASTVisitor& v) { v.visit(*this); }
+void ConceptDecl::accept(ASTVisitor& v) { v.visit(*this); }
 void ImplBlock::accept(ASTVisitor& v) { v.visit(*this); }
 void UnsafeBlock::accept(ASTVisitor& v) { v.visit(*this); }
 void ImportStmt::accept(ASTVisitor& v) { v.visit(*this); }

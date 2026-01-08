@@ -3,6 +3,7 @@
 
 #include "backend/codegen/codegen_base.h"
 #include "semantic/ownership/ownership.h"
+#include "semantic/ctfe/ctfe_interpreter.h"
 
 namespace tyl {
 
@@ -886,6 +887,39 @@ bool NativeCodeGen::tryEvalComptimeCall(Expression* expr, int64_t& outValue) {
     
     auto* id = dynamic_cast<Identifier*>(call->callee.get());
     if (!id) return false;
+    
+    // First, try to evaluate user-defined comptime functions via CTFE interpreter
+    if (ctfe_.isComptimeFunction(id->name)) {
+        // Evaluate arguments
+        std::vector<CTFEInterpValue> args;
+        bool allArgsConst = true;
+        
+        for (auto& arg : call->args) {
+            auto val = ctfe_.evaluateExpr(arg.get());
+            if (val) {
+                args.push_back(*val);
+            } else {
+                allArgsConst = false;
+                break;
+            }
+        }
+        
+        if (allArgsConst) {
+            try {
+                auto result = ctfe_.evaluateCall(id->name, args);
+                if (result) {
+                    auto intVal = CTFEInterpreter::toInt(*result);
+                    if (intVal) {
+                        outValue = *intVal;
+                        return true;
+                    }
+                }
+            } catch (const CTFEInterpError& e) {
+                // CTFE evaluation failed - fall through to runtime
+                (void)e;
+            }
+        }
+    }
     
     // len() on constant strings or lists
     if (id->name == "len" && call->args.size() == 1) {

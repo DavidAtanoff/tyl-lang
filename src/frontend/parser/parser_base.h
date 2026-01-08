@@ -56,13 +56,14 @@ private:
     
     // Declaration parsing (parser_declarations.cpp)
     StmtPtr declaration();
-    StmtPtr fnDeclaration();
+    StmtPtr fnDeclaration(bool requireBody = true);
     StmtPtr externFnDeclaration();
     StmtPtr recordDeclaration();
     StmtPtr unionDeclaration();
     StmtPtr enumDeclaration();
     StmtPtr typeAliasDeclaration();
     StmtPtr traitDeclaration();
+    StmtPtr conceptDeclaration();
     StmtPtr implDeclaration();
     StmtPtr useStatement();
     StmtPtr importStatement();

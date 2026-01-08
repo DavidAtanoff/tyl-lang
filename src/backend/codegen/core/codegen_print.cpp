@@ -314,6 +314,16 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
             }
         }
         
+        // Check for integer constant FIRST (before float)
+        // This ensures integer comptime functions are printed as integers
+        auto intIt = constVars.find(ident->name);
+        if (intIt != constVars.end()) {
+            std::string numStr = std::to_string(intIt->second);
+            uint32_t strRVA = addString(numStr);
+            emitWriteConsole(strRVA, numStr.length());
+            return;
+        }
+        
         auto floatIt = constFloatVars.find(ident->name);
         if (floatIt != constFloatVars.end()) {
             std::ostringstream oss;
@@ -330,14 +340,6 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
             asm_.mov_rdx_rax();
             asm_.mov_r8_rcx();
             emitWriteConsoleBuffer();
-            return;
-        }
-        
-        auto intIt = constVars.find(ident->name);
-        if (intIt != constVars.end()) {
-            std::string numStr = std::to_string(intIt->second);
-            uint32_t strRVA = addString(numStr);
-            emitWriteConsole(strRVA, numStr.length());
             return;
         }
         

@@ -327,6 +327,14 @@ static void collectNestedFunctions(Statement* stmt, std::vector<FnDecl*>& nested
 }
 
 void NativeCodeGen::visit(FnDecl& node) {
+    // Skip comptime functions - they are evaluated at compile time, not emitted as code
+    if (node.isComptime) {
+        // Register with CTFE interpreter for compile-time evaluation
+        ctfe_.registerComptimeFunction(&node);
+        comptimeFunctions_.insert(node.name);
+        return;
+    }
+    
     std::map<std::string, int32_t> savedLocals = locals;
     std::map<std::string, std::string> savedConstStrVars = constStrVars;
     std::map<std::string, std::string> savedVarRecordTypes = varRecordTypes_;
@@ -339,6 +347,8 @@ void NativeCodeGen::visit(FnDecl& node) {
     bool savedStdoutCached = stdoutHandleCached_;
     std::map<std::string, std::string> savedBorrowParams = borrowParams_;
     std::string savedReturnType = currentFnReturnType_;
+    std::set<std::string> savedFnPtrVars = fnPtrVars_;
+    std::set<std::string> savedClosureVars = closureVars_;
     
     std::vector<FnDecl*> nestedFunctions;
     if (auto* block = dynamic_cast<Block*>(node.body.get())) {
@@ -355,6 +365,8 @@ void NativeCodeGen::visit(FnDecl& node) {
     locals.clear();
     varRecordTypes_.clear();
     borrowParams_.clear();
+    fnPtrVars_.clear();
+    closureVars_.clear();
     currentFnReturnType_ = node.returnType;
     stackOffset = 0;
     stackAllocated_ = false;
@@ -373,6 +385,13 @@ void NativeCodeGen::visit(FnDecl& node) {
     fnAttributes_[node.name] = attrs;
     
     if (useRegisterAllocation_) {
+        // Pass function names to register allocator so it skips them
+        // Verify that allFunctionNames_ is populated
+        if (allFunctionNames_.empty()) {
+            // This should never happen - allFunctionNames_ should be populated in visit(Program&)
+            // before any functions are compiled
+        }
+        regAlloc_.setFunctionNames(&allFunctionNames_);
         regAlloc_.analyze(node);
         
         for (const auto& range : regAlloc_.getLiveRanges()) {
@@ -430,17 +449,32 @@ void NativeCodeGen::visit(FnDecl& node) {
         emitSaveCalleeSavedRegs();
         
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
-            constStrVars[node.params[i].first] = "";
+            // Only mark string parameters in constStrVars
+            const std::string& paramType = node.params[i].second;
+            if (paramType == "str" || paramType == "string" || paramType == "String") {
+                constStrVars[node.params[i].first] = "";  // Empty means runtime string
+            }
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
             if (isFloatTypeName(node.params[i].second)) {
                 floatVars.insert(node.params[i].first);
             }
+            // Track function pointer parameters
+            if (paramType.find("fn(") != std::string::npos || 
+                paramType.find("fn (") != std::string::npos ||
+                (paramType.size() > 3 && paramType.substr(0, 3) == "*fn")) {
+                fnPtrVars_.insert(node.params[i].first);
+            }
             // Track record type for parameters
-            if (recordTypes_.find(node.params[i].second) != recordTypes_.end()) {
-                varRecordTypes_[node.params[i].first] = node.params[i].second;
+            // Handle generic types like Container[int] -> Container
+            std::string paramTypeName = node.params[i].second;
+            size_t bracketPos = paramTypeName.find('[');
+            if (bracketPos != std::string::npos) {
+                paramTypeName = paramTypeName.substr(0, bracketPos);
+            }
+            if (recordTypes_.find(paramTypeName) != recordTypes_.end()) {
+                varRecordTypes_[node.params[i].first] = paramTypeName;
             }
             // Track borrow parameters for auto-dereference on return
-            const std::string& paramType = node.params[i].second;
             if (!paramType.empty() && paramType[0] == '&') {
                 // Extract base type: "&int" -> "int", "&mut int" -> "int"
                 std::string baseType = paramType.substr(1);
@@ -466,17 +500,32 @@ void NativeCodeGen::visit(FnDecl& node) {
         stackAllocated_ = true;
         
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
-            constStrVars[node.params[i].first] = "";
+            // Only mark string parameters in constStrVars
+            const std::string& paramType = node.params[i].second;
+            if (paramType == "str" || paramType == "string" || paramType == "String") {
+                constStrVars[node.params[i].first] = "";  // Empty means runtime string
+            }
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
             if (isFloatTypeName(node.params[i].second)) {
                 floatVars.insert(node.params[i].first);
             }
+            // Track function pointer parameters
+            if (paramType.find("fn(") != std::string::npos || 
+                paramType.find("fn (") != std::string::npos ||
+                (paramType.size() > 3 && paramType.substr(0, 3) == "*fn")) {
+                fnPtrVars_.insert(node.params[i].first);
+            }
             // Track record type for parameters
-            if (recordTypes_.find(node.params[i].second) != recordTypes_.end()) {
-                varRecordTypes_[node.params[i].first] = node.params[i].second;
+            // Handle generic types like Container[int] -> Container
+            std::string paramTypeName = node.params[i].second;
+            size_t bracketPos = paramTypeName.find('[');
+            if (bracketPos != std::string::npos) {
+                paramTypeName = paramTypeName.substr(0, bracketPos);
+            }
+            if (recordTypes_.find(paramTypeName) != recordTypes_.end()) {
+                varRecordTypes_[node.params[i].first] = paramTypeName;
             }
             // Track borrow parameters for auto-dereference on return
-            const std::string& paramType = node.params[i].second;
             if (!paramType.empty() && paramType[0] == '&') {
                 // Extract base type: "&int" -> "int", "&mut int" -> "int"
                 std::string baseType = paramType.substr(1);
@@ -520,6 +569,8 @@ void NativeCodeGen::visit(FnDecl& node) {
     stdoutHandleCached_ = savedStdoutCached;
     borrowParams_ = savedBorrowParams;
     currentFnReturnType_ = savedReturnType;
+    fnPtrVars_ = savedFnPtrVars;
+    closureVars_ = savedClosureVars;
     
     for (auto* nested : nestedFunctions) {
         nested->accept(*this);

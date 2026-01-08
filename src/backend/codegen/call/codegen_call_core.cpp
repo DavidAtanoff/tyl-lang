@@ -3,10 +3,63 @@
 
 #include "backend/codegen/codegen_base.h"
 #include "semantic/types/types.h"
+#include "semantic/ctfe/ctfe_interpreter.h"
 
 namespace tyl {
 
 void NativeCodeGen::visit(CallExpr& node) {
+    // First, try to evaluate comptime function calls at compile time
+    if (auto* id = dynamic_cast<Identifier*>(node.callee.get())) {
+        if (ctfe_.isComptimeFunction(id->name)) {
+            // Try to evaluate all arguments at compile time
+            std::vector<CTFEInterpValue> args;
+            bool allArgsConst = true;
+            
+            for (auto& arg : node.args) {
+                auto val = ctfe_.evaluateExpr(arg.get());
+                if (val) {
+                    args.push_back(*val);
+                } else {
+                    allArgsConst = false;
+                    break;
+                }
+            }
+            
+            if (allArgsConst) {
+                try {
+                    auto result = ctfe_.evaluateCall(id->name, args);
+                    if (result) {
+                        // Emit the constant result
+                        if (auto intVal = CTFEInterpreter::toInt(*result)) {
+                            asm_.mov_rax_imm64(*intVal);
+                            lastExprWasFloat_ = false;  // Ensure we mark this as NOT a float
+                            return;
+                        }
+                        if (auto floatVal = CTFEInterpreter::toFloat(*result)) {
+                            uint32_t rva = addFloatConstant(*floatVal);
+                            asm_.movsd_xmm0_mem_rip(rva);
+                            lastExprWasFloat_ = true;
+                            return;
+                        }
+                        if (auto strVal = CTFEInterpreter::toString(*result)) {
+                            uint32_t rva = addString(*strVal);
+                            asm_.lea_rax_rip_fixup(rva);
+                            return;
+                        }
+                        if (auto boolVal = CTFEInterpreter::toBool(*result)) {
+                            asm_.mov_rax_imm64(*boolVal ? 1 : 0);
+                            return;
+                        }
+                    }
+                } catch (const CTFEInterpError& e) {
+                    // CTFE evaluation failed - this is an error for comptime functions
+                    // For now, we'll fall through and try runtime (which will fail)
+                    (void)e;
+                }
+            }
+        }
+    }
+    
     // Handle module function calls (e.g., math.add)
     if (auto* member = dynamic_cast<MemberExpr*>(node.callee.get())) {
         // Check for .clone() method call - deep copy for ownership system
@@ -393,25 +446,46 @@ void NativeCodeGen::visit(CallExpr& node) {
         }
         
         // Check for instance method call (obj.method())
+        // First, try to determine the type of the object
+        std::string objTypeName;
+        if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+            auto varTypeIt = varRecordTypes_.find(objId->name);
+            if (varTypeIt != varRecordTypes_.end()) {
+                objTypeName = varTypeIt->second;
+            }
+        }
+        
+        // Look for impl method matching the object's type
         for (const auto& [implKey, info] : impls_) {
+            // If we know the object type, only match impls for that type
+            if (!objTypeName.empty() && info.typeName != objTypeName) {
+                continue;
+            }
+            
             auto methodIt = info.methodLabels.find(member->member);
             if (methodIt != info.methodLabels.end()) {
-                member->object->accept(*this);
-                asm_.push_rax();
+                // Push arguments in reverse order so they pop into correct registers
+                // For method call obj.method(arg1, arg2), we want:
+                // RCX = obj (self), RDX = arg1, R8 = arg2, etc.
+                // Push order: arg2, arg1, obj -> pop order: obj->RCX, arg1->RDX, arg2->R8
                 
                 for (int i = (int)node.args.size() - 1; i >= 0; i--) {
                     node.args[i]->accept(*this);
                     asm_.push_rax();
                 }
                 
+                // Push self last so it pops into RCX first
+                member->object->accept(*this);
+                asm_.push_rax();
+                
                 size_t totalArgs = node.args.size() + 1;
-                if (totalArgs >= 1) asm_.pop_rcx();
-                if (totalArgs >= 2) asm_.pop_rdx();
+                if (totalArgs >= 1) asm_.pop_rcx();  // self
+                if (totalArgs >= 2) asm_.pop_rdx();  // arg1
                 if (totalArgs >= 3) {
-                    asm_.code.push_back(0x41); asm_.code.push_back(0x58);
+                    asm_.code.push_back(0x41); asm_.code.push_back(0x58);  // pop r8
                 }
                 if (totalArgs >= 4) {
-                    asm_.code.push_back(0x41); asm_.code.push_back(0x59);
+                    asm_.code.push_back(0x41); asm_.code.push_back(0x59);  // pop r9
                 }
                 
                 if (!stackAllocated_) asm_.sub_rsp_imm32(0x20);

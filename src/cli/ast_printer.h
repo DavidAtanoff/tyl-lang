@@ -120,6 +120,7 @@ public:
     void visit(TypeAlias& n) override;
     void visit(TraitDecl& n) override;
     void visit(ImplBlock& n) override;
+    void visit(ConceptDecl& n) override;
     void visit(UnsafeBlock& n) override;
     void visit(ImportStmt& n) override;
     void visit(ExternDecl& n) override;

@@ -218,6 +218,7 @@ public:
     void visit(TypeAlias& node) override {}
     void visit(TraitDecl& node) override {}
     void visit(ImplBlock& node) override;
+    void visit(ConceptDecl& node) override {}  // Concepts are compile-time only
     void visit(UnsafeBlock& node) override;
     void visit(ImportStmt& node) override {}
     void visit(ExternDecl& node) override {}

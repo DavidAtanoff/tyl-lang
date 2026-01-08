@@ -2,6 +2,7 @@
 // Declaration type checking
 
 #include "checker_base.h"
+#include <algorithm>
 
 namespace tyl {
 
@@ -12,13 +13,59 @@ void TypeChecker::visit(FnDecl& node) {
     // Handle generic type parameters
     fnType->typeParams = node.typeParams;
     
-    // Push type parameters into scope
+    // Push type parameters into scope, parsing constraints if present
     std::vector<std::string> savedTypeParamNames = currentTypeParamNames_;
+    auto savedTypeParamConstraints = typeParamConstraints_;  // Save current constraints
+    
     for (const auto& tp : node.typeParams) {
-        currentTypeParamNames_.push_back(tp);
+        std::string paramName = tp;
+        std::vector<std::string> constraints;
+        
+        // Check for constraint syntax: "T: Numeric" or "T: Numeric + Orderable"
+        size_t colonPos = tp.find(':');
+        if (colonPos != std::string::npos && tp.find('[') == std::string::npos) {
+            // Has constraint (but not HKT syntax like F[_])
+            paramName = tp.substr(0, colonPos);
+            // Trim whitespace
+            while (!paramName.empty() && paramName.back() == ' ') paramName.pop_back();
+            
+            std::string constraintStr = tp.substr(colonPos + 1);
+            // Parse constraints separated by +
+            size_t pos = 0;
+            while (pos < constraintStr.length()) {
+                // Skip whitespace
+                while (pos < constraintStr.length() && constraintStr[pos] == ' ') pos++;
+                if (pos >= constraintStr.length()) break;
+                
+                // Find end of concept name
+                size_t end = pos;
+                while (end < constraintStr.length() && constraintStr[end] != ' ' && constraintStr[end] != '+') end++;
+                
+                if (end > pos) {
+                    std::string conceptName = constraintStr.substr(pos, end - pos);
+                    constraints.push_back(conceptName);
+                    
+                    // Validate concept exists
+                    ConceptPtr concept = reg.lookupConcept(conceptName);
+                    if (!concept) {
+                        warning("Unknown concept '" + conceptName + "' in constraint for type parameter '" + paramName + "'", node.location);
+                    }
+                }
+                
+                pos = end;
+                // Skip + and whitespace
+                while (pos < constraintStr.length() && (constraintStr[pos] == ' ' || constraintStr[pos] == '+')) pos++;
+            }
+            
+            if (!constraints.empty()) {
+                typeParamConstraints_[paramName] = constraints;
+            }
+        }
+        
+        currentTypeParamNames_.push_back(paramName);
         // Create type parameter type
-        auto tpType = std::make_shared<TypeParamType>(tp);
-        currentTypeParams_[tp] = tpType;
+        auto tpType = std::make_shared<TypeParamType>(paramName);
+        currentTypeParams_[paramName] = tpType;
     }
     
     // =========================================================================
@@ -153,9 +200,18 @@ void TypeChecker::visit(FnDecl& node) {
     
     // Restore type parameter scope
     for (const auto& tp : node.typeParams) {
-        currentTypeParams_.erase(tp);
+        // Extract parameter name (handle "T: Concept" syntax)
+        std::string paramName = tp;
+        size_t colonPos = tp.find(':');
+        if (colonPos != std::string::npos && tp.find('[') == std::string::npos) {
+            paramName = tp.substr(0, colonPos);
+            while (!paramName.empty() && paramName.back() == ' ') paramName.pop_back();
+        }
+        currentTypeParams_.erase(paramName);
+        typeParamConstraints_.erase(paramName);
     }
     currentTypeParamNames_ = savedTypeParamNames;
+    typeParamConstraints_ = savedTypeParamConstraints;
 }
 
 void TypeChecker::visit(RecordDecl& node) {
@@ -334,6 +390,26 @@ void TypeChecker::visit(TraitDecl& node) {
         currentTypeParams_[tp] = tpType;
     }
     
+    // Handle Higher-Kinded Type parameters (F[_], M[_, _], etc.)
+    for (const auto& hktParam : node.hktTypeParams) {
+        currentTypeParamNames_.push_back(hktParam.name);
+        auto tcType = std::make_shared<TypeConstructorType>(hktParam.name, hktParam.arity);
+        tcType->bounds = hktParam.bounds;
+        currentTypeParams_[hktParam.name] = tcType;
+        
+        // Register the type constructor
+        reg.registerTypeConstructor(hktParam.name, tcType);
+        
+        // Also add to trait's type params for serialization
+        std::string hktStr = hktParam.name + "[";
+        for (size_t i = 0; i < hktParam.arity; i++) {
+            if (i > 0) hktStr += ", ";
+            hktStr += "_";
+        }
+        hktStr += "]";
+        trait->typeParams.push_back(hktStr);
+    }
+    
     // Add implicit Self type parameter
     currentTypeParamNames_.push_back("Self");
     currentTypeParams_["Self"] = reg.typeParamType("Self");
@@ -378,6 +454,9 @@ void TypeChecker::visit(TraitDecl& node) {
     for (const auto& tp : node.typeParams) {
         currentTypeParams_.erase(tp);
     }
+    for (const auto& hktParam : node.hktTypeParams) {
+        currentTypeParams_.erase(hktParam.name);
+    }
     currentTypeParamNames_ = savedTypeParamNames;
 }
 
@@ -398,7 +477,22 @@ void TypeChecker::visit(ImplBlock& node) {
     // Add Self as alias for the implementing type
     currentTypeParams_["Self"] = implType;
     
+    // For HKT trait implementations, we need to handle the type constructor
+    // e.g., "impl Functor for Container" where Functor[F[_]] and Container is F
+    bool isHKTImpl = false;
+    TraitPtr trait = nullptr;
     if (!node.traitName.empty()) {
+        trait = reg.lookupTrait(node.traitName);
+        if (trait) {
+            // Check if this trait has HKT type parameters
+            for (const auto& tp : trait->typeParams) {
+                if (tp.find("[_]") != std::string::npos || tp.find("[_, _]") != std::string::npos) {
+                    isHKTImpl = true;
+                    break;
+                }
+            }
+        }
+        
         // This is a trait implementation
         checkTraitImpl(node.traitName, node.typeName, node.methods, node.location);
         
@@ -414,6 +508,36 @@ void TypeChecker::visit(ImplBlock& node) {
                 }
             }
         }
+    } else {
+        // Inherent impl (no trait) - register methods for lookup
+        TraitImpl impl;
+        impl.traitName = "";  // Empty means inherent impl
+        impl.typeName = node.typeName;
+        
+        for (auto& method : node.methods) {
+            // Add method type parameters to scope before parsing types
+            std::vector<std::string> savedMethodTypeParams = currentTypeParamNames_;
+            auto savedMethodParams = currentTypeParams_;
+            
+            for (const auto& tp : method->typeParams) {
+                currentTypeParamNames_.push_back(tp);
+                auto tpType = std::make_shared<TypeParamType>(tp);
+                currentTypeParams_[tp] = tpType;
+            }
+            
+            auto fnType = std::make_shared<FunctionType>();
+            fnType->typeParams = method->typeParams;
+            for (const auto& p : method->params) {
+                fnType->params.push_back({p.first, parseTypeAnnotation(p.second)});
+            }
+            fnType->returnType = parseTypeAnnotation(method->returnType);
+            impl.methods[method->name] = fnType;
+            
+            // Restore type parameter scope
+            currentTypeParamNames_ = savedMethodTypeParams;
+            currentTypeParams_ = savedMethodParams;
+        }
+        reg.registerTraitImpl(impl);
     }
     
     // Type check all methods
@@ -421,7 +545,19 @@ void TypeChecker::visit(ImplBlock& node) {
         // Create qualified method name for the type
         std::string qualifiedName = node.typeName + "." + method->name;
         
+        // For HKT impls, method type parameters need to be in scope
+        // e.g., fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]
+        std::vector<std::string> methodTypeParams;
+        for (const auto& tp : method->typeParams) {
+            methodTypeParams.push_back(tp);
+            currentTypeParamNames_.push_back(tp);
+            auto tpType = std::make_shared<TypeParamType>(tp);
+            currentTypeParams_[tp] = tpType;
+        }
+        
         auto fnType = std::make_shared<FunctionType>();
+        fnType->typeParams = method->typeParams;
+        
         for (auto& p : method->params) {
             TypePtr paramType = parseTypeAnnotation(p.second);
             if (paramType->kind == TypeKind::UNKNOWN) paramType = reg.anyType();
@@ -453,6 +589,15 @@ void TypeChecker::visit(ImplBlock& node) {
             method->body->accept(*this);
         }
         symbols_.popScope();
+        
+        // Remove method type parameters from scope
+        for (const auto& tp : methodTypeParams) {
+            currentTypeParams_.erase(tp);
+            currentTypeParamNames_.erase(
+                std::remove(currentTypeParamNames_.begin(), currentTypeParamNames_.end(), tp),
+                currentTypeParamNames_.end()
+            );
+        }
     }
     
     // Restore type parameter scope
@@ -520,6 +665,68 @@ void TypeChecker::visit(ModuleDecl& node) {
             stmt->accept(*this);
         }
     }
+}
+
+void TypeChecker::visit(ConceptDecl& node) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Create the concept type
+    auto concept = reg.conceptType(node.name);
+    concept->typeParams = node.typeParams;
+    
+    // Push type parameters into scope for requirement parsing
+    std::vector<std::string> savedTypeParamNames = currentTypeParamNames_;
+    for (const auto& tp : node.typeParams) {
+        currentTypeParamNames_.push_back(tp);
+        auto tpType = std::make_shared<TypeParamType>(tp);
+        currentTypeParams_[tp] = tpType;
+    }
+    
+    // Validate super concepts exist
+    for (const auto& superConcept : node.superConcepts) {
+        ConceptPtr superConceptType = reg.lookupConcept(superConcept);
+        if (!superConceptType) {
+            error("Unknown super concept '" + superConcept + "'", node.location);
+        }
+    }
+    
+    // Process concept requirements (function signatures)
+    for (const auto& req : node.requirements) {
+        ConceptRequirementType reqType;
+        reqType.name = req.name;
+        reqType.isStatic = req.isStatic;
+        
+        // Create function signature for the requirement
+        reqType.signature = std::make_shared<FunctionType>();
+        
+        // Parse parameter types
+        for (const auto& param : req.params) {
+            TypePtr paramType = parseTypeAnnotation(param.second);
+            if (paramType->kind == TypeKind::UNKNOWN) paramType = reg.anyType();
+            reqType.signature->params.push_back({param.first, paramType});
+        }
+        
+        // Parse return type
+        reqType.signature->returnType = parseTypeAnnotation(req.returnType);
+        if (reqType.signature->returnType->kind == TypeKind::UNKNOWN) {
+            reqType.signature->returnType = reg.voidType();
+        }
+        
+        concept->requirements.push_back(reqType);
+    }
+    
+    // Register the concept
+    reg.registerConcept(node.name, concept);
+    
+    // Also register as a type symbol for constraint usage
+    Symbol conceptSym(node.name, SymbolKind::TYPE, concept);
+    symbols_.define(conceptSym);
+    
+    // Restore type parameter scope
+    for (const auto& tp : node.typeParams) {
+        currentTypeParams_.erase(tp);
+    }
+    currentTypeParamNames_ = savedTypeParamNames;
 }
 
 } // namespace tyl

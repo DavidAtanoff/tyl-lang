@@ -42,13 +42,54 @@ void TailCallOptimizationPass::collectFunctions(Program& ast) {
     }
 }
 
+// Helper to check if an expression contains a recursive call
+static bool containsRecursiveCall(Expression* expr, const std::string& fnName) {
+    if (!expr) return false;
+    
+    if (auto* call = dynamic_cast<CallExpr*>(expr)) {
+        if (auto* callee = dynamic_cast<Identifier*>(call->callee.get())) {
+            if (callee->name == fnName) return true;
+        }
+        // Check arguments for nested recursive calls
+        for (auto& arg : call->args) {
+            if (containsRecursiveCall(arg.get(), fnName)) return true;
+        }
+    }
+    else if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        return containsRecursiveCall(binary->left.get(), fnName) ||
+               containsRecursiveCall(binary->right.get(), fnName);
+    }
+    else if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+        return containsRecursiveCall(unary->operand.get(), fnName);
+    }
+    else if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {
+        return containsRecursiveCall(ternary->condition.get(), fnName) ||
+               containsRecursiveCall(ternary->thenExpr.get(), fnName) ||
+               containsRecursiveCall(ternary->elseExpr.get(), fnName);
+    }
+    
+    return false;
+}
+
 bool TailCallOptimizationPass::isTailCall(ReturnStmt* ret, const std::string& fnName) {
     if (!ret || !ret->value) return false;
     
-    // Check if return value is a call to the same function
+    // Check if return value is a DIRECT call to the same function
+    // (not nested inside another expression or as an argument)
     if (auto* call = dynamic_cast<CallExpr*>(ret->value.get())) {
         if (auto* callee = dynamic_cast<Identifier*>(call->callee.get())) {
-            return callee->name == fnName;
+            if (callee->name == fnName) {
+                // This is a direct recursive call, but we need to verify
+                // that none of the arguments contain recursive calls.
+                // e.g., ackermann(m - 1, ackermann(m, n - 1)) is NOT a tail call
+                // because the inner ackermann call must complete first.
+                for (auto& arg : call->args) {
+                    if (containsRecursiveCall(arg.get(), fnName)) {
+                        return false;  // Nested recursive call - not a true tail call
+                    }
+                }
+                return true;  // True tail call
+            }
         }
     }
     
@@ -90,8 +131,9 @@ void TailCallOptimizationPass::analyzeTailCalls() {
     for (auto& [name, info] : functions_) {
         if (!info.decl || !info.decl->body) continue;
         
-        // Skip extern and async functions
-        if (info.decl->isExtern || info.decl->isAsync) continue;
+        // Skip extern, async, and comptime functions
+        // Comptime functions are evaluated by the CTFE interpreter, not compiled
+        if (info.decl->isExtern || info.decl->isAsync || info.decl->isComptime) continue;
         
         // Find all tail calls
         findTailCalls(info.decl->body.get(), name, info.tailCalls);

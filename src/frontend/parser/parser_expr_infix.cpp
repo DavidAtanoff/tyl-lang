@@ -307,6 +307,7 @@ ExprPtr Parser::parseIndexAccess(ExprPtr object, SourceLocation loc) {
         if (validTypeArgs && check(TokenType::RBRACKET)) {
             advance();
             
+            // Check for call with type args: Name[T](args)
             if (check(TokenType::LPAREN)) {
                 advance();
                 auto call = std::make_unique<CallExpr>(std::move(object), loc);
@@ -314,6 +315,32 @@ ExprPtr Parser::parseIndexAccess(ExprPtr object, SourceLocation loc) {
                 parseCallArgs(call.get());
                 consume(TokenType::RPAREN, "Expected ')' after arguments");
                 return call;
+            }
+            
+            // Check for record literal with type args: Name[T] { fields }
+            if (check(TokenType::LBRACE)) {
+                advance();
+                auto* id = dynamic_cast<Identifier*>(object.get());
+                auto rec = std::make_unique<RecordExpr>(loc);
+                rec->typeName = id->name;
+                rec->typeArgs = std::move(typeArgs);
+                
+                skipNewlines();
+                if (!check(TokenType::RBRACE)) {
+                    do {
+                        skipNewlines();
+                        if (check(TokenType::RBRACE)) break;
+                        
+                        auto name = consume(TokenType::IDENTIFIER, "Expected field name").lexeme;
+                        consume(TokenType::COLON, "Expected ':' after field name");
+                        auto value = expression();
+                        rec->fields.emplace_back(name, std::move(value));
+                    } while (match(TokenType::COMMA));
+                }
+                
+                skipNewlines();
+                consume(TokenType::RBRACE, "Expected '}' after record fields");
+                return rec;
             }
         }
         

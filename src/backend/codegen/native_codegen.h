@@ -10,6 +10,7 @@
 #include "backend/codegen/global_register_allocator.h"
 #include "backend/gc/gc.h"
 #include "semantic/generics/monomorphizer.h"
+#include "semantic/ctfe/ctfe_interpreter.h"
 #include <map>
 #include <set>
 
@@ -348,6 +349,11 @@ private:
     // Borrow parameter tracking for auto-dereference on return
     std::map<std::string, std::string> borrowParams_;          // Parameter name -> base type (e.g., "x" -> "int" for &int)
     std::string currentFnReturnType_;                          // Return type of current function
+    
+    // CTFE (Compile-Time Function Evaluation) support
+    CTFEInterpreter ctfe_;                                     // CTFE interpreter instance
+    std::set<std::string> comptimeFunctions_;                  // Names of comptime functions (don't emit code for these)
+    bool tryEvalComptimeFnCall(CallExpr* call, int64_t& outValue);  // Try to evaluate comptime function call
     
     // Channel helper methods
     void emitChannelCreate(size_t bufferSize, int32_t elementSize);  // Create a new channel
@@ -814,6 +820,7 @@ private:
     void visit(TypeAlias& node) override;
     void visit(TraitDecl& node) override;
     void visit(ImplBlock& node) override;
+    void visit(ConceptDecl& node) override;  // Concepts are compile-time only, no codegen needed
     void visit(UnsafeBlock& node) override;
     void visit(ImportStmt& node) override;
     void visit(ExternDecl& node) override;

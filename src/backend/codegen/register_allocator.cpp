@@ -6,7 +6,7 @@
 
 namespace tyl {
 
-RegisterAllocator::RegisterAllocator() : currentPos_(0) {}
+RegisterAllocator::RegisterAllocator() : currentPos_(0), functionNames_(nullptr) {}
 
 void RegisterAllocator::reset() {
     liveRanges_.clear();
@@ -42,8 +42,11 @@ std::vector<VarRegister> RegisterAllocator::getUsedRegisters() const {
 }
 
 void RegisterAllocator::recordDef(const std::string& name) {
-    // Skip internal/temporary variables
+    // Skip internal/temporary variables (starting with $)
     if (name.empty() || name[0] == '$') return;
+    
+    // Skip function names - they are addresses, not variables
+    if (functionNames_ && functionNames_->count(name)) return;
     
     // Find existing range or create new one
     for (auto& range : liveRanges_) {
@@ -66,8 +69,13 @@ void RegisterAllocator::recordDef(const std::string& name) {
 }
 
 void RegisterAllocator::recordUse(const std::string& name) {
-    // Skip internal/temporary variables
+    // Skip internal/temporary variables (starting with $)
     if (name.empty() || name[0] == '$') return;
+    
+    // Skip function names - they are addresses, not variables
+    if (functionNames_ && functionNames_->count(name)) {
+        return;
+    }
     
     for (auto& range : liveRanges_) {
         if (range.name == name) {
@@ -169,8 +177,7 @@ void RegisterAllocator::scanExpression(Expression* expr) {
     if (!expr) return;
     
     if (auto* id = dynamic_cast<Identifier*>(expr)) {
-        // Don't record function names as variable uses - they're handled separately
-        // Only record actual variable uses
+        // recordUse will skip function names if functionNames_ is set
         recordUse(id->name);
     }
     else if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
@@ -181,14 +188,24 @@ void RegisterAllocator::scanExpression(Expression* expr) {
         scanExpression(unary->operand.get());
     }
     else if (auto* call = dynamic_cast<CallExpr*>(expr)) {
-        // Don't scan the callee - it's a function name, not a variable
-        // Only scan the arguments
+        // Don't scan the callee if it's a simple identifier (function name)
+        // But DO scan member expressions and other complex callees
+        if (!dynamic_cast<Identifier*>(call->callee.get())) {
+            scanExpression(call->callee.get());
+        }
+        // Scan the arguments - but skip function name identifiers
         for (auto& arg : call->args) {
+            // Check if this argument is a function name being passed as a function pointer
+            if (auto* argId = dynamic_cast<Identifier*>(arg.get())) {
+                // Skip if it's a known function name
+                if (functionNames_ && functionNames_->count(argId->name)) {
+                    continue;  // Don't record use for function names
+                }
+            }
             scanExpression(arg.get());
         }
     }
     else if (auto* interp = dynamic_cast<InterpolatedString*>(expr)) {
-        // Scan all parts of the interpolated string for variable uses
         for (auto& part : interp->parts) {
             if (std::holds_alternative<ExprPtr>(part)) {
                 scanExpression(std::get<ExprPtr>(part).get());
@@ -230,6 +247,25 @@ void RegisterAllocator::scanExpression(Expression* expr) {
     }
     else if (auto* deref = dynamic_cast<DerefExpr*>(expr)) {
         scanExpression(deref->operand.get());
+    }
+    // Handle LambdaExpr - scan the body expression
+    else if (auto* lambda = dynamic_cast<LambdaExpr*>(expr)) {
+        // Lambda parameters are local to the lambda, don't record them here
+        // But we do need to scan the body for any captured variables
+        scanExpression(lambda->body.get());
+    }
+    // Handle RecordExpr - scan field value expressions
+    else if (auto* record = dynamic_cast<RecordExpr*>(expr)) {
+        for (auto& field : record->fields) {
+            scanExpression(field.second.get());
+        }
+    }
+    // Handle MapExpr - scan key and value expressions
+    else if (auto* map = dynamic_cast<MapExpr*>(expr)) {
+        for (auto& entry : map->entries) {
+            scanExpression(entry.first.get());
+            scanExpression(entry.second.get());
+        }
     }
 }
 

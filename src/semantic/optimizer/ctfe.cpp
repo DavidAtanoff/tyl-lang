@@ -235,8 +235,9 @@ void CTFEPass::analyzeFunctions() {
     // Third pass: mark CTFE candidates
     // A function can be CTFE'd if it's pure - recursive functions ARE allowed
     // because we have recursion depth limits in the evaluator
+    // Skip functions marked as 'comptime' - they are handled by the new CTFE interpreter
     for (auto& [name, info] : functions_) {
-        if (info.isPure) {
+        if (info.isPure && info.decl && !info.decl->isComptime) {
             info.canCTFE = true;
             ctfeCandidates_.insert(name);
         }

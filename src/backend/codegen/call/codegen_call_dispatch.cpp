@@ -85,7 +85,7 @@ void NativeCodeGen::emitFloatFunctionCall(CallExpr& node, const std::string& cal
 }
 
 void NativeCodeGen::emitFunctionPointerCall(CallExpr& node, const std::string& varName) {
-    // Load function pointer from variable
+    // Load function pointer/closure from variable
     auto regIt = varRegisters_.find(varName);
     auto globalRegIt = globalVarRegisters_.find(varName);
     auto localIt = locals.find(varName);
@@ -114,7 +114,21 @@ void NativeCodeGen::emitFunctionPointerCall(CallExpr& node, const std::string& v
         asm_.xor_rax_rax();
     }
     
-    // Save function pointer
+    // RAX now contains either:
+    // 1. A closure pointer (heap object with fn ptr at offset 0)
+    // 2. A raw function pointer (code address)
+    // 
+    // We need to handle both cases. Closures are heap-allocated and have
+    // the function pointer at [rax]. Raw function pointers are just addresses.
+    // 
+    // Strategy: Load [rax] into a temp register. If it looks like a valid
+    // code address (in the code section), use it. Otherwise, use rax directly.
+    // 
+    // Simpler approach: All function pointer parameters are now treated as
+    // closures. When passing a raw function pointer, the caller wraps it.
+    // The lambda calling convention is: RCX = closure ptr, RDX = arg0, R8 = arg1, R9 = arg2
+    
+    // Save closure pointer
     asm_.push_rax();
     
     // Push arguments in reverse order
@@ -123,20 +137,27 @@ void NativeCodeGen::emitFunctionPointerCall(CallExpr& node, const std::string& v
         asm_.push_rax();
     }
     
-    // Pop into argument registers (Windows x64 ABI)
-    if (node.args.size() >= 1) asm_.pop_rcx();
-    if (node.args.size() >= 2) asm_.pop_rdx();
-    if (node.args.size() >= 3) {
+    // Pop arguments into registers (closure calling convention)
+    // RCX = closure, RDX = arg0, R8 = arg1, R9 = arg2
+    if (node.args.size() >= 1) asm_.pop_rdx();
+    if (node.args.size() >= 2) {
         asm_.code.push_back(0x41); asm_.code.push_back(0x58); // pop r8
     }
-    if (node.args.size() >= 4) {
+    if (node.args.size() >= 3) {
         asm_.code.push_back(0x41); asm_.code.push_back(0x59); // pop r9
     }
+    if (node.args.size() >= 4) {
+        // Extra args would need stack passing
+        asm_.pop_rax();
+    }
     
-    // Pop function pointer into RAX
-    asm_.pop_rax();
+    // Pop closure pointer into RCX
+    asm_.pop_rcx();
     
-    // Call through function pointer (always allocate shadow space)
+    // Load function pointer from closure: mov rax, [rcx]
+    asm_.mov_rax_mem_rcx();
+    
+    // Call through function pointer
     asm_.sub_rsp_imm32(0x20);
     asm_.call_rax();
     asm_.add_rsp_imm32(0x20);

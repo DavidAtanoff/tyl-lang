@@ -29,7 +29,7 @@ struct CallExpr : Expression { ExprPtr callee; std::vector<ExprPtr> args; std::v
 struct MemberExpr : Expression { ExprPtr object; std::string member; MemberExpr(ExprPtr obj, std::string m, SourceLocation loc) : object(std::move(obj)), member(std::move(m)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct IndexExpr : Expression { ExprPtr object; ExprPtr index; IndexExpr(ExprPtr obj, ExprPtr idx, SourceLocation loc) : object(std::move(obj)), index(std::move(idx)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ListExpr : Expression { std::vector<ExprPtr> elements; ListExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
-struct RecordExpr : Expression { std::string typeName; std::vector<std::pair<std::string, ExprPtr>> fields; RecordExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
+struct RecordExpr : Expression { std::string typeName; std::vector<std::string> typeArgs; std::vector<std::pair<std::string, ExprPtr>> fields; RecordExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct MapExpr : Expression { std::vector<std::pair<ExprPtr, ExprPtr>> entries; MapExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct RangeExpr : Expression { ExprPtr start; ExprPtr end; ExprPtr step; RangeExpr(ExprPtr s, ExprPtr e, ExprPtr st, SourceLocation loc) : start(std::move(s)), end(std::move(e)), step(std::move(st)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct LambdaExpr : Expression { std::vector<std::pair<std::string, std::string>> params; ExprPtr body; LambdaExpr(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -163,7 +163,7 @@ enum class CallingConvention {
     Win64       // Windows x64 ABI
 };
 
-struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> lifetimeParams; std::vector<std::pair<std::string, std::string>> params; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; bool isExport = false; bool isHidden = false; bool isWeak = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
+struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> lifetimeParams; std::vector<std::pair<std::string, std::string>> params; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; bool isExport = false; bool isHidden = false; bool isWeak = false; bool isComptime = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
 // Bitfield specification for a record field
 struct BitfieldSpec {
     int bitWidth = 0;          // Number of bits (0 = not a bitfield)
@@ -196,11 +196,13 @@ struct UnionDecl : Statement {
 };
 struct EnumDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::pair<std::string, std::optional<int64_t>>> variants; EnumDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 
-// Type parameter for dependent types - can be a type (T) or a value (N: int)
+// Type parameter for dependent types - can be a type (T) or a value (N: int) or a type constructor (F[_])
 struct DependentTypeParam {
-    std::string name;           // Parameter name (e.g., "T" or "N")
-    std::string kind;           // "type" for type params, or a type name for value params (e.g., "int")
+    std::string name;           // Parameter name (e.g., "T" or "N" or "F")
+    std::string kind;           // "type" for type params, or a type name for value params (e.g., "int"), or "type_constructor" for HKT
     bool isValue = false;       // true if this is a value parameter (N: int)
+    bool isTypeConstructor = false;  // true if this is a type constructor (F[_])
+    size_t constructorArity = 0;     // Number of type params for type constructor (1 for F[_], 2 for F[_, _])
     DependentTypeParam(std::string n, std::string k = "type", bool val = false) 
         : name(std::move(n)), kind(std::move(k)), isValue(val) {}
 };
@@ -213,7 +215,44 @@ struct TypeAlias : Statement {
     TypeAlias(std::string n, std::string t, SourceLocation loc) : name(std::move(n)), targetType(std::move(t)) { location = loc; } 
     void accept(ASTVisitor& visitor) override; 
 };
-struct TraitDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> superTraits; std::vector<std::unique_ptr<FnDecl>> methods; TraitDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+// Higher-Kinded Type parameter info for traits
+struct HKTTypeParam {
+    std::string name;           // Parameter name (e.g., "F", "M")
+    size_t arity;               // Number of type args (1 for F[_], 2 for F[_, _])
+    std::vector<std::string> bounds;  // Trait bounds (e.g., "Functor" for F[_]: Functor)
+    HKTTypeParam(std::string n, size_t ar = 1) : name(std::move(n)), arity(ar) {}
+};
+
+struct TraitDecl : Statement { 
+    std::string name; 
+    std::vector<std::string> typeParams;           // Regular type parameters (T, U, etc.)
+    std::vector<HKTTypeParam> hktTypeParams;       // Higher-kinded type parameters (F[_], M[_], etc.)
+    std::vector<std::string> superTraits; 
+    std::vector<std::unique_ptr<FnDecl>> methods; 
+    TraitDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } 
+    void accept(ASTVisitor& visitor) override; 
+};
+
+// Concept declaration for type classes / constrained generics
+// concept Numeric[T]:
+//     fn add(T, T) -> T
+//     fn zero() -> T
+struct ConceptRequirement {
+    std::string name;                                    // Function name (e.g., "add", "zero")
+    std::vector<std::pair<std::string, std::string>> params;  // Parameters (name, type)
+    std::string returnType;                              // Return type
+    bool isStatic = false;                               // Static function (no self parameter)
+    ConceptRequirement(std::string n) : name(std::move(n)) {}
+};
+
+struct ConceptDecl : Statement {
+    std::string name;                                    // Concept name (e.g., "Numeric", "Orderable")
+    std::vector<std::string> typeParams;                 // Type parameters [T]
+    std::vector<std::string> superConcepts;              // Inherited concepts
+    std::vector<ConceptRequirement> requirements;        // Required functions
+    ConceptDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
 struct ImplBlock : Statement { std::string traitName; std::string typeName; std::vector<std::string> typeParams; std::vector<std::unique_ptr<FnDecl>> methods; ImplBlock(std::string trait, std::string type, SourceLocation loc) : traitName(std::move(trait)), typeName(std::move(type)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct UnsafeBlock : Statement { StmtPtr body; UnsafeBlock(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ImportStmt : Statement { std::string path; std::string alias; std::vector<std::string> items; ImportStmt(std::string p, SourceLocation loc) : path(std::move(p)) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -410,6 +449,7 @@ struct ASTVisitor {
     virtual void visit(UnionDecl& node) = 0;
     virtual void visit(EnumDecl& node) = 0; virtual void visit(TypeAlias& node) = 0;
     virtual void visit(TraitDecl& node) = 0; virtual void visit(ImplBlock& node) = 0;
+    virtual void visit(ConceptDecl& node) = 0;
     virtual void visit(UnsafeBlock& node) = 0; virtual void visit(ImportStmt& node) = 0;
     virtual void visit(ExternDecl& node) = 0; virtual void visit(MacroDecl& node) = 0;
     virtual void visit(SyntaxMacroDecl& node) = 0; virtual void visit(LayerDecl& node) = 0;

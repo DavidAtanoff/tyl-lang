@@ -641,12 +641,19 @@ bool LICMPass::isStatementInvariant(Statement* stmt, const std::set<std::string>
                                      const std::string& inductionVar) {
     if (!stmt) return false;
     
-    // Only variable declarations with invariant initializers can be hoisted
-    if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
-        if (varDecl->initializer) {
-            return isLoopInvariant(varDecl->initializer.get(), modified, inductionVar);
-        }
-    }
+    // IMPORTANT: Variable declarations inside loops should NEVER be hoisted!
+    // Even if the initializer is loop-invariant, the declaration creates a new
+    // binding on each iteration. Hoisting it would change the semantics.
+    // For example:
+    //   while i <= n:
+    //       temp := a + b   // Creates new 'temp' each iteration
+    //       a = b
+    //       b = temp
+    // If we hoist 'temp := a + b', it would only be computed once with initial values.
+    
+    // Only expression statements with invariant expressions can be hoisted
+    // (and even then, only if they have no side effects)
+    // For now, we disable hoisting of variable declarations entirely.
     
     return false;
 }

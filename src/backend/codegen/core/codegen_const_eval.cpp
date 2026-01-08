@@ -2,6 +2,7 @@
 // Handles: tryEvalConstant, tryEvalConstantFloat, tryEvalConstantString
 
 #include "backend/codegen/codegen_base.h"
+#include "semantic/ctfe/ctfe_interpreter.h"
 #include <cmath>
 #include <sstream>
 
@@ -151,6 +152,38 @@ bool NativeCodeGen::tryEvalConstant(Expression* expr, int64_t& outValue) {
                         }
                         outValue = offset;
                         return true;
+                    }
+                }
+            }
+            
+            // Handle comptime function calls via CTFE interpreter
+            if (ctfe_.isComptimeFunction(id->name)) {
+                std::vector<CTFEInterpValue> args;
+                bool allArgsConst = true;
+                
+                for (auto& arg : call->args) {
+                    auto val = ctfe_.evaluateExpr(arg.get());
+                    if (val) {
+                        args.push_back(*val);
+                    } else {
+                        allArgsConst = false;
+                        break;
+                    }
+                }
+                
+                if (allArgsConst) {
+                    try {
+                        auto result = ctfe_.evaluateCall(id->name, args);
+                        if (result) {
+                            auto intVal = CTFEInterpreter::toInt(*result);
+                            if (intVal) {
+                                outValue = *intVal;
+                                return true;
+                            }
+                        }
+                    } catch (const CTFEInterpError& e) {
+                        // CTFE evaluation failed - fall through
+                        (void)e;
                     }
                 }
             }

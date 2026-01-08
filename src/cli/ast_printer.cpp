@@ -237,7 +237,8 @@ void ASTPrinter::visit(FnDecl& n) {
         params += name;
         if (!type.empty()) params += ": " + type;
     }
-    print("FnDecl: " + n.name + typeParams + "(" + params + ")" + 
+    std::string prefix = n.isComptime ? "comptime " : "";
+    print(prefix + "FnDecl: " + n.name + typeParams + "(" + params + ")" + 
           (n.returnType.empty() ? "" : " -> " + n.returnType));
     indent++; if (n.body) n.body->accept(*this); indent--;
 }
@@ -323,6 +324,38 @@ void ASTPrinter::visit(ImplBlock& n) {
     std::string desc = n.traitName.empty() ? n.typeName : n.traitName + " for " + n.typeName;
     print("ImplBlock: " + desc);
     indent++; for (auto& method : n.methods) method->accept(*this); indent--;
+}
+
+void ASTPrinter::visit(ConceptDecl& n) {
+    std::string typeParams;
+    if (!n.typeParams.empty()) {
+        typeParams = "[";
+        for (size_t i = 0; i < n.typeParams.size(); i++) {
+            if (i > 0) typeParams += ", ";
+            typeParams += n.typeParams[i];
+        }
+        typeParams += "]";
+    }
+    std::string superConcepts;
+    if (!n.superConcepts.empty()) {
+        superConcepts = " : ";
+        for (size_t i = 0; i < n.superConcepts.size(); i++) {
+            if (i > 0) superConcepts += " + ";
+            superConcepts += n.superConcepts[i];
+        }
+    }
+    print("ConceptDecl: " + n.name + typeParams + superConcepts);
+    indent++;
+    for (const auto& req : n.requirements) {
+        std::string reqStr = (req.isStatic ? "static " : "") + std::string("fn ") + req.name + "(";
+        for (size_t i = 0; i < req.params.size(); i++) {
+            if (i > 0) reqStr += ", ";
+            reqStr += req.params[i].first + ": " + req.params[i].second;
+        }
+        reqStr += ") -> " + req.returnType;
+        print(reqStr);
+    }
+    indent--;
 }
 
 void ASTPrinter::visit(UnsafeBlock& n) { print("UnsafeBlock"); indent++; n.body->accept(*this); indent--; }

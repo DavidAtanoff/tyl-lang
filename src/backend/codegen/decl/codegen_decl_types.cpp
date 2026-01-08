@@ -107,6 +107,20 @@ void NativeCodeGen::visit(ImplBlock& node) {
     info.traitName = node.traitName;
     info.typeName = node.typeName;
     
+    // Check if this is an HKT trait implementation
+    bool isHKTImpl = false;
+    if (!node.traitName.empty()) {
+        auto traitIt = traits_.find(node.traitName);
+        if (traitIt != traits_.end()) {
+            // Check if any type param has HKT syntax
+            for (const auto& tp : traitIt->second.methodNames) {
+                // HKT traits have methods with type parameters
+                isHKTImpl = true;  // Assume HKT for now if trait exists
+                break;
+            }
+        }
+    }
+    
     for (auto& method : node.methods) {
         std::string mangledName;
         if (!node.traitName.empty()) {
@@ -124,6 +138,17 @@ void NativeCodeGen::visit(ImplBlock& node) {
     }
     
     impls_[implKey] = info;
+    
+    // Also register with just the type name for method lookup
+    // This allows c.map(...) to find Container_Functor_map
+    if (!node.traitName.empty()) {
+        std::string typeOnlyKey = ":" + node.typeName;
+        auto& typeInfo = impls_[typeOnlyKey];
+        typeInfo.typeName = node.typeName;
+        for (const auto& [methodName, label] : info.methodLabels) {
+            typeInfo.methodLabels[methodName] = label;
+        }
+    }
     
     // Vtable generation is deferred to finalizeVtables() after all code is emitted
     // This ensures function addresses are known
@@ -148,6 +173,7 @@ void NativeCodeGen::visit(ExternDecl& node) {
 void NativeCodeGen::visit(MacroDecl& node) { (void)node; }
 void NativeCodeGen::visit(SyntaxMacroDecl& node) { (void)node; }
 void NativeCodeGen::visit(LayerDecl& node) { (void)node; }
+void NativeCodeGen::visit(ConceptDecl& node) { (void)node; }  // Concepts are compile-time only
 
 void NativeCodeGen::visit(ModuleDecl& node) {
     std::string savedModule = currentModule_;

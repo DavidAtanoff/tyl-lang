@@ -168,6 +168,58 @@ void TypeChecker::visit(BinaryExpr& node) {
     TypePtr effectiveLeftType = derefIfRef(leftType);
     TypePtr effectiveRightType = derefIfRef(rightType);
     
+    // Check if either operand is a constrained type parameter
+    auto isConstrainedTypeParam = [this](const TypePtr& t) -> std::string {
+        if (t->kind == TypeKind::TYPE_PARAM) {
+            if (auto* tp = dynamic_cast<TypeParamType*>(t.get())) {
+                if (typeParamConstraints_.find(tp->name) != typeParamConstraints_.end()) {
+                    return tp->name;
+                }
+            }
+        }
+        return "";
+    };
+    
+    std::string leftTypeParam = isConstrainedTypeParam(effectiveLeftType);
+    std::string rightTypeParam = isConstrainedTypeParam(effectiveRightType);
+    
+    // If either operand is a constrained type parameter, check concept constraints
+    if (!leftTypeParam.empty() || !rightTypeParam.empty()) {
+        std::string typeParamName = !leftTypeParam.empty() ? leftTypeParam : rightTypeParam;
+        
+        switch (node.op) {
+            case TokenType::PLUS:
+            case TokenType::MINUS:
+            case TokenType::STAR:
+            case TokenType::SLASH:
+            case TokenType::PERCENT:
+                // Check if the type parameter is constrained to be numeric
+                if (typeParamIsNumeric(typeParamName)) {
+                    // Return the type parameter type (operations on T return T)
+                    currentType_ = !leftTypeParam.empty() ? effectiveLeftType : effectiveRightType;
+                    return;
+                }
+                break;
+            case TokenType::EQ: case TokenType::NE:
+                // Equality is generally allowed for any type
+                currentType_ = reg.boolType();
+                return;
+            case TokenType::LT: case TokenType::GT:
+            case TokenType::LE: case TokenType::GE:
+                // Check if the type parameter is constrained to be orderable
+                if (typeParamIsOrderable(typeParamName) || typeParamIsNumeric(typeParamName)) {
+                    currentType_ = reg.boolType();
+                    return;
+                }
+                break;
+            case TokenType::AND: case TokenType::OR:
+                currentType_ = reg.boolType();
+                return;
+            default:
+                break;
+        }
+    }
+    
     // If either operand is ANY, allow the operation and return ANY
     if (effectiveLeftType->kind == TypeKind::ANY || effectiveRightType->kind == TypeKind::ANY) {
         switch (node.op) {
@@ -652,7 +704,89 @@ void TypeChecker::visit(MemberExpr& node) {
     if (objType->kind == TypeKind::RECORD) {
         auto* recType = static_cast<RecordType*>(objType.get());
         TypePtr fieldType = recType->getField(node.member);
-        currentType_ = fieldType ? fieldType : reg.errorType();
+        if (fieldType) {
+            currentType_ = fieldType;
+            return;
+        }
+        
+        // Not a field - check for impl methods (both trait and inherent)
+        // Look up all implementations for this type
+        auto impls = reg.getTraitImpls(recType->name);
+        for (const auto* impl : impls) {
+            auto methodIt = impl->methods.find(node.member);
+            if (methodIt != impl->methods.end()) {
+                // Found an impl method
+                // For method call syntax (obj.method(args)), strip the self parameter
+                auto fnType = std::dynamic_pointer_cast<FunctionType>(methodIt->second);
+                if (fnType && !fnType->params.empty()) {
+                    // Create a new function type without the self parameter
+                    auto methodFn = std::make_shared<FunctionType>();
+                    methodFn->typeParams = fnType->typeParams;
+                    for (size_t i = 1; i < fnType->params.size(); i++) {
+                        methodFn->params.push_back(fnType->params[i]);
+                    }
+                    methodFn->returnType = fnType->returnType;
+                    currentType_ = methodFn;
+                    return;
+                }
+                currentType_ = methodIt->second;
+                return;
+            }
+        }
+        
+        // Check for qualified method name (Type.method)
+        std::string qualifiedName = recType->name + "." + node.member;
+        Symbol* methodSym = symbols_.lookup(qualifiedName);
+        if (methodSym && methodSym->kind == SymbolKind::FUNCTION) {
+            currentType_ = methodSym->type;
+            return;
+        }
+        
+        currentType_ = reg.errorType();
+    } else if (objType->kind == TypeKind::GENERIC) {
+        // Handle generic type method access (e.g., Container[int].map)
+        auto* genType = static_cast<GenericType*>(objType.get());
+        
+        // Look up trait implementations for the base type
+        auto impls = reg.getTraitImpls(genType->baseName);
+        for (const auto* impl : impls) {
+            auto methodIt = impl->methods.find(node.member);
+            if (methodIt != impl->methods.end()) {
+                // Found a trait method - need to substitute type args
+                auto fnType = std::dynamic_pointer_cast<FunctionType>(methodIt->second);
+                if (fnType) {
+                    // Create a copy with substituted types, stripping self parameter
+                    auto newFn = std::make_shared<FunctionType>();
+                    newFn->typeParams = fnType->typeParams;
+                    
+                    // Build substitution map from generic type args
+                    std::unordered_map<std::string, TypePtr> subs;
+                    // For HKT, the type constructor is bound to the concrete type
+                    // e.g., F -> Container, so F[A] -> Container[A]
+                    
+                    // Skip first parameter (self) for method call syntax
+                    for (size_t i = 1; i < fnType->params.size(); i++) {
+                        TypePtr paramType = reg.substituteTypeParams(fnType->params[i].second, subs);
+                        newFn->params.push_back({fnType->params[i].first, paramType});
+                    }
+                    newFn->returnType = reg.substituteTypeParams(fnType->returnType, subs);
+                    currentType_ = newFn;
+                    return;
+                }
+                currentType_ = methodIt->second;
+                return;
+            }
+        }
+        
+        // Check for qualified method name
+        std::string qualifiedName = genType->baseName + "." + node.member;
+        Symbol* methodSym = symbols_.lookup(qualifiedName);
+        if (methodSym && methodSym->kind == SymbolKind::FUNCTION) {
+            currentType_ = methodSym->type;
+            return;
+        }
+        
+        currentType_ = reg.anyType();
     } else {
         currentType_ = reg.anyType();
     }
@@ -709,27 +843,61 @@ void TypeChecker::visit(ListExpr& node) {
 }
 
 void TypeChecker::visit(RecordExpr& node) {
+    auto& reg = TypeRegistry::instance();
+    
     // If the record has a type name (e.g., Point{x: 1, y: 2}), look up the declared type
     if (!node.typeName.empty()) {
         TypePtr declaredType = symbols_.lookupType(node.typeName);
         if (declaredType && declaredType->kind == TypeKind::RECORD) {
             auto* recType = static_cast<RecordType*>(declaredType.get());
+            
+            // Handle generic type arguments (e.g., Container[int] { value: 21 })
+            std::unordered_map<std::string, TypePtr> typeSubstitutions;
+            if (!node.typeArgs.empty()) {
+                // Look up the record declaration to get type parameter names
+                // For now, assume single type parameter T for simple cases
+                // A full implementation would look up the RecordDecl
+                if (node.typeArgs.size() >= 1) {
+                    typeSubstitutions["T"] = parseTypeAnnotation(node.typeArgs[0]);
+                }
+                if (node.typeArgs.size() >= 2) {
+                    typeSubstitutions["U"] = parseTypeAnnotation(node.typeArgs[1]);
+                }
+                // Add more as needed for common cases
+            }
+            
             // Type check each field against the declared type
             for (auto& field : node.fields) {
                 TypePtr fieldType = inferType(field.second.get());
                 // Find the field in the declared type and check compatibility
                 for (const auto& declField : recType->fields) {
                     if (declField.name == field.first) {
-                        if (!isAssignable(declField.type, fieldType)) {
+                        // Substitute type parameters in the declared field type
+                        TypePtr expectedType = declField.type;
+                        if (!typeSubstitutions.empty()) {
+                            expectedType = reg.substituteTypeParams(declField.type, typeSubstitutions);
+                        }
+                        
+                        if (!isAssignable(expectedType, fieldType)) {
                             error("Field '" + field.first + "' type mismatch: expected '" + 
-                                  declField.type->toString() + "', got '" + fieldType->toString() + "'",
+                                  expectedType->toString() + "', got '" + fieldType->toString() + "'",
                                   node.location);
                         }
                         break;
                     }
                 }
             }
-            currentType_ = declaredType;
+            
+            // Return the instantiated generic type
+            if (!node.typeArgs.empty()) {
+                std::vector<TypePtr> typeArgPtrs;
+                for (const auto& arg : node.typeArgs) {
+                    typeArgPtrs.push_back(parseTypeAnnotation(arg));
+                }
+                currentType_ = reg.instantiateGeneric(declaredType, typeArgPtrs);
+            } else {
+                currentType_ = declaredType;
+            }
             return;
         }
     }

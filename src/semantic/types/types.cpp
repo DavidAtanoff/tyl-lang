@@ -254,6 +254,39 @@ TypePtr TraitObjectType::clone() const {
     return std::make_shared<TraitObjectType>(traitName, trait);
 }
 
+// ConceptType implementation
+std::string ConceptType::toString() const {
+    std::string s = "concept " + name;
+    if (!typeParams.empty()) {
+        s += "[";
+        for (size_t i = 0; i < typeParams.size(); i++) {
+            if (i > 0) s += ", ";
+            s += typeParams[i];
+        }
+        s += "]";
+    }
+    return s;
+}
+bool ConceptType::equals(const Type* other) const {
+    if (auto* c = dynamic_cast<const ConceptType*>(other)) {
+        return name == c->name;
+    }
+    return false;
+}
+TypePtr ConceptType::clone() const {
+    auto c = std::make_shared<ConceptType>(name);
+    c->typeParams = typeParams;
+    c->requirements = requirements;
+    c->superConcepts = superConcepts;
+    return c;
+}
+const ConceptRequirementType* ConceptType::getRequirement(const std::string& reqName) const {
+    for (const auto& r : requirements) {
+        if (r.name == reqName) return &r;
+    }
+    return nullptr;
+}
+
 // GenericType implementation
 std::string GenericType::toString() const {
     std::string s = baseName + "[";
@@ -1471,6 +1504,204 @@ void TypeRegistry::registerEffect(const std::string& name, std::shared_ptr<Effec
 std::shared_ptr<EffectType> TypeRegistry::lookupEffect(const std::string& name) {
     auto it = effects_.find(name);
     return it != effects_.end() ? it->second : nullptr;
+}
+
+// ============================================================================
+// Higher-Kinded Types Implementation
+// ============================================================================
+
+// TypeConstructorType implementation
+std::string TypeConstructorType::toString() const {
+    std::string s = name + "[";
+    for (size_t i = 0; i < arity; i++) {
+        if (i > 0) s += ", ";
+        s += "_";
+    }
+    s += "]";
+    if (!bounds.empty()) {
+        s += ": ";
+        for (size_t i = 0; i < bounds.size(); i++) {
+            if (i > 0) s += " + ";
+            s += bounds[i];
+        }
+    }
+    return s;
+}
+
+bool TypeConstructorType::equals(const Type* other) const {
+    if (auto* tc = dynamic_cast<const TypeConstructorType*>(other)) {
+        return name == tc->name && arity == tc->arity;
+    }
+    return false;
+}
+
+TypePtr TypeConstructorType::clone() const {
+    auto tc = std::make_shared<TypeConstructorType>(name, arity);
+    tc->bounds = bounds;
+    return tc;
+}
+
+// HKTApplicationType implementation
+std::string HKTApplicationType::toString() const {
+    std::string s = constructorName + "[";
+    for (size_t i = 0; i < typeArgs.size(); i++) {
+        if (i > 0) s += ", ";
+        s += typeArgs[i] ? typeArgs[i]->toString() : "?";
+    }
+    return s + "]";
+}
+
+bool HKTApplicationType::equals(const Type* other) const {
+    if (auto* hkt = dynamic_cast<const HKTApplicationType*>(other)) {
+        if (constructorName != hkt->constructorName) return false;
+        if (typeArgs.size() != hkt->typeArgs.size()) return false;
+        for (size_t i = 0; i < typeArgs.size(); i++) {
+            if (typeArgs[i] && hkt->typeArgs[i]) {
+                if (!typeArgs[i]->equals(hkt->typeArgs[i].get())) return false;
+            } else if (typeArgs[i] || hkt->typeArgs[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+TypePtr HKTApplicationType::clone() const {
+    auto hkt = std::make_shared<HKTApplicationType>(constructorName);
+    if (constructor) hkt->constructor = constructor->clone();
+    for (const auto& arg : typeArgs) {
+        hkt->typeArgs.push_back(arg ? arg->clone() : nullptr);
+    }
+    return hkt;
+}
+
+// TypeRegistry HKT methods
+TypePtr TypeRegistry::typeConstructorType(const std::string& name, size_t arity) {
+    return std::make_shared<TypeConstructorType>(name, arity);
+}
+
+TypePtr TypeRegistry::hktApplicationType(const std::string& constructorName, const std::vector<TypePtr>& typeArgs) {
+    auto hkt = std::make_shared<HKTApplicationType>(constructorName);
+    hkt->typeArgs = typeArgs;
+    return hkt;
+}
+
+void TypeRegistry::registerTypeConstructor(const std::string& name, TypePtr constructor) {
+    typeConstructors_[name] = std::move(constructor);
+}
+
+TypePtr TypeRegistry::lookupTypeConstructor(const std::string& name) {
+    auto it = typeConstructors_.find(name);
+    return it != typeConstructors_.end() ? it->second : nullptr;
+}
+
+bool TypeRegistry::isTypeConstructor(const std::string& name) {
+    return typeConstructors_.find(name) != typeConstructors_.end();
+}
+
+TypePtr TypeRegistry::applyTypeConstructor(TypePtr constructor, const std::vector<TypePtr>& args) {
+    if (!constructor) return nullptr;
+    
+    auto* tc = dynamic_cast<TypeConstructorType*>(constructor.get());
+    if (!tc) return nullptr;
+    
+    // Check arity matches
+    if (args.size() != tc->arity) return nullptr;
+    
+    // Create HKT application
+    auto hkt = std::make_shared<HKTApplicationType>(tc->name);
+    hkt->constructor = constructor;
+    hkt->typeArgs = args;
+    return hkt;
+}
+
+// Type Classes / Concepts implementation
+ConceptPtr TypeRegistry::conceptType(const std::string& name) {
+    auto it = concepts_.find(name);
+    if (it != concepts_.end()) return it->second;
+    auto concept = std::make_shared<ConceptType>(name);
+    concepts_[name] = concept;
+    return concept;
+}
+
+void TypeRegistry::registerConcept(const std::string& name, ConceptPtr concept) {
+    concepts_[name] = std::move(concept);
+}
+
+ConceptPtr TypeRegistry::lookupConcept(const std::string& name) {
+    auto it = concepts_.find(name);
+    return it != concepts_.end() ? it->second : nullptr;
+}
+
+bool TypeRegistry::typeImplementsConcept(TypePtr type, const std::string& conceptName) {
+    if (!type) return false;
+    
+    ConceptPtr concept = lookupConcept(conceptName);
+    if (!concept) return false;
+    
+    // Type parameters with bounds satisfy their bounds
+    if (auto* tp = dynamic_cast<TypeParamType*>(type.get())) {
+        return tp->satisfiesBound(conceptName);
+    }
+    
+    // Check if the type has implementations for all required functions
+    std::string typeName = type->toString();
+    
+    // For primitive types, check built-in concept implementations
+    // Numeric concept: int, float, etc.
+    if (conceptName == "Numeric") {
+        return type->isNumeric();
+    }
+    
+    // Orderable concept: types that can be compared
+    if (conceptName == "Orderable" || conceptName == "Ord") {
+        return type->isNumeric() || type->kind == TypeKind::STRING || type->kind == TypeKind::CHAR;
+    }
+    
+    // Eq concept: types that can be compared for equality
+    if (conceptName == "Eq") {
+        return type->isPrimitive() || type->kind == TypeKind::STRING;
+    }
+    
+    // Copy concept: types that can be copied
+    if (conceptName == "Copy") {
+        return type->isPrimitive();
+    }
+    
+    // Clone concept: types that can be cloned
+    if (conceptName == "Clone") {
+        return true;  // All types can be cloned
+    }
+    
+    // Default concept: types with a default value
+    if (conceptName == "Default") {
+        return type->isPrimitive() || type->kind == TypeKind::STRING;
+    }
+    
+    // Check for trait implementations that satisfy the concept
+    // A concept can be satisfied by implementing a trait with the same name
+    if (lookupTraitImpl(conceptName, typeName) != nullptr) {
+        return true;
+    }
+    
+    // Check super concepts recursively
+    for (const auto& superConcept : concept->superConcepts) {
+        if (!typeImplementsConcept(type, superConcept)) {
+            return false;
+        }
+    }
+    
+    return false;
+}
+
+bool TypeRegistry::checkConceptConstraints(TypePtr type, const std::vector<std::string>& conceptNames) {
+    for (const auto& conceptName : conceptNames) {
+        if (!typeImplementsConcept(type, conceptName)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace tyl

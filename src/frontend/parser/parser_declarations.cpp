@@ -169,11 +169,13 @@ StmtPtr Parser::declaration() {
     bool isPublic = match(TokenType::PUB);
     bool isPrivate = !isPublic && match(TokenType::PRIV);
     bool isAsync = match(TokenType::ASYNC);
+    bool isComptime = match(TokenType::COMPTIME);
     
     if (match(TokenType::FN)) {
         auto fn = fnDeclaration();
         auto* fnDecl = static_cast<FnDecl*>(fn.get());
         if (isAsync) fnDecl->isAsync = true;
+        if (isComptime) fnDecl->isComptime = true;
         fnDecl->isPublic = isPublic;
         fnDecl->callingConv = callingConv;
         fnDecl->isNaked = isNaked;
@@ -202,6 +204,7 @@ StmtPtr Parser::declaration() {
     if (match(TokenType::ENUM)) return enumDeclaration();
     if (match(TokenType::TYPE)) return typeAliasDeclaration();
     if (match(TokenType::TRAIT)) return traitDeclaration();
+    if (match(TokenType::CONCEPT)) return conceptDeclaration();
     if (match(TokenType::IMPL)) return implDeclaration();
     if (match(TokenType::USE)) return useStatement();
     if (match(TokenType::IMPORT)) return importStatement();
@@ -217,6 +220,7 @@ StmtPtr Parser::declaration() {
     (void)isPublic;
     (void)isPrivate;
     (void)isAsync;
+    (void)isComptime;
     return statement();
 }
 
@@ -289,20 +293,50 @@ StmtPtr Parser::varDeclaration() {
     return decl;
 }
 
-StmtPtr Parser::fnDeclaration() {
+StmtPtr Parser::fnDeclaration(bool requireBody) {
     auto loc = previous().location;
     auto name = consume(TokenType::IDENTIFIER, "Expected function name").lexeme;
     
     auto fn = std::make_unique<FnDecl>(name, loc);
     
-    // Generic type parameters and lifetime parameters: fn name[T, U, 'a, 'b]
+    // Generic type parameters and lifetime parameters: fn name[T, U, 'a, 'b, F[_]]
     if (match(TokenType::LBRACKET)) {
         do {
             // Check for lifetime parameter: 'a, 'static, etc.
             if (check(TokenType::LIFETIME)) {
                 fn->lifetimeParams.push_back(advance().lexeme);
             } else {
-                fn->typeParams.push_back(consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme);
+                std::string paramName = consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme;
+                
+                // Check for HKT syntax: F[_] or F[_, _]
+                if (check(TokenType::LBRACKET)) {
+                    advance();  // consume [
+                    std::string hktParam = paramName + "[";
+                    bool first = true;
+                    do {
+                        if (!first) hktParam += ", ";
+                        first = false;
+                        if (check(TokenType::UNDERSCORE) || (check(TokenType::IDENTIFIER) && peek().lexeme == "_")) {
+                            advance();  // consume _
+                            hktParam += "_";
+                        }
+                    } while (match(TokenType::COMMA));
+                    consume(TokenType::RBRACKET, "Expected ']' after type constructor arity");
+                    hktParam += "]";
+                    fn->typeParams.push_back(hktParam);
+                } else if (match(TokenType::COLON)) {
+                    // Type constraint: T: Numeric or T: Numeric + Orderable
+                    std::string constraint = paramName + ": ";
+                    constraint += consume(TokenType::IDENTIFIER, "Expected concept name").lexeme;
+                    // Support multiple constraints with +
+                    while (match(TokenType::PLUS)) {
+                        constraint += " + ";
+                        constraint += consume(TokenType::IDENTIFIER, "Expected concept name").lexeme;
+                    }
+                    fn->typeParams.push_back(constraint);
+                } else {
+                    fn->typeParams.push_back(paramName);
+                }
             }
         } while (match(TokenType::COMMA));
         consume(TokenType::RBRACKET, "Expected ']' after type parameters");
@@ -344,6 +378,10 @@ StmtPtr Parser::fnDeclaration() {
         auto blk = std::make_unique<Block>(loc);
         blk->statements.push_back(std::move(ret));
         fn->body = std::move(blk);
+        match(TokenType::NEWLINE);
+    } else if (!requireBody) {
+        // No body required (e.g., trait method signature)
+        // Just consume the newline if present
         match(TokenType::NEWLINE);
     } else {
         auto diag = errors::expectedFunctionBody(peek().location);
@@ -514,104 +552,7 @@ StmtPtr Parser::typeAliasDeclaration() {
     return alias;
 }
 
-StmtPtr Parser::traitDeclaration() {
-    auto loc = previous().location;
-    auto name = consume(TokenType::IDENTIFIER, "Expected trait name").lexeme;
-    
-    auto trait = std::make_unique<TraitDecl>(name, loc);
-    
-    if (match(TokenType::LBRACKET)) {
-        do {
-            trait->typeParams.push_back(consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme);
-        } while (match(TokenType::COMMA));
-        consume(TokenType::RBRACKET, "Expected ']' after type parameters");
-    }
-    
-    // Parse super traits: trait Foo: Bar, Baz
-    // Note: We check for COLON but need to distinguish from block start
-    // Super traits come before the block colon
-    if (check(TokenType::COLON)) {
-        // Peek ahead to see if this is super traits or block start
-        // If next token after COLON is IDENTIFIER (not NEWLINE/INDENT), it's super traits
-        size_t savedPos = current;
-        advance();  // consume COLON
-        
-        if (check(TokenType::IDENTIFIER)) {
-            // This is super traits
-            do {
-                trait->superTraits.push_back(consume(TokenType::IDENTIFIER, "Expected super trait name").lexeme);
-            } while (match(TokenType::COMMA));
-            
-            // Now expect the block colon
-            consume(TokenType::COLON, "Expected ':' after super traits");
-        } else {
-            // This was the block colon, restore position
-            current = savedPos;
-            consume(TokenType::COLON, "Expected ':' after trait name");
-        }
-    } else {
-        consume(TokenType::COLON, "Expected ':' after trait name");
-    }
-    
-    match(TokenType::NEWLINE);
-    
-    consume(TokenType::INDENT, "Expected indented trait body");
-    skipNewlines();
-    
-    while (!check(TokenType::DEDENT) && !isAtEnd()) {
-        if (match(TokenType::FN)) {
-            auto fn = fnDeclaration();
-            trait->methods.push_back(std::unique_ptr<FnDecl>(static_cast<FnDecl*>(fn.release())));
-        }
-        skipNewlines();
-    }
-    
-    consume(TokenType::DEDENT, "Expected end of trait");
-    return trait;
-}
-
-StmtPtr Parser::implDeclaration() {
-    auto loc = previous().location;
-    
-    auto firstIdent = consume(TokenType::IDENTIFIER, "Expected trait or type name").lexeme;
-    
-    std::string traitName;
-    std::string typeName;
-    
-    if (check(TokenType::FOR)) {
-        advance();
-        traitName = firstIdent;
-        typeName = consume(TokenType::IDENTIFIER, "Expected type name").lexeme;
-    } else {
-        typeName = firstIdent;
-    }
-    
-    auto impl = std::make_unique<ImplBlock>(traitName, typeName, loc);
-    
-    if (match(TokenType::LBRACKET)) {
-        do {
-            impl->typeParams.push_back(consume(TokenType::IDENTIFIER, "Expected type parameter").lexeme);
-        } while (match(TokenType::COMMA));
-        consume(TokenType::RBRACKET, "Expected ']' after type parameters");
-    }
-    
-    consume(TokenType::COLON, "Expected ':' after impl declaration");
-    match(TokenType::NEWLINE);
-    
-    consume(TokenType::INDENT, "Expected indented impl body");
-    skipNewlines();
-    
-    while (!check(TokenType::DEDENT) && !isAtEnd()) {
-        if (match(TokenType::FN)) {
-            auto fn = fnDeclaration();
-            impl->methods.push_back(std::unique_ptr<FnDecl>(static_cast<FnDecl*>(fn.release())));
-        }
-        skipNewlines();
-    }
-    
-    consume(TokenType::DEDENT, "Expected end of impl");
-    return impl;
-}
+// traitDeclaration and implDeclaration are defined in parser_decl_traits.cpp
 
 StmtPtr Parser::useStatement() {
     auto loc = previous().location;
