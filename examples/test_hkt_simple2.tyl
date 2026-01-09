@@ -1,0 +1,8 @@
+// Simplest HKT test - just record and trait
+
+record Container[T]:
+    value: T
+
+fn main:
+    c = Container[int] { value: 42 }
+    println("Value: ", c.value)

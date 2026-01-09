@@ -1,0 +1,131 @@
+// Advanced CTFE Tests - Floats, Complex Math, Loops, etc.
+
+// ============ FLOAT OPERATIONS ============
+
+// Comptime function with floats
+comptime fn circle_area radius: float -> float:
+    return 3.14159265359 * radius * radius
+
+comptime fn sphere_volume radius: float -> float:
+    return 4.0 / 3.0 * 3.14159265359 * radius * radius * radius
+
+comptime fn celsius_to_fahrenheit c: float -> float:
+    return c * 9.0 / 5.0 + 32.0
+
+comptime fn fahrenheit_to_celsius f: float -> float:
+    return (f - 32.0) * 5.0 / 9.0
+
+// ============ COMPLEX INTEGER MATH ============
+
+// Sum of first n natural numbers
+comptime fn sum_n n: int -> int:
+    if n <= 0:
+        return 0
+    return n + sum_n(n - 1)
+
+// Sum of squares
+comptime fn sum_squares n: int -> int:
+    if n <= 0:
+        return 0
+    return n * n + sum_squares(n - 1)
+
+// GCD using Euclidean algorithm
+comptime fn gcd a: int, b: int -> int:
+    if b == 0:
+        return a
+    return gcd(b, a % b)
+
+// LCM using GCD
+comptime fn lcm a: int, b: int -> int:
+    return (a * b) / gcd(a, b)
+
+// Check if prime (simple trial division)
+comptime fn is_prime_helper n: int, divisor: int -> int:
+    if divisor * divisor > n:
+        return 1
+    if n % divisor == 0:
+        return 0
+    return is_prime_helper(n, divisor + 1)
+
+comptime fn is_prime n: int -> int:
+    if n < 2:
+        return 0
+    return is_prime_helper(n, 2)
+
+// Count primes up to n
+comptime fn count_primes_helper n: int, current: int, count: int -> int:
+    if current > n:
+        return count
+    if is_prime(current) == 1:
+        return count_primes_helper(n, current + 1, count + 1)
+    return count_primes_helper(n, current + 1, count)
+
+comptime fn count_primes n: int -> int:
+    return count_primes_helper(n, 2, 0)
+
+// Binomial coefficient (n choose k)
+comptime fn binomial n: int, k: int -> int:
+    if k == 0:
+        return 1
+    if k > n:
+        return 0
+    if k > n - k:
+        return binomial(n, n - k)
+    return n * binomial(n - 1, k - 1) / k
+
+// Ackermann function (limited - grows VERY fast)
+comptime fn ackermann m: int, n: int -> int:
+    if m == 0:
+        return n + 1
+    if n == 0:
+        return ackermann(m - 1, 1)
+    return ackermann(m - 1, ackermann(m, n - 1))
+
+// ============ COMPILE-TIME CONSTANTS ============
+
+// Float constants
+PI :: 3.14159265359
+E :: 2.71828182845
+CIRCLE_AREA_5 :: circle_area(5.0)
+SPHERE_VOL_3 :: sphere_volume(3.0)
+BOILING_F :: celsius_to_fahrenheit(100.0)
+FREEZING_C :: fahrenheit_to_celsius(32.0)
+
+// Integer math constants
+SUM_100 :: sum_n(100)
+SUM_SQ_10 :: sum_squares(10)
+GCD_48_18 :: gcd(48, 18)
+LCM_12_18 :: lcm(12, 18)
+PRIMES_50 :: count_primes(50)
+BINOM_10_3 :: binomial(10, 3)
+ACK_3_3 :: ackermann(3, 3)
+
+fn main:
+    println("=== Advanced CTFE Tests ===")
+    println("")
+    
+    println("--- Float Operations ---")
+    println("circle_area(5.0) = ", CIRCLE_AREA_5)
+    println("sphere_volume(3.0) = ", SPHERE_VOL_3)
+    println("celsius_to_fahrenheit(100.0) = ", BOILING_F)
+    println("fahrenheit_to_celsius(32.0) = ", FREEZING_C)
+    println("")
+    
+    println("--- Complex Integer Math ---")
+    println("sum_n(100) = ", SUM_100)
+    println("sum_squares(10) = ", SUM_SQ_10)
+    println("gcd(48, 18) = ", GCD_48_18)
+    println("lcm(12, 18) = ", LCM_12_18)
+    println("count_primes(50) = ", PRIMES_50)
+    println("binomial(10, 3) = ", BINOM_10_3)
+    println("ackermann(3, 3) = ", ACK_3_3)
+    println("")
+    
+    println("--- Direct Comptime Calls ---")
+    println("is_prime(17) = ", is_prime(17))
+    println("is_prime(18) = ", is_prime(18))
+    println("gcd(100, 35) = ", gcd(100, 35))
+    println("binomial(5, 2) = ", binomial(5, 2))
+    println("")
+    
+    println("=== All Advanced CTFE Tests Complete! ===")

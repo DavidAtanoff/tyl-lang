@@ -1,0 +1,211 @@
+// Test file for new optimization passes:
+// - Jump Threading
+// - Loop Rotation
+// - Induction Variable Simplification
+
+// ============================================
+// Test 1: Jump Threading
+// ============================================
+
+fn test_jump_threading -> int:
+    x := 5
+    mut result := 0
+    
+    // Jump threading should eliminate this redundant check
+    if x == 5:
+        result = 10
+        if x == 5:
+            result = result + 5
+    
+    // Another jump threading opportunity
+    flag := true
+    if flag:
+        if flag:
+            result = result + 1
+    
+    return result  // Should be 16
+
+fn test_jump_threading_chain -> int:
+    a := 10
+    b := 20
+    
+    // Chain of conditions that can be threaded
+    if a < 15:
+        if a < 20:
+            if b > 10:
+                return a + b  // Should reach here: 30
+    
+    return 0
+
+// ============================================
+// Test 2: Loop Rotation
+// ============================================
+
+fn test_loop_rotation -> int:
+    mut sum := 0
+    mut i := 0
+    
+    // This while loop should be rotated
+    while i < 10:
+        sum = sum + i
+        i = i + 1
+    
+    return sum  // Should be 45 (0+1+2+...+9)
+
+fn test_loop_rotation_nested -> int:
+    mut result := 0
+    mut i := 0
+    
+    while i < 5:
+        mut j := 0
+        while j < 3:
+            result = result + 1
+            j = j + 1
+        i = i + 1
+    
+    return result  // Should be 15 (5 * 3)
+
+// ============================================
+// Test 3: Induction Variable Simplification
+// ============================================
+
+fn test_indvar_simple -> int:
+    mut sum := 0
+    
+    // Simple for loop with known bounds
+    for i in range(10):
+        sum = sum + i
+    
+    return sum  // Should be 45 (0+1+2+...+9)
+
+fn test_indvar_derived -> int:
+    mut sum := 0
+    
+    // Loop with derived induction variable
+    for i in range(5):
+        j := i * 2  // Derived IV
+        sum = sum + j
+    
+    return sum  // Should be 0+2+4+6+8 = 20
+
+fn test_indvar_complex_bounds -> int:
+    n := 4
+    mut sum := 0
+    
+    // Loop with computed bounds
+    for i in range(n * n):
+        sum = sum + 1
+    
+    return sum  // Should be 16
+
+fn test_indvar_step -> int:
+    mut sum := 0
+    
+    // Loop with non-unit step
+    for i in range(0, 10, 2):
+        sum = sum + i
+    
+    return sum  // Should be 0+2+4+6+8 = 20
+
+// ============================================
+// Test 4: Combined Optimizations
+// ============================================
+
+fn test_combined -> int:
+    mut result := 0
+    flag := true
+    
+    // Jump threading + loop rotation + indvar
+    if flag:
+        mut sum := 0
+        mut i := 0
+        
+        // Loop rotation applies here
+        while i < 5:
+            j := i * 3
+            sum = sum + j
+            i = i + 1
+        
+        // Jump threading: flag is still true
+        if flag:
+            result = sum
+    
+    return result  // Should be 0+3+6+9+12 = 30
+
+// ============================================
+// Main function to run all tests
+// ============================================
+
+fn main:
+    mut passed := 0
+    mut failed := 0
+    
+    // Test Jump Threading
+    if test_jump_threading() == 16:
+        println("PASS: test_jump_threading")
+        passed = passed + 1
+    else:
+        println("FAIL: test_jump_threading")
+        failed = failed + 1
+    
+    if test_jump_threading_chain() == 30:
+        println("PASS: test_jump_threading_chain")
+        passed = passed + 1
+    else:
+        println("FAIL: test_jump_threading_chain")
+        failed = failed + 1
+    
+    // Test Loop Rotation
+    if test_loop_rotation() == 45:
+        println("PASS: test_loop_rotation")
+        passed = passed + 1
+    else:
+        println("FAIL: test_loop_rotation")
+        failed = failed + 1
+    
+    if test_loop_rotation_nested() == 15:
+        println("PASS: test_loop_rotation_nested")
+        passed = passed + 1
+    else:
+        println("FAIL: test_loop_rotation_nested")
+        failed = failed + 1
+    
+    // Test IndVar Simplification
+    if test_indvar_simple() == 45:
+        println("PASS: test_indvar_simple")
+        passed = passed + 1
+    else:
+        println("FAIL: test_indvar_simple")
+        failed = failed + 1
+    
+    if test_indvar_derived() == 20:
+        println("PASS: test_indvar_derived")
+        passed = passed + 1
+    else:
+        println("FAIL: test_indvar_derived")
+        failed = failed + 1
+    
+    if test_indvar_complex_bounds() == 16:
+        println("PASS: test_indvar_complex_bounds")
+        passed = passed + 1
+    else:
+        println("FAIL: test_indvar_complex_bounds")
+        failed = failed + 1
+    
+    if test_indvar_step() == 20:
+        println("PASS: test_indvar_step")
+        passed = passed + 1
+    else:
+        println("FAIL: test_indvar_step")
+        failed = failed + 1
+    
+    // Test Combined
+    if test_combined() == 30:
+        println("PASS: test_combined")
+        passed = passed + 1
+    else:
+        println("FAIL: test_combined")
+        failed = failed + 1
+    
+    println("")
+    println("Results: " + str(passed) + " passed, " + str(failed) + " failed")

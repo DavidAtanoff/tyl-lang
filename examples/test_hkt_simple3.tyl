@@ -1,0 +1,20 @@
+// HKT test - with trait and function call
+
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+record Container[T]:
+    value: T
+
+impl Functor for Container:
+    fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]:
+        result = f(self.value)
+        return Container[B] { value: result }
+
+fn double x: int -> int:
+    return x * 2
+
+fn main:
+    c = Container[int] { value: 21 }
+    result = c.map(double)
+    println("Value: ", result.value)

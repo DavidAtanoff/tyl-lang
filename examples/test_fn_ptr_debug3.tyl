@@ -1,0 +1,10 @@
+// Debug function pointer call - even simpler
+
+fn apply_fn x: int, y: int -> int:
+    println("In apply_fn, x = ", x, ", y = ", y)
+    return x + y
+
+fn main:
+    println("Calling apply_fn")
+    result = apply_fn(21, 42)
+    println("Result = ", result)

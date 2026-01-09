@@ -1,8 +1,5 @@
 # Build outputs
 build/
-out/
-bin/
-obj/
 *.exe
 *.o
 *.obj
@@ -14,31 +11,12 @@ obj/
 # IDE files
 .vs/
 .vscode/
-*.vcxproj.user
-*.suo
-*.sln.docstates
-.idea/
-
-# CMake
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-Makefile
-
-# OS files
-.DS_Store
-Thumbs.db
-desktop.ini
 
 # Temporary files
 *.tmp
 *.temp
 *.log
 *.bak
-*~
 
 # Test outputs
 examples/*.exe
-
-# Implementation notes
-

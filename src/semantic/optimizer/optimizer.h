@@ -23,6 +23,25 @@ class PGOPass;
 class SimplifyCFGPass;
 struct ProgramProfile;
 
+// Enhanced optimization passes
+class ADCEPass;
+class EnhancedDCEPass;
+class GVNPREPass;
+class LoadEliminationPass;
+class StoreSinkingPass;
+class EnhancedLICMPass;
+class InvariantExpressionHoistingPass;
+
+// New optimization passes (January 2026)
+class ReassociatePass;
+class SROAPass;
+class Mem2RegPass;
+
+// Loop and CFG optimization passes (January 2026)
+class JumpThreadingPass;
+class LoopRotationPass;
+class IndVarSimplifyPass;
+
 // Base class for all optimization passes
 class OptimizationPass {
 public:
@@ -69,6 +88,7 @@ public:
     // Enable/disable specific passes
     void enableConstantFolding(bool enable = true);
     void enableDeadCodeElimination(bool enable = true);
+    void enableDeadStoreElimination(bool enable = true);
     void enableInlining(bool enable = true);
     void enableTailCallOptimization(bool enable = true);
     void enableCTFE(bool enable = true);
@@ -77,6 +97,9 @@ public:
     void enableInstructionScheduling(bool enable = true);
     void enablePGO(bool enable = true);
     void enableSimplifyCFG(bool enable = true);
+    void enableReassociate(bool enable = true);
+    void enableSROA(bool enable = true);
+    void enableMem2Reg(bool enable = true);
     
     // PGO configuration
     void setProfileFile(const std::string& filename) { profileFile_ = filename; }
@@ -104,6 +127,7 @@ private:
     // Pass enable flags
     bool constantFoldingEnabled_ = true;
     bool deadCodeEnabled_ = true;
+    bool deadStoreEnabled_ = true;
     bool inliningEnabled_ = true;
     bool tailCallEnabled_ = true;
     bool ctfeEnabled_ = true;
@@ -112,6 +136,9 @@ private:
     bool schedulingEnabled_ = true;
     bool pgoEnabled_ = false;
     bool simplifyCFGEnabled_ = true;  // CFG simplification
+    bool reassociateEnabled_ = true;  // Expression reassociation
+    bool sroaEnabled_ = true;         // Scalar replacement of aggregates
+    bool mem2regEnabled_ = true;      // Memory to register promotion
     std::string profileFile_;
     
     // Inlining configuration

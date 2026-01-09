@@ -133,7 +133,38 @@ void NativeCodeGen::visit(NilLiteral& node) {
 }
 
 void NativeCodeGen::visit(Identifier& node) {
-    // FIRST: Check if this is a function label (for function pointers)
+    // FIRST: Check for compile-time constants - these should ALWAYS be inlined
+    // This must be checked before register lookup because the register allocator
+    // might have assigned a register to a constant name (which would be uninitialized)
+    auto constIt = constVars.find(node.name);
+    if (constIt != constVars.end()) {
+        if (constIt->second == 0) {
+            asm_.xor_rax_rax();
+        } else if (constIt->second >= 0 && constIt->second <= 0x7FFFFFFF) {
+            asm_.code.push_back(0xB8);
+            asm_.code.push_back(constIt->second & 0xFF);
+            asm_.code.push_back((constIt->second >> 8) & 0xFF);
+            asm_.code.push_back((constIt->second >> 16) & 0xFF);
+            asm_.code.push_back((constIt->second >> 24) & 0xFF);
+        } else {
+            asm_.mov_rax_imm64(constIt->second);
+        }
+        lastExprWasFloat_ = false;
+        return;
+    }
+    
+    // Check for compile-time float constants
+    auto constFloatIt = constFloatVars.find(node.name);
+    if (constFloatIt != constFloatVars.end()) {
+        union { double d; int64_t i; } u;
+        u.d = constFloatIt->second;
+        asm_.mov_rax_imm64(u.i);
+        asm_.movq_xmm0_rax();
+        lastExprWasFloat_ = true;
+        return;
+    }
+    
+    // Check if this is a function label (for function pointers)
     // This must be checked before register lookup because function names
     // might accidentally be in varRegisters_ due to register allocation
     bool inLabels = asm_.labels.count(node.name) > 0;
@@ -264,34 +295,6 @@ void NativeCodeGen::visit(Identifier& node) {
             asm_.mov_rax_mem_rbp(it->second);
             lastExprWasFloat_ = false;
         }
-        return;
-    }
-    
-    // Check for compile-time integer constants
-    auto constIt = constVars.find(node.name);
-    if (constIt != constVars.end()) {
-        if (constIt->second == 0) {
-            asm_.xor_rax_rax();
-        } else if (constIt->second >= 0 && constIt->second <= 0x7FFFFFFF) {
-            asm_.code.push_back(0xB8);
-            asm_.code.push_back(constIt->second & 0xFF);
-            asm_.code.push_back((constIt->second >> 8) & 0xFF);
-            asm_.code.push_back((constIt->second >> 16) & 0xFF);
-            asm_.code.push_back((constIt->second >> 24) & 0xFF);
-        } else {
-            asm_.mov_rax_imm64(constIt->second);
-        }
-        lastExprWasFloat_ = false;
-        return;
-    }
-    
-    // Check for compile-time float constants
-    if (constFloatVars.count(node.name)) {
-        union { double d; int64_t i; } u;
-        u.d = constFloatVars[node.name];
-        asm_.mov_rax_imm64(u.i);
-        asm_.movq_xmm0_rax();
-        lastExprWasFloat_ = true;
         return;
     }
     

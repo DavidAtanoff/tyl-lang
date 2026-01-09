@@ -1,0 +1,21 @@
+# Simple Fibonacci test
+
+comptime fn fib_iter n: int -> int:
+    if n <= 1:
+        return n
+    a := 0
+    b := 1
+    i := 2
+    while i <= n:
+        temp := a + b
+        a = b
+        b = temp
+        i = i + 1
+    return b
+
+FIB_5 :: fib_iter(5)
+FIB_10 :: fib_iter(10)
+
+fn main:
+    println("fib_iter(5) = ", FIB_5, " (expected: 5)")
+    println("fib_iter(10) = ", FIB_10, " (expected: 55)")

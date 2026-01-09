@@ -1,0 +1,25 @@
+# Simple recursive CTFE test
+
+comptime fn is_prime_helper n: int, divisor: int -> int:
+    if divisor * divisor > n:
+        return 1
+    if n % divisor == 0:
+        return 0
+    return is_prime_helper(n, divisor + 1)
+
+comptime fn is_prime n: int -> int:
+    if n < 2:
+        return 0
+    return is_prime_helper(n, 2)
+
+# Test single prime check
+PRIME_17 :: is_prime(17)
+PRIME_18 :: is_prime(18)
+PRIME_2 :: is_prime(2)
+PRIME_3 :: is_prime(3)
+
+fn main:
+    println("is_prime(17) = ", PRIME_17, " (expected: 1)")
+    println("is_prime(18) = ", PRIME_18, " (expected: 0)")
+    println("is_prime(2) = ", PRIME_2, " (expected: 1)")
+    println("is_prime(3) = ", PRIME_3, " (expected: 1)")

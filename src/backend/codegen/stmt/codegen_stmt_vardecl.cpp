@@ -8,6 +8,28 @@ namespace tyl {
 
 void NativeCodeGen::visit(VarDecl& node) {
     if (node.initializer) {
+        // For compile-time constants (NAME :: value), only store in constVars
+        // and skip code generation - they will be inlined at use sites
+        if (node.isConst) {
+            int64_t intVal;
+            if (tryEvalConstant(node.initializer.get(), intVal)) {
+                constVars[node.name] = intVal;
+                return;  // No code generation needed for compile-time constants
+            }
+            double floatVal;
+            if (tryEvalConstantFloat(node.initializer.get(), floatVal)) {
+                constFloatVars[node.name] = floatVal;
+                return;  // No code generation needed for compile-time constants
+            }
+            std::string strVal;
+            if (tryEvalConstantString(node.initializer.get(), strVal)) {
+                constStrVars[node.name] = strVal;
+                return;  // No code generation needed for compile-time constants
+            }
+            // If we can't evaluate the constant at compile time, fall through
+            // to generate runtime code (this shouldn't happen for valid constants)
+        }
+        
         bool isFloat = isFloatExpression(node.initializer.get());
         
         // Check for lambda/closure

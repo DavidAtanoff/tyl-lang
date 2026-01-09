@@ -1,0 +1,90 @@
+// Keypress detector v2 - simpler version
+
+extern "user32.dll":
+    fn GetAsyncKeyState(vKey: int) -> int
+
+VK_ESCAPE :: 27
+VK_A :: 65
+VK_W :: 87
+VK_S :: 83
+VK_D :: 68
+VK_SPACE :: 32
+
+fn main:
+    println("=== Keypress Detector ===")
+    println("Press A, W, S, D, SPACE")
+    println("Press ESC to exit")
+    println("")
+    
+    mut count = 0
+    mut prev_a = 0
+    mut prev_w = 0
+    mut prev_s = 0
+    mut prev_d = 0
+    mut prev_space = 0
+    mut prev_esc = 0
+    
+    while count < 500:
+        // Get current states
+        state_esc = GetAsyncKeyState(VK_ESCAPE)
+        state_a = GetAsyncKeyState(VK_A)
+        state_w = GetAsyncKeyState(VK_W)
+        state_s = GetAsyncKeyState(VK_S)
+        state_d = GetAsyncKeyState(VK_D)
+        state_space = GetAsyncKeyState(VK_SPACE)
+        
+        // Check ESC (high bit = 0x8000 = 32768)
+        if (state_esc & 32768) != 0:
+            if prev_esc == 0:
+                println("ESC - exiting!")
+                count = 9999
+            prev_esc = 1
+        else:
+            prev_esc = 0
+        
+        // Check A
+        if (state_a & 32768) != 0:
+            if prev_a == 0:
+                println("A pressed")
+            prev_a = 1
+        else:
+            prev_a = 0
+        
+        // Check W
+        if (state_w & 32768) != 0:
+            if prev_w == 0:
+                println("W pressed")
+            prev_w = 1
+        else:
+            prev_w = 0
+        
+        // Check S
+        if (state_s & 32768) != 0:
+            if prev_s == 0:
+                println("S pressed")
+            prev_s = 1
+        else:
+            prev_s = 0
+        
+        // Check D
+        if (state_d & 32768) != 0:
+            if prev_d == 0:
+                println("D pressed")
+            prev_d = 1
+        else:
+            prev_d = 0
+        
+        // Check SPACE
+        if (state_space & 32768) != 0:
+            if prev_space == 0:
+                println("SPACE pressed")
+            prev_space = 1
+        else:
+            prev_space = 0
+        
+        sleep(20)
+        count = count + 1
+    
+    println("Goodbye!")
+
+main()

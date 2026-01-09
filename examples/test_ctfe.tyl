@@ -1,0 +1,44 @@
+# Test Compile-Time Function Evaluation (CTFE)
+
+# A comptime function to calculate factorial
+comptime fn factorial n: int -> int:
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+# A comptime function to calculate fibonacci
+comptime fn fib n: int -> int:
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+# A comptime function to calculate power
+comptime fn power base: int, exp: int -> int:
+    if exp == 0:
+        return 1
+    return base * power(base, exp - 1)
+
+# Use comptime functions - these should be evaluated at compile time
+FACT_5 :: factorial(5)      # Should be 120
+FACT_10 :: factorial(10)    # Should be 3628800
+FIB_10 :: fib(10)           # Should be 55
+POW_2_10 :: power(2, 10)    # Should be 1024
+
+fn main:
+    println("Testing CTFE (Compile-Time Function Evaluation)")
+    println("")
+    
+    println("factorial(5) = ", FACT_5)
+    println("factorial(10) = ", FACT_10)
+    println("fib(10) = ", FIB_10)
+    println("power(2, 10) = ", POW_2_10)
+    
+    # Direct comptime calls should also work
+    println("")
+    println("Direct comptime calls:")
+    println("factorial(6) = ", factorial(6))
+    println("fib(8) = ", fib(8))
+    println("power(3, 4) = ", power(3, 4))
+    
+    println("")
+    println("CTFE test complete!")

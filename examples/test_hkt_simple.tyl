@@ -1,0 +1,8 @@
+// Simple HKT test
+
+// Basic trait with HKT parameter
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+fn main:
+    println("HKT test")

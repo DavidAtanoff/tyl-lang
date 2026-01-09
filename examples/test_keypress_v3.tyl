@@ -1,0 +1,44 @@
+// Keypress detector v3 - with debug output
+
+extern "user32.dll":
+    fn GetAsyncKeyState(vKey: int) -> int
+
+VK_ESCAPE :: 27
+VK_A :: 65
+
+fn main:
+    println("=== Keypress Detector ===")
+    println("Make sure this window has focus!")
+    println("Press A to test, ESC to exit")
+    println("")
+    
+    mut count = 0
+    mut prev_a = 0
+    
+    while count < 100:
+        state_a = GetAsyncKeyState(VK_A)
+        state_esc = GetAsyncKeyState(VK_ESCAPE)
+        
+        // Print raw state every 10 iterations
+        if count % 10 == 0:
+            println("Tick ", count, " - A state: ", state_a, " ESC state: ", state_esc)
+        
+        // Check if high bit is set (key down)
+        // 0x8000 = 32768, but signed short makes it negative
+        if state_a < 0:
+            if prev_a == 0:
+                println(">>> A PRESSED! <<<")
+            prev_a = 1
+        else:
+            prev_a = 0
+        
+        if state_esc < 0:
+            println("ESC - exiting!")
+            count = 9999
+        
+        sleep(100)
+        count = count + 1
+    
+    println("Goodbye!")
+
+main()

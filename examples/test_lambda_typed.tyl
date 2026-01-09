@@ -1,0 +1,9 @@
+// Lambda with pipe syntax
+
+fn apply f: fn(int) -> int, x: int -> int:
+    return f(x)
+
+fn main:
+    double = |x| => x * 2
+    result = apply(double, 21)
+    println("Result: ", result)

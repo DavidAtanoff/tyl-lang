@@ -1,0 +1,12 @@
+# Debug helper function
+
+comptime fn count_helper n: int, current: int, count: int -> int:
+    if current > n:
+        return count
+    return count_helper(n, current + 1, count + 1)
+
+# Should count from 2 to 10 = 9 iterations
+COUNT_10 :: count_helper(10, 2, 0)
+
+fn main:
+    println("count_helper(10, 2, 0) = ", COUNT_10, " (expected: 9)")

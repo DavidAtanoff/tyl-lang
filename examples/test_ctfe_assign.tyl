@@ -1,0 +1,12 @@
+// Test CTFE with assignments
+fn simple_assign() -> int {
+    mut x := 10
+    x = 40
+    return x
+}
+
+fn main() -> int {
+    result := simple_assign()
+    print("Result: {result}")
+    return 0
+}

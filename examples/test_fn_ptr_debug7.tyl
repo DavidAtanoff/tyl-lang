@@ -1,0 +1,15 @@
+// Test with many variables to force stack allocation
+
+fn double_it x: int -> int:
+    return x * 2
+
+fn call_fn f: fn(int) -> int, a: int, b: int, c: int, d: int, e: int -> int:
+    println("About to call f")
+    result = f(a)
+    println("f returned: ", result)
+    return result
+
+fn main:
+    println("Calling call_fn")
+    r = call_fn(double_it, 10, 20, 30, 40, 50)
+    println("Result: ", r)

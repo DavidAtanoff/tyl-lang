@@ -1,0 +1,12 @@
+// Minimal test for function pointer as parameter
+
+fn double x: int -> int:
+    return x * 2
+
+fn apply_fn val: int, f: fn(int) -> int -> int:
+    return f(val)
+
+fn main:
+    // Test with named function
+    result = apply_fn(5, double)
+    println("apply_fn(5, double) = ", result)

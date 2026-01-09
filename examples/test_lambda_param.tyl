@@ -1,0 +1,13 @@
+// Test passing lambda as parameter
+
+fn apply_fn x: int, f: fn(int) -> int -> int:
+    println("In apply_fn, x = ", x)
+    println("About to call f...")
+    result = f(x)
+    println("f returned: ", result)
+    return result
+
+fn main:
+    println("Step 1: Calling apply_fn")
+    result = apply_fn(21, x => x * 2)
+    println("Step 2: Result = ", result)

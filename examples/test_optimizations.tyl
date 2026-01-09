@@ -1,0 +1,129 @@
+// Test file for optimization passes
+// Tests: Dead Store Elimination, Loop Unrolling, Instruction Scheduling, PGO
+
+// Test 1: Dead Store Elimination
+fn test_dead_store() -> int {
+    mut x := 10
+    x = 20      // Dead store - overwritten before read
+    x = 30      // Dead store - overwritten before read
+    x = 40      // This one is used
+    return x
+}
+
+// Test 2: Dead Store with intermediate reads
+fn test_dead_store_with_reads() -> int {
+    mut a := 1
+    mut b := 2
+    a = a + b   // Not dead - b is read
+    a = 100     // Dead store - a overwritten
+    a = 200     // This one is used
+    return a
+}
+
+// Test 3: Loop Unrolling - small loop (full unroll)
+fn test_loop_unroll_small() -> int {
+    mut sum := 0
+    for i in range(4) {
+        sum += i
+    }
+    return sum  // Should be 0+1+2+3 = 6
+}
+
+// Test 4: Loop Unrolling - larger loop (partial unroll)
+fn test_loop_unroll_partial() -> int {
+    mut sum := 0
+    for i in range(10) {
+        sum += i
+    }
+    return sum  // Should be 0+1+2+...+9 = 45
+}
+
+// Test 5: Loop Unrolling with inclusive range
+fn test_loop_unroll_inclusive() -> int {
+    mut product := 1
+    for i in 1..5 {
+        product *= i
+    }
+    return product  // Should be 1*2*3*4*5 = 120
+}
+
+// Test 6: Instruction Scheduling - independent operations
+fn test_instruction_scheduling() -> int {
+    a := 10
+    b := 20
+    c := 30
+    d := 40
+    
+    // These can be reordered for better pipelining
+    x := a + b
+    y := c + d
+    z := a * c
+    w := b * d
+    
+    return x + y + z + w
+}
+
+// Test 7: Combined optimizations
+fn test_combined() -> int {
+    mut result := 0
+    
+    // Loop that can be unrolled
+    for i in range(8) {
+        mut temp := i * 2    // Dead store if not used
+        temp = i * 3         // This overwrites
+        result += temp
+    }
+    
+    // Dead stores
+    mut unused := 100
+    unused = 200
+    unused = 300
+    
+    return result
+}
+
+// Test 8: Hot function (for PGO testing)
+fn hot_function(n: int) -> int {
+    mut sum := 0
+    for i in range(n) {
+        sum += i
+    }
+    return sum
+}
+
+// Test 9: Cold function (for PGO testing)
+fn cold_function() -> int {
+    return 42
+}
+
+// Main function
+fn main() -> int {
+    result1 := test_dead_store()
+    result2 := test_dead_store_with_reads()
+    result3 := test_loop_unroll_small()
+    result4 := test_loop_unroll_partial()
+    result5 := test_loop_unroll_inclusive()
+    result6 := test_instruction_scheduling()
+    result7 := test_combined()
+    
+    // Call hot function many times (simulating hot path)
+    mut hot_result := 0
+    for i in range(100) {
+        hot_result += hot_function(10)
+    }
+    
+    // Call cold function once
+    cold_result := cold_function()
+    
+    print("Dead Store Test 1: {result1}")
+    print("Dead Store Test 2: {result2}")
+    print("Loop Unroll Small: {result3}")
+    print("Loop Unroll Partial: {result4}")
+    print("Loop Unroll Inclusive: {result5}")
+    print("Instruction Scheduling: {result6}")
+    print("Combined Test: {result7}")
+    print("Hot Function Result: {hot_result}")
+    print("Cold Function Result: {cold_result}")
+    
+    return 0
+}

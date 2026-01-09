@@ -1,0 +1,13 @@
+// Simple trait method test
+
+trait Doubler:
+    fn double self: int -> int
+
+impl Doubler for int:
+    fn double self: int -> int:
+        return self * 2
+
+fn main:
+    x = 21
+    result = x.double()
+    println("Result: ", result)

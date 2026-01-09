@@ -1,0 +1,15 @@
+// Simple keypress test - minimal version
+
+extern "user32.dll":
+    fn GetAsyncKeyState(vKey: int) -> int
+
+fn main:
+    println("Testing GetAsyncKeyState...")
+    
+    // Test calling the function
+    state = GetAsyncKeyState(65)  // 'A' key
+    println("State for A key: ", state)
+    
+    println("Done!")
+
+main()

@@ -1,0 +1,23 @@
+// Debug keypress - check what GetAsyncKeyState returns
+
+extern "user32.dll":
+    fn GetAsyncKeyState(vKey: int) -> int
+
+VK_ESCAPE :: 27
+VK_A :: 65
+
+fn main:
+    println("Checking key states...")
+    
+    // Check ESC state a few times
+    mut i = 0
+    while i < 10:
+        esc_state = GetAsyncKeyState(VK_ESCAPE)
+        a_state = GetAsyncKeyState(VK_A)
+        println("ESC raw: ", esc_state, " A raw: ", a_state)
+        sleep(500)
+        i = i + 1
+    
+    println("Done!")
+
+main()

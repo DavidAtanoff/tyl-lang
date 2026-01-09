@@ -1,0 +1,61 @@
+// Test SimplifyCFG Optimization Pass
+// Tests: constant conditions, unreachable code, empty blocks, nested ifs
+
+fn test_unreachable -> int:
+    return 42
+    // This code is unreachable and should be removed
+    return 0
+
+fn main:
+    // Test 1: Constant condition simplification
+    // if (true) should be eliminated, just run the body
+    if true:
+        println("Test 1: Constant true - this should print")
+    
+    // if (false) should be eliminated entirely
+    if false:
+        println("ERROR: This should never print!")
+    
+    // Test 2: Constant false with else branch
+    // Should become just the else branch
+    if false:
+        println("ERROR: False branch!")
+    else:
+        println("Test 2: Else branch after false - this should print")
+    
+    // Test 3: Unreachable code after return (in a helper function)
+    result = test_unreachable()
+    println("Test 3: Got result: " + str(result))
+    
+    // Test 4: Nested if flattening
+    // if (a) { if (b) { X } } should become if (a && b) { X }
+    a = true
+    b = true
+    if a:
+        if b:
+            println("Test 4: Nested ifs - this should print")
+    
+    // Test 5: Variable in both branches
+    c = true
+    x = 0
+    if c:
+        x = 42
+    else:
+        x = 42
+    println("Test 5: Redundant branches - x = " + str(x))
+    
+    // Test 6: while(false) should be removed
+    while false:
+        println("ERROR: while(false) should never execute!")
+    
+    println("Test 6: while(false) was skipped - this should print")
+    
+    // Test 7: Complex constant expression
+    if true and true:
+        println("Test 7: true and true - this should print")
+    
+    if false or false:
+        println("ERROR: false or false should not print!")
+    
+    println("All SimplifyCFG tests completed!")
+    println("ERROR: Unreachable code!")

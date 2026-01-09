@@ -45,7 +45,10 @@ void NativeCodeGen::visit(WhileStmt& node) {
     
     loopStack.push_back({node.label, loopLabel, endLabel});
     
-    constVars.clear();
+    // Note: We intentionally do NOT clear constVars here.
+    // Compile-time constants (like VK_A :: 65) should remain valid inside loops.
+    // Only mutable variables that are modified in the loop need special handling,
+    // and those are tracked separately.
     
     asm_.label(loopLabel);
     node.condition->accept(*this);
@@ -130,7 +133,12 @@ void NativeCodeGen::visit(ForStmt& node) {
     if (auto* call = dynamic_cast<CallExpr*>(node.iterable.get())) {
         if (auto* calleeId = dynamic_cast<Identifier*>(call->callee.get())) {
             if (calleeId->name == "range" && call->args.size() >= 1) {
+                int64_t stepValue = 1;
+                bool hasConstStep = false;
+                bool hasVarStep = false;
+                
                 if (call->args.size() == 1) {
+                    // range(end) - start at 0
                     asm_.xor_rax_rax();
                     allocLocal(node.var);
                     asm_.mov_mem_rbp_rax(locals[node.var]);
@@ -139,6 +147,7 @@ void NativeCodeGen::visit(ForStmt& node) {
                     allocLocal("$end");
                     asm_.mov_mem_rbp_rax(locals["$end"]);
                 } else {
+                    // range(start, end) or range(start, end, step)
                     call->args[0]->accept(*this);
                     allocLocal(node.var);
                     asm_.mov_mem_rbp_rax(locals[node.var]);
@@ -146,6 +155,20 @@ void NativeCodeGen::visit(ForStmt& node) {
                     call->args[1]->accept(*this);
                     allocLocal("$end");
                     asm_.mov_mem_rbp_rax(locals["$end"]);
+                    
+                    // Handle step value if provided
+                    if (call->args.size() >= 3) {
+                        if (auto* stepLit = dynamic_cast<IntegerLiteral*>(call->args[2].get())) {
+                            stepValue = stepLit->value;
+                            hasConstStep = true;
+                        } else {
+                            // Non-constant step - evaluate and store
+                            call->args[2]->accept(*this);
+                            allocLocal("$step");
+                            asm_.mov_mem_rbp_rax(locals["$step"]);
+                            hasVarStep = true;
+                        }
+                    }
                 }
                 
                 constVars.erase(node.var);
@@ -159,7 +182,16 @@ void NativeCodeGen::visit(ForStmt& node) {
                 
                 asm_.label(continueLabel);
                 asm_.mov_rax_mem_rbp(locals[node.var]);
-                asm_.inc_rax();
+                if (hasConstStep) {
+                    // Constant step
+                    asm_.add_rax_imm32(static_cast<int32_t>(stepValue));
+                } else if (hasVarStep) {
+                    // Non-constant step: load step, add to rax
+                    asm_.mov_rcx_mem_rbp(locals["$step"]);
+                    asm_.add_rax_rcx();
+                } else {
+                    asm_.inc_rax();
+                }
                 asm_.mov_mem_rbp_rax(locals[node.var]);
                 asm_.jmp_rel32(loopLabel);
                 

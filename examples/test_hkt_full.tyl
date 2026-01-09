@@ -1,0 +1,21 @@
+// Test if HKT actually works end-to-end
+
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+record Container[T]:
+    value: T
+
+// Try to implement Functor for Container
+impl Functor for Container:
+    fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]:
+        return Container[B] { value: f(self.value) }
+
+// Try to use the trait method
+fn double_container c: Container[int] -> Container[int]:
+    return c.map(x => x * 2)
+
+fn main:
+    b = Container[int] { value: 21 }
+    result = double_container(b)
+    println("Result: ", result.value)

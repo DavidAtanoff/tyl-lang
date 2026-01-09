@@ -1,0 +1,8 @@
+// Simple lambda test
+
+fn apply f: fn(int) -> int, x: int -> int:
+    return f(x)
+
+fn main:
+    result = apply(x => x * 2, 21)
+    println("Result: ", result)

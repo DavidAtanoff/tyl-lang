@@ -1,0 +1,12 @@
+// Even simpler test - just pass function and print its address
+
+fn double_it x: int -> int:
+    return x * 2
+
+fn print_addr f: fn(int) -> int:
+    println("Function address received")
+
+fn main:
+    println("About to call print_addr")
+    print_addr(double_it)
+    println("Done")

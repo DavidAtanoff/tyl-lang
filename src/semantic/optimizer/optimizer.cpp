@@ -6,12 +6,21 @@
 #include "scalar/constant_folding.h"
 #include "scalar/constant_propagation.h"
 #include "scalar/dead_code.h"
+#include "scalar/dead_store.h"
 #include "scalar/cse.h"
 #include "scalar/gvn.h"
 #include "scalar/algebraic.h"
+#include "scalar/adce.h"
+#include "scalar/gvn_pre.h"
+#include "scalar/reassociate.h"
+#include "scalar/sroa.h"
+#include "scalar/mem2reg.h"
 
 // Loop optimizations
 #include "loop/loop_optimizer.h"
+#include "loop/enhanced_licm.h"
+#include "loop/loop_rotation.h"
+#include "loop/indvar_simplify.h"
 
 // Function optimizations
 #include "function/inlining.h"
@@ -20,6 +29,7 @@
 
 // CFG optimizations
 #include "cfg/simplify_cfg.h"
+#include "cfg/jump_threading.h"
 
 // Analysis passes
 #include "analysis/ssa.h"
@@ -54,6 +64,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = false;
             schedulingEnabled_ = false;
             simplifyCFGEnabled_ = false;
+            reassociateEnabled_ = false;
+            sroaEnabled_ = false;
+            mem2regEnabled_ = false;
             break;
             
         case OptLevel::O1:
@@ -67,6 +80,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = false;
             schedulingEnabled_ = false;
             simplifyCFGEnabled_ = true;  // Enable at O1
+            reassociateEnabled_ = false;
+            sroaEnabled_ = false;
+            mem2regEnabled_ = false;
             break;
             
         case OptLevel::O2:
@@ -80,6 +96,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = true;
             schedulingEnabled_ = false;
             simplifyCFGEnabled_ = true;
+            reassociateEnabled_ = true;   // Enable at O2
+            sroaEnabled_ = true;          // Enable at O2
+            mem2regEnabled_ = true;       // Enable at O2
             aggressiveInlining_ = false;
             maxInlineStatements_ = 10;
             maxInlineCallCount_ = 5;
@@ -96,6 +115,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = true;
             schedulingEnabled_ = true;
             simplifyCFGEnabled_ = true;
+            reassociateEnabled_ = true;
+            sroaEnabled_ = true;
+            mem2regEnabled_ = true;
             aggressiveInlining_ = true;
             maxInlineStatements_ = 50;
             maxInlineCallCount_ = 20;
@@ -112,6 +134,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = true;
             schedulingEnabled_ = false;
             simplifyCFGEnabled_ = true;
+            reassociateEnabled_ = true;
+            sroaEnabled_ = true;
+            mem2regEnabled_ = true;
             aggressiveInlining_ = false;
             maxInlineStatements_ = 5;   // Less inlining for smaller code
             maxInlineCallCount_ = 3;
@@ -128,6 +153,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = false;    // No loop unrolling
             schedulingEnabled_ = false;
             simplifyCFGEnabled_ = true;  // Still useful for size
+            reassociateEnabled_ = true;  // Still useful for size
+            sroaEnabled_ = true;         // Helps with register allocation
+            mem2regEnabled_ = true;      // Reduces memory traffic
             aggressiveInlining_ = false;
             maxInlineStatements_ = 0;
             maxInlineCallCount_ = 0;
@@ -144,6 +172,9 @@ void Optimizer::setOptLevel(OptLevel level) {
             loopOptEnabled_ = true;
             schedulingEnabled_ = true;
             simplifyCFGEnabled_ = true;
+            reassociateEnabled_ = true;
+            sroaEnabled_ = true;
+            mem2regEnabled_ = true;
             pgoEnabled_ = true;  // Enable PGO at Ofast
             aggressiveInlining_ = true;
             maxInlineStatements_ = 100;
@@ -178,6 +209,18 @@ void Optimizer::optimize(Program& ast) {
         }
     }
     
+    // Reassociate expressions to expose more constant folding opportunities
+    // Example: (a + 1) + 2 → a + 3
+    if (reassociateEnabled_ && optLevel_ >= OptLevel::O2) {
+        auto reassoc = std::make_unique<ReassociatePass>();
+        reassoc->run(ast);
+        totalTransformations_ += reassoc->transformations();
+        if (verbose_ && reassoc->transformations() > 0) {
+            std::cout << "[Optimizer] Reassociate: " 
+                      << reassoc->transformations() << " transformation(s)\n";
+        }
+    }
+    
     // Constant folding to simplify loop bounds
     if (constantFoldingEnabled_) {
         auto cf = std::make_unique<ConstantFoldingPass>();
@@ -186,6 +229,30 @@ void Optimizer::optimize(Program& ast) {
         if (verbose_ && cf->transformations() > 0) {
             std::cout << "[Optimizer] ConstantFolding (phase 1): " 
                       << cf->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // SROA - Scalar Replacement of Aggregates
+    // Break up records/structs into individual scalar variables
+    if (sroaEnabled_ && optLevel_ >= OptLevel::O2) {
+        auto sroa = std::make_unique<SROAPass>();
+        sroa->run(ast);
+        totalTransformations_ += sroa->transformations();
+        if (verbose_ && sroa->transformations() > 0) {
+            std::cout << "[Optimizer] SROA: " 
+                      << sroa->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // mem2reg - Memory to Register Promotion
+    // Promote stack allocations to SSA registers
+    if (mem2regEnabled_ && optLevel_ >= OptLevel::O2) {
+        auto mem2reg = std::make_unique<Mem2RegPass>();
+        mem2reg->run(ast);
+        totalTransformations_ += mem2reg->transformations();
+        if (verbose_ && mem2reg->transformations() > 0) {
+            std::cout << "[Optimizer] Mem2Reg: " 
+                      << mem2reg->transformations() << " transformation(s)\n";
         }
     }
     
@@ -201,12 +268,46 @@ void Optimizer::optimize(Program& ast) {
     
     // PHASE 2: Loop optimizations
     if (loopOptEnabled_) {
+        // Loop Rotation - transform loops to have exit at bottom
+        // This enables better LICM and loop unrolling
+        if (optLevel_ >= OptLevel::O2) {
+            auto loopRotate = std::make_unique<LoopRotationPass>();
+            loopRotate->run(ast);
+            totalTransformations_ += loopRotate->transformations();
+            if (verbose_ && loopRotate->transformations() > 0) {
+                std::cout << "[Optimizer] LoopRotation: " 
+                          << loopRotate->transformations() << " transformation(s)\n";
+            }
+        }
+        
+        // Induction Variable Simplification - canonicalize IVs, compute trip counts
+        if (optLevel_ >= OptLevel::O2) {
+            auto indvar = std::make_unique<IndVarSimplifyPass>();
+            indvar->run(ast);
+            totalTransformations_ += indvar->transformations();
+            if (verbose_ && indvar->transformations() > 0) {
+                std::cout << "[Optimizer] IndVarSimplify: " 
+                          << indvar->transformations() << " transformation(s)\n";
+            }
+        }
+        
         auto loopOpt = std::make_unique<LoopOptimizationPass>();
         loopOpt->run(ast);
         totalTransformations_ += loopOpt->transformations();
         if (verbose_ && loopOpt->transformations() > 0) {
             std::cout << "[Optimizer] LoopOptimization: " 
                       << loopOpt->transformations() << " transformation(s)\n";
+        }
+        
+        // Enhanced LICM for more aggressive hoisting (O3/Ofast)
+        if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+            auto enhancedLicm = std::make_unique<EnhancedLICMPass>();
+            enhancedLicm->run(ast);
+            totalTransformations_ += enhancedLicm->transformations();
+            if (verbose_ && enhancedLicm->transformations() > 0) {
+                std::cout << "[Optimizer] EnhancedLICM: " 
+                          << enhancedLicm->transformations() << " transformation(s)\n";
+            }
         }
     }
     
@@ -285,6 +386,15 @@ void Optimizer::optimize(Program& ast) {
     
     // PHASE 5: Advanced optimizations (O3/Ofast only)
     if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+        // GVN-PRE for load/store optimization and partial redundancy elimination
+        auto gvnPre = std::make_unique<GVNPREPass>();
+        gvnPre->run(ast);
+        totalTransformations_ += gvnPre->transformations();
+        if (verbose_ && gvnPre->transformations() > 0) {
+            std::cout << "[Optimizer] GVN-PRE: " 
+                      << gvnPre->transformations() << " transformation(s)\n";
+        }
+        
         // Advanced strength reduction for more complex patterns
         auto advStrength = std::make_unique<AdvancedStrengthReductionPass>();
         advStrength->run(ast);
@@ -305,6 +415,17 @@ void Optimizer::optimize(Program& ast) {
     }
     
     // PHASE 6: CFG Simplification (cleanup control flow)
+    // Jump Threading - thread jumps through predictable conditions
+    if (simplifyCFGEnabled_ && optLevel_ >= OptLevel::O2) {
+        auto jumpThread = std::make_unique<JumpThreadingPass>();
+        jumpThread->run(ast);
+        totalTransformations_ += jumpThread->transformations();
+        if (verbose_ && jumpThread->transformations() > 0) {
+            std::cout << "[Optimizer] JumpThreading: " 
+                      << jumpThread->transformations() << " transformation(s)\n";
+        }
+    }
+    
     if (simplifyCFGEnabled_) {
         auto cfg = std::make_unique<SimplifyCFGPass>();
         cfg->run(ast);
@@ -326,6 +447,17 @@ void Optimizer::optimize(Program& ast) {
         }
     }
     
+    // Dead Store Elimination - remove redundant stores
+    if (deadCodeEnabled_) {
+        auto dse = std::make_unique<DeadStoreEliminationPass>();
+        dse->run(ast);
+        totalTransformations_ += dse->transformations();
+        if (verbose_ && dse->transformations() > 0) {
+            std::cout << "[Optimizer] DeadStoreElimination: " 
+                      << dse->transformations() << " transformation(s)\n";
+        }
+    }
+
     if (deadCodeEnabled_) {
         auto dce = std::make_unique<DeadCodeEliminationPass>();
         dce->run(ast);
@@ -333,6 +465,28 @@ void Optimizer::optimize(Program& ast) {
         if (verbose_ && dce->transformations() > 0) {
             std::cout << "[Optimizer] DeadCodeElimination (final): " 
                       << dce->transformations() << " transformation(s)\n";
+        }
+        
+        // ADCE for more aggressive dead code elimination (O3/Ofast)
+        if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+            auto adce = std::make_unique<ADCEPass>();
+            adce->run(ast);
+            totalTransformations_ += adce->transformations();
+            if (verbose_ && adce->transformations() > 0) {
+                std::cout << "[Optimizer] ADCE: " 
+                          << adce->transformations() << " transformation(s)\n";
+            }
+        }
+    }
+    
+    // PHASE 8: Instruction Scheduling (O3/Ofast only)
+    if (schedulingEnabled_ && (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast)) {
+        auto scheduler = std::make_unique<InstructionSchedulerPass>();
+        scheduler->run(ast);
+        totalTransformations_ += scheduler->transformations();
+        if (verbose_ && scheduler->transformations() > 0) {
+            std::cout << "[Optimizer] InstructionScheduler: " 
+                      << scheduler->transformations() << " transformation(s)\n";
         }
     }
     
@@ -347,6 +501,10 @@ void Optimizer::enableConstantFolding(bool enable) {
 
 void Optimizer::enableDeadCodeElimination(bool enable) {
     deadCodeEnabled_ = enable;
+}
+
+void Optimizer::enableDeadStoreElimination(bool enable) {
+    deadStoreEnabled_ = enable;
 }
 
 void Optimizer::enableInlining(bool enable) {
@@ -379,6 +537,18 @@ void Optimizer::enableInstructionScheduling(bool enable) {
 
 void Optimizer::enablePGO(bool enable) {
     pgoEnabled_ = enable;
+}
+
+void Optimizer::enableReassociate(bool enable) {
+    reassociateEnabled_ = enable;
+}
+
+void Optimizer::enableSROA(bool enable) {
+    sroaEnabled_ = enable;
+}
+
+void Optimizer::enableMem2Reg(bool enable) {
+    mem2regEnabled_ = enable;
 }
 
 std::unique_ptr<SSAModule> Optimizer::buildSSA(Program& ast) {

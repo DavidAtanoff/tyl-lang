@@ -1,0 +1,13 @@
+// Test - print function pointer address
+
+fn double_it x: int -> int:
+    return x * 2
+
+fn call_fn f: fn(int) -> int -> int:
+    // Don't call println - just call f directly
+    result = f(10)
+    return result
+
+fn main:
+    r = call_fn(double_it)
+    println("Result: ", r)

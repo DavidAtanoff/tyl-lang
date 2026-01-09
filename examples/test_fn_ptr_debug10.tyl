@@ -1,0 +1,12 @@
+// Test - simplest possible function pointer call
+// Reordered to see if order matters
+
+fn main:
+    r = call_fn(double_it)
+    println("Result: ", r)
+
+fn call_fn f: fn(int) -> int -> int:
+    return f(10)
+
+fn double_it x: int -> int:
+    return x * 2

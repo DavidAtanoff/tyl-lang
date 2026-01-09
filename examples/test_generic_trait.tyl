@@ -1,0 +1,16 @@
+// Generic trait test
+
+record Wrapper[T]:
+    value: T
+
+trait Getter[T]:
+    fn get self -> T
+
+impl[T] Getter[T] for Wrapper[T]:
+    fn get self -> T:
+        return self.value
+
+fn main:
+    b = Wrapper[int] { value: 42 }
+    result = b.get()
+    println("Result: ", result)

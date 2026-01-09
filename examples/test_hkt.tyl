@@ -1,0 +1,56 @@
+// Higher-Kinded Types (HKT) Test
+// Tests the implementation of type constructors like F[_] in traits
+
+// ============================================================================
+// Basic HKT Trait: Functor
+// A Functor is a type constructor F[_] that supports mapping
+// ============================================================================
+
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+// ============================================================================
+// HKT Trait with super trait: Monad
+// Monad extends Functor with pure and flatMap
+// ============================================================================
+
+trait Monad[M[_]]: Functor:
+    fn pure[A] a: A -> M[A]
+    fn flatMap[A, B] self: M[A], f: fn(A) -> M[B] -> M[B]
+
+// ============================================================================
+// Applicative trait (between Functor and Monad)
+// ============================================================================
+
+trait Applicative[F[_]]: Functor:
+    fn pure[A] a: A -> F[A]
+    fn apply[A, B] self: F[fn(A) -> B], fa: F[A] -> F[B]
+
+// ============================================================================
+// Traversable trait - for types that can be traversed
+// ============================================================================
+
+trait Traversable[T[_]]: Functor:
+    fn traverse[F[_], A, B] self: T[A], f: fn(A) -> F[B] -> F[T[B]]
+    fn sequence[F[_], A] self: T[F[A]] -> F[T[A]]
+
+// ============================================================================
+// Main test function
+// ============================================================================
+
+fn main:
+    println("=== Higher-Kinded Types Test ===")
+    
+    // Test list operations
+    numbers = [1, 2, 3, 4, 5]
+    println("List: [1, 2, 3, 4, 5]")
+    println("Length: ", len(numbers))
+    
+    println("")
+    println("=== HKT Traits Parsed Successfully ===")
+    println("- Functor[F[_]] with map method")
+    println("- Monad[M[_]] extending Functor")
+    println("- Applicative[F[_]] extending Functor")
+    println("- Traversable[T[_]] with HKT method params")
+    println("")
+    println("=== HKT Test Complete ===")

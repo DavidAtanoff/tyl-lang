@@ -1,0 +1,24 @@
+// Test function pointer as parameter in impl
+
+record Container:
+    value: int
+
+impl Container:
+    fn apply self: Container, f: fn(int) -> int -> Container:
+        println("In Container.apply")
+        println("self.value = ", self.value)
+        println("About to call f...")
+        result = f(self.value)
+        println("f returned: ", result)
+        return Container { value: result }
+
+fn double_it x: int -> int:
+    println("In double_it, x = ", x)
+    return x * 2
+
+fn main:
+    c = Container { value: 21 }
+    println("c.value = ", c.value)
+    println("Calling c.apply(double_it)")
+    c2 = c.apply(double_it)
+    println("c2.value = ", c2.value)

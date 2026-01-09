@@ -1,0 +1,9 @@
+// Debug parameter passing
+
+fn test_one x: int -> int:
+    println("x = ", x)
+    return x
+
+fn main:
+    result = test_one(42)
+    println("Result = ", result)

@@ -1,0 +1,15 @@
+// Test calling through function pointer - no other args
+
+fn double_it x: int -> int:
+    return x * 2
+
+fn call_fn f: fn(int) -> int -> int:
+    println("About to call f(10)")
+    result = f(10)
+    println("f returned")
+    return result
+
+fn main:
+    println("Calling call_fn")
+    r = call_fn(double_it)
+    println("Result: ", r)

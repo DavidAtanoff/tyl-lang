@@ -1,0 +1,31 @@
+// Test @derive attribute for automatic trait implementation
+
+#[derive(Debug, Clone, Eq)]
+record Point:
+    x: int
+    y: int
+
+#[derive(Debug)]
+record Person:
+    name: str
+    age: int
+
+fn main:
+    // Test that derive attribute is parsed correctly
+    println("Testing @derive attribute:")
+    
+    // Create a Point
+    p := Point { x: 10, y: 20 }
+    println("Point created: x=", p.x, ", y=", p.y)
+    
+    // Test type reflection still works
+    println("\nType reflection:")
+    println("Point type name: ", type_name[Point]())
+    println("Point size: ", type_size[Point]())
+    
+    // Test has_field
+    println("\nField checks:")
+    println("Point has 'x': ", has_field[Point]("x"))
+    println("Point has 'z': ", has_field[Point]("z"))
+    
+    println("\nDerive tests complete!")

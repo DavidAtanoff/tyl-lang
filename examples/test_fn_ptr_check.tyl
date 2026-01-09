@@ -1,0 +1,11 @@
+// Check if function pointer is recognized
+
+fn double_it x: int -> int:
+    return x * 2
+
+fn main:
+    println("Getting address of double_it")
+    f = double_it
+    println("Calling f(10)")
+    result = f(10)
+    println("Result: ", result)

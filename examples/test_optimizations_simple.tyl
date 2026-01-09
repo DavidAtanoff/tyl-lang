@@ -1,0 +1,31 @@
+// Simple test file for optimization passes
+// Tests: Dead Store Elimination, Loop Unrolling
+
+// Test 1: Dead Store Elimination - simple case
+fn test_dead_store() -> int {
+    mut x := 10
+    x = 20      // Dead store - overwritten before read
+    x = 30      // Dead store - overwritten before read
+    x = 40      // This one is used
+    return x
+}
+
+// Test 2: Loop Unrolling - small loop (full unroll)
+fn test_loop_unroll_small() -> int {
+    mut sum := 0
+    for i in range(4) {
+        sum += i
+    }
+    return sum  // Should be 0+1+2+3 = 6
+}
+
+// Main function - uses print to prevent CTFE
+fn main() -> int {
+    result1 := test_dead_store()
+    result2 := test_loop_unroll_small()
+    
+    print("Dead Store Test: {result1}")
+    print("Loop Unroll Small: {result2}")
+    
+    return 0
+}

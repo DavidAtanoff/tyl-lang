@@ -1,0 +1,81 @@
+// Comprehensive HKT (Higher-Kinded Types) Test
+// Tests the Functor pattern with function pointers as parameters
+
+// Define a simple container type (using Container, not Box which is a keyword)
+record Container[T]:
+    value: T
+
+// Define the Functor trait for higher-kinded types
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+// Implement Functor for Container
+impl Functor for Container:
+    fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]:
+        result = f(self.value)
+        return Container[B] { value: result }
+
+// Simple transformation functions
+fn double x: int -> int:
+    return x * 2
+
+fn triple x: int -> int:
+    return x * 3
+
+fn add_ten x: int -> int:
+    return x + 10
+
+fn square x: int -> int:
+    return x * x
+
+// Test function that uses the Functor trait
+fn transform_container b: Container[int], f: fn(int) -> int -> Container[int]:
+    return b.map(f)
+
+// Test chaining transformations
+fn chain_transforms b: Container[int] -> Container[int]:
+    b1 = b.map(double)
+    b2 = b1.map(add_ten)
+    return b2
+
+fn main:
+    println("=== HKT Comprehensive Test ===")
+    
+    // Test 1: Basic function pointer as parameter
+    println("\nTest 1: Basic function pointer parameter")
+    box1 = Container[int] { value: 5 }
+    println("Original value: ", box1.value)
+    
+    result1 = transform_container(box1, double)
+    println("After double: ", result1.value)
+    
+    result2 = transform_container(box1, triple)
+    println("After triple: ", result2.value)
+    
+    // Test 2: Direct map call with function reference
+    println("\nTest 2: Direct map call")
+    box2 = Container[int] { value: 7 }
+    mapped = box2.map(square)
+    println("7 squared: ", mapped.value)
+    
+    // Test 3: Chained transformations
+    println("\nTest 3: Chained transformations")
+    box3 = Container[int] { value: 3 }
+    chained = chain_transforms(box3)
+    println("3 -> double -> add_ten = ", chained.value)
+    
+    // Test 4: Lambda as function argument
+    println("\nTest 4: Lambda as function argument")
+    box4 = Container[int] { value: 10 }
+    with_lambda = box4.map(x => x + 5)
+    println("10 + 5 via lambda: ", with_lambda.value)
+    
+    // Test 5: Multiple operations
+    println("\nTest 5: Multiple operations")
+    box5 = Container[int] { value: 2 }
+    r1 = box5.map(double)
+    r2 = r1.map(double)
+    r3 = r2.map(double)
+    println("2 -> double -> double -> double = ", r3.value)
+    
+    println("\n=== All HKT Tests Passed ===")

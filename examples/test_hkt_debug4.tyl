@@ -1,0 +1,25 @@
+// Debug HKT - test lambda call
+
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+record Container[T]:
+    value: T
+
+impl Functor for Container:
+    fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]:
+        println("In map method!")
+        println("self.value = ", self.value)
+        println("About to call f...")
+        result = f(self.value)
+        println("Called f, result: ", result)
+        return Container[B] { value: result }
+
+fn main:
+    println("Step 1: Creating container")
+    b = Container[int] { value: 21 }
+    println("Step 2: Container created, value: ", b.value)
+    
+    println("Step 3: Calling b.map")
+    doubled = b.map(x => x * 2)
+    println("Step 4: Map returned, value: ", doubled.value)

@@ -1,0 +1,55 @@
+// Test file for Type Classes / Concepts feature
+
+// Define a simple Numeric concept
+concept Numeric[T]:
+    fn add(T, T) -> T
+    fn mul(T, T) -> T
+    fn zero() -> T
+
+// Define an Orderable concept
+concept Orderable[T]:
+    fn compare(T, T) -> int
+    fn less_than(T, T) -> bool
+
+// Define a concept with super concepts (inheritance)
+concept OrderedNumeric[T]: Numeric, Orderable:
+    fn abs(T) -> T
+
+// Simple function without constraints
+fn double x: int -> int:
+    return x + x
+
+// Function with concept constraint (syntax: fn name[T: Numeric])
+fn triple[T: Numeric] x: T -> T:
+    return x + x + x
+
+// Function with multiple constraints
+fn compare_and_add[T: Numeric + Orderable] a: T, b: T -> T:
+    if a < b:
+        return a + b
+    return b + a
+
+// Test basic concept parsing
+fn main:
+    print("Testing concepts:")
+    
+    let x = 10
+    let y = double(x)
+    print("double(10) = ", y)
+    
+    // Test constrained generic function with int
+    let z = triple(7)
+    print("triple(7) = ", z)
+    
+    // Test function with multiple constraints
+    let w = compare_and_add(3, 5)
+    print("compare_and_add(3, 5) = ", w)
+    
+    // Test with floats
+    let f = triple(2.5)
+    print("triple(2.5) = ", f)
+    
+    let g = compare_and_add(1.5, 3.5)
+    print("compare_and_add(1.5, 3.5) = ", g)
+    
+    print("All tests passed!")

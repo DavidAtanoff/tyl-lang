@@ -69,17 +69,27 @@ set(SEMANTIC_SOURCES
     src/semantic/optimizer/scalar/constant_folding.cpp
     src/semantic/optimizer/scalar/constant_propagation.cpp
     src/semantic/optimizer/scalar/dead_code.cpp
+    src/semantic/optimizer/scalar/dead_store.cpp
     src/semantic/optimizer/scalar/cse.cpp
     src/semantic/optimizer/scalar/gvn.cpp
     src/semantic/optimizer/scalar/algebraic.cpp
+    src/semantic/optimizer/scalar/adce.cpp
+    src/semantic/optimizer/scalar/gvn_pre.cpp
+    src/semantic/optimizer/scalar/reassociate.cpp
+    src/semantic/optimizer/scalar/sroa.cpp
+    src/semantic/optimizer/scalar/mem2reg.cpp
     # Loop optimizations
     src/semantic/optimizer/loop/loop_optimizer.cpp
+    src/semantic/optimizer/loop/enhanced_licm.cpp
+    src/semantic/optimizer/loop/loop_rotation.cpp
+    src/semantic/optimizer/loop/indvar_simplify.cpp
     # Function optimizations
     src/semantic/optimizer/function/inlining.cpp
     src/semantic/optimizer/function/tail_call.cpp
     src/semantic/optimizer/function/ctfe.cpp
     # CFG optimizations
     src/semantic/optimizer/cfg/simplify_cfg.cpp
+    src/semantic/optimizer/cfg/jump_threading.cpp
     # Analysis passes
     src/semantic/optimizer/analysis/ssa.cpp
     src/semantic/optimizer/analysis/instruction_scheduler.cpp

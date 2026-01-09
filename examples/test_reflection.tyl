@@ -1,0 +1,54 @@
+// Test compile-time reflection features
+
+record Point:
+    x: int
+    y: int
+
+record Person:
+    name: str
+    age: int
+    height: float
+
+fn main:
+    // Test type_name[T]()
+    println("Testing type_name:")
+    name := type_name[Point]()
+    println("Point type name: ", name)
+    
+    // Test type_size[T]()
+    println("\nTesting type_size:")
+    size := type_size[Point]()
+    println("Point size: ", size)
+    
+    person_size := type_size[Person]()
+    println("Person size: ", person_size)
+    
+    // Test type_align[T]()
+    println("\nTesting type_align:")
+    point_align := type_align[Point]()
+    println("Point alignment: ", point_align)
+    
+    // Test has_field[T](name)
+    println("\nTesting has_field:")
+    has_x := has_field[Point]("x")
+    has_z := has_field[Point]("z")
+    println("Point has 'x': ", has_x)
+    println("Point has 'z': ", has_z)
+    
+    has_name := has_field[Person]("name")
+    has_email := has_field[Person]("email")
+    println("Person has 'name': ", has_name)
+    println("Person has 'email': ", has_email)
+    
+    // Test field_type[T](name)
+    println("\nTesting field_type:")
+    x_type := field_type[Point]("x")
+    println("Point.x type: ", x_type)
+    
+    age_type := field_type[Person]("age")
+    println("Person.age type: ", age_type)
+    
+    height_type := field_type[Person]("height")
+    println("Person.height type: ", height_type)
+    
+    println("\nReflection tests complete!")

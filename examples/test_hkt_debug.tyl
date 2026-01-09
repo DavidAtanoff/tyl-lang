@@ -1,0 +1,11 @@
+// Debug HKT - step by step
+
+record Container[T]:
+    value: T
+
+fn main:
+    println("Step 1: Creating container")
+    b = Container[int] { value: 21 }
+    println("Step 2: Container created")
+    println("Value: ", b.value)
+    println("Step 3: Done")

@@ -1,0 +1,31 @@
+// Count primes CTFE test
+
+comptime fn is_prime_helper n: int, divisor: int -> int:
+    if divisor * divisor > n:
+        return 1
+    if n % divisor == 0:
+        return 0
+    return is_prime_helper(n, divisor + 1)
+
+comptime fn is_prime n: int -> int:
+    if n < 2:
+        return 0
+    return is_prime_helper(n, 2)
+
+comptime fn count_primes_helper n: int, current: int, count: int -> int:
+    if current > n:
+        return count
+    if is_prime(current) == 1:
+        return count_primes_helper(n, current + 1, count + 1)
+    return count_primes_helper(n, current + 1, count)
+
+comptime fn count_primes n: int -> int:
+    return count_primes_helper(n, 2, 0)
+
+// Test with small values first
+PRIMES_10 :: count_primes(10)
+PRIMES_20 :: count_primes(20)
+
+fn main:
+    println("count_primes(10) = ", PRIMES_10, " (expected: 4)")
+    println("count_primes(20) = ", PRIMES_20, " (expected: 8)")

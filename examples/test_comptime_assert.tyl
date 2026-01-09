@@ -1,0 +1,110 @@
+// Test compile-time assertions - comprehensive test
+
+// ============================================================================
+// Test 1: Basic compile-time assertions with constant expressions
+// ============================================================================
+comptime assert 1 + 1 == 2, "Basic addition should work"
+comptime assert 10 - 3 == 7, "Basic subtraction should work"
+comptime assert 4 * 5 == 20, "Basic multiplication should work"
+comptime assert 20 / 4 == 5, "Basic division should work"
+comptime assert 17 % 5 == 2, "Basic modulo should work"
+
+// ============================================================================
+// Test 2: sizeof assertions
+// ============================================================================
+comptime assert sizeof("int") == 8, "int should be 8 bytes"
+comptime assert sizeof("i64") == 8, "i64 should be 8 bytes"
+comptime assert sizeof("i32") == 4, "i32 should be 4 bytes"
+comptime assert sizeof("i16") == 2, "i16 should be 2 bytes"
+comptime assert sizeof("i8") == 1, "i8 should be 1 byte"
+comptime assert sizeof("bool") == 1, "bool should be 1 byte"
+comptime assert sizeof("float") == 8, "float should be 8 bytes"
+comptime assert sizeof("f64") == 8, "f64 should be 8 bytes"
+comptime assert sizeof("f32") == 4, "f32 should be 4 bytes"
+
+// ============================================================================
+// Test 3: alignof assertions
+// ============================================================================
+comptime assert alignof("int") == 8, "int should be 8-byte aligned"
+comptime assert alignof("i64") == 8, "i64 should be 8-byte aligned"
+comptime assert alignof("i32") == 4, "i32 should be 4-byte aligned"
+comptime assert alignof("i16") == 2, "i16 should be 2-byte aligned"
+comptime assert alignof("i8") == 1, "i8 should be 1-byte aligned"
+
+// ============================================================================
+// Test 4: is_pod assertions for primitive types
+// ============================================================================
+comptime assert is_pod[int], "int should be POD"
+comptime assert is_pod[bool], "bool should be POD"
+comptime assert is_pod[float], "float should be POD"
+comptime assert is_pod[i32], "i32 should be POD"
+comptime assert is_pod[u64], "u64 should be POD"
+comptime assert is_pod[char], "char should be POD"
+
+// ============================================================================
+// Test 5: is_primitive assertions
+// ============================================================================
+comptime assert is_primitive[int], "int should be primitive"
+comptime assert is_primitive[bool], "bool should be primitive"
+comptime assert is_primitive[char], "char should be primitive"
+comptime assert is_primitive[float], "float should be primitive"
+comptime assert is_primitive[i8], "i8 should be primitive"
+comptime assert is_primitive[u32], "u32 should be primitive"
+
+// ============================================================================
+// Test 6: Comparison operators
+// ============================================================================
+comptime assert 10 > 5, "10 should be greater than 5"
+comptime assert 5 < 10, "5 should be less than 10"
+comptime assert 5 <= 5, "5 should be less than or equal to 5"
+comptime assert 5 >= 5, "5 should be greater than or equal to 5"
+comptime assert 5 == 5, "5 should equal 5"
+comptime assert 5 != 6, "5 should not equal 6"
+
+// ============================================================================
+// Test 7: Boolean operators
+// ============================================================================
+comptime assert true and true, "true and true should be true"
+comptime assert true or false, "true or false should be true"
+comptime assert not false, "not false should be true"
+comptime assert not (false and true), "not (false and true) should be true"
+comptime assert (true or false) and true, "complex boolean should work"
+
+// ============================================================================
+// Test 8: Compile-time function evaluation
+// ============================================================================
+comptime fn square n: int -> int:
+    return n * n
+
+comptime fn factorial n: int -> int:
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+comptime fn fib n: int -> int:
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+comptime assert square(5) == 25, "square(5) should be 25"
+comptime assert square(10) == 100, "square(10) should be 100"
+comptime assert factorial(5) == 120, "factorial(5) should be 120"
+comptime assert factorial(6) == 720, "factorial(6) should be 720"
+comptime assert fib(10) == 55, "fib(10) should be 55"
+
+// ============================================================================
+// Test 9: Nested expressions
+// ============================================================================
+comptime assert (1 + 2) * 3 == 9, "nested arithmetic should work"
+comptime assert 2 * 3 + 4 == 10, "operator precedence should work"
+comptime assert 10 / 2 - 1 == 4, "division and subtraction should work"
+
+fn main:
+    println("All compile-time assertions passed!")
+    println("sizeof(int) = 8 bytes")
+    println("alignof(int) = 8 bytes")
+    println("is_pod[int] = true")
+    println("is_primitive[int] = true")
+    println("square(5) = 25")
+    println("factorial(5) = 120")
+    println("fib(10) = 55")

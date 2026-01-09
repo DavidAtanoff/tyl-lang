@@ -524,21 +524,49 @@ Add more stuff to custom x64 codegen with LLVM IR Src for:
 
 ### 5.2 Optimization Passes
 
-| Pass | Description |
-|------|-------------|
-| mem2reg | Promote memory to registers (SSA) |
-| instcombine | Algebraic simplification |
-| gvn | Global value numbering |
-| licm | Loop-invariant code motion |
-| loop-unroll | Loop unrolling |
-| loop-vectorize | Auto-vectorization |
-| inline | Function inlining |
-| dce | Dead code elimination |
-| dse | Dead store elimination |
-| sccp | Sparse conditional constant propagation |
-| tailcallelim | Tail call optimization |
-| reassociate | Reassociate expressions |
-| simplifycfg | Control flow simplification |
+**Currently Implemented (24+ passes):**
+
+| Pass | Description | Status |
+|------|-------------|--------|
+| Constant Folding | Evaluate constant expressions at compile time | ✅ Complete |
+| Constant Propagation | Track and propagate known constant values | ✅ Complete |
+| Dead Code Elimination | Remove unreachable and unused code | ✅ Complete |
+| Dead Store Elimination | Remove stores that are overwritten before read | ✅ Complete |
+| Common Subexpression Elimination | Eliminate redundant computations | ✅ Complete |
+| Global Value Numbering | Assign unique numbers to values, eliminate redundancy | ✅ Complete |
+| GVN-PRE | Partial Redundancy Elimination with GVN | ✅ Complete |
+| Copy Propagation | Replace copies with original values | ✅ Complete |
+| Algebraic Simplification | Apply algebraic identities (x*1=x, x+0=x) | ✅ Complete |
+| Reassociate | Reorder expressions for constant folding | ✅ Complete |
+| SROA | Scalar Replacement of Aggregates (split records) | ✅ Complete |
+| mem2reg | Promote memory to registers (SSA) | ✅ Complete |
+| Loop Unrolling | Unroll small loops with known bounds | ✅ Complete |
+| Loop Invariant Code Motion | Hoist invariant code out of loops | ✅ Complete |
+| Enhanced LICM | Aggressive LICM with alias analysis | ✅ Complete |
+| Strength Reduction | Replace expensive ops with cheaper ones | ✅ Complete |
+| Function Inlining | Inline small functions | ✅ Complete |
+| Tail Call Optimization | Convert tail calls to jumps | ✅ Complete |
+| CTFE | Compile-Time Function Evaluation | ✅ Complete |
+| SimplifyCFG | Control flow graph simplification | ✅ Complete |
+| ADCE | Aggressive Dead Code Elimination | ✅ Complete |
+| Instruction Scheduling | Reorder instructions for better pipelining | ✅ Complete |
+| PGO | Profile-Guided Optimization | ✅ Complete |
+| SSA Construction | Static Single Assignment form | ✅ Complete |
+
+**Planned:**
+
+| Pass | Description | Status |
+|------|-------------|--------|
+| Jump Threading | Thread jumps through predictable conditions | 📋 Planned |
+| Loop Rotation | Transform loops to do-while form | 📋 Planned |
+| Induction Variable Simplification | Canonicalize loop induction variables | 📋 Planned |
+| Loop Deletion | Remove loops with no side effects | 📋 Planned |
+| Loop Idiom Recognition | Recognize memset/memcpy patterns | 📋 Planned |
+| Correlated Value Propagation | Use range analysis for simplification | 📋 Planned |
+| Loop Vectorization | Auto-vectorization with SIMD | 📋 Future |
+| SLP Vectorization | Straight-line code vectorization | 📋 Future |
+
+**LLVM O2 Coverage: 76% (16/21 core passes)**
 
 ### 5.3 Optimization Levels
 

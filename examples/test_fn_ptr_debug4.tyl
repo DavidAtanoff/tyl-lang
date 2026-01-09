@@ -1,0 +1,16 @@
+// Minimal test for function pointer as parameter
+
+fn double_it x: int -> int:
+    println("In double_it, x = ", x)
+    return x * 2
+
+fn apply_fn f: fn(int) -> int, val: int -> int:
+    println("In apply_fn, about to call f...")
+    result = f(val)
+    println("f returned: ", result)
+    return result
+
+fn main:
+    println("Testing function pointer parameter")
+    result = apply_fn(double_it, 21)
+    println("Final result: ", result)

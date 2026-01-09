@@ -1,0 +1,24 @@
+# Debug conditional helper function
+
+comptime fn is_even n: int -> int:
+    if n % 2 == 0:
+        return 1
+    return 0
+
+comptime fn count_even_helper n: int, current: int, count: int -> int:
+    if current > n:
+        return count
+    if is_even(current) == 1:
+        return count_even_helper(n, current + 1, count + 1)
+    return count_even_helper(n, current + 1, count)
+
+comptime fn count_even n: int -> int:
+    return count_even_helper(n, 1, 0)
+
+# Should count evens from 1 to 10 = 5 (2,4,6,8,10)
+COUNT_EVEN_10 :: count_even(10)
+
+fn main:
+    println("count_even(10) = ", COUNT_EVEN_10, " (expected: 5)")
+    println("is_even(2) = ", is_even(2))
+    println("is_even(3) = ", is_even(3))

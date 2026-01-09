@@ -1,0 +1,25 @@
+// HKT test - with debug prints
+
+trait Functor[F[_]]:
+    fn map[A, B] self: F[A], f: fn(A) -> B -> F[B]
+
+record Container[T]:
+    value: T
+
+impl Functor for Container:
+    fn map[A, B] self: Container[A], f: fn(A) -> B -> Container[B]:
+        println("In map, self.value = ", self.value)
+        result = f(self.value)
+        println("After f call, result = ", result)
+        return Container[B] { value: result }
+
+fn double x: int -> int:
+    println("In double, x = ", x)
+    return x * 2
+
+fn main:
+    println("Starting")
+    c = Container[int] { value: 21 }
+    println("Created container with value: ", c.value)
+    result = c.map(double)
+    println("After map, result.value = ", result.value)

@@ -69,6 +69,19 @@ bool NativeCodeGen::compile(Program& program, const std::string& outputFile) {
     // User info support
     pe_.addImport("advapi32.dll", "GetUserNameA");
     
+    // Pre-scan for extern declarations to add their imports BEFORE finalizing
+    // This ensures extern function RVAs are calculated correctly
+    for (auto& stmt : program.statements) {
+        if (auto* ext = dynamic_cast<ExternDecl*>(stmt.get())) {
+            if (!ext->library.empty()) {
+                for (auto& fn : ext->functions) {
+                    pe_.addImport(ext->library, fn->name);
+                    externFunctions_[fn->name] = 0;
+                }
+            }
+        }
+    }
+    
     pe_.finalizeImports();
     
     addString("%d");
@@ -351,6 +364,18 @@ bool NativeCodeGen::compileToObject(Program& program, const std::string& outputF
     pe_.addImport("kernel32.dll", "GetFileSize");
     pe_.addImport("shell32.dll", "SHGetFolderPathA");
     pe_.addImport("advapi32.dll", "GetUserNameA");
+    
+    // Pre-scan for extern declarations to add their imports BEFORE finalizing
+    for (auto& stmt : program.statements) {
+        if (auto* ext = dynamic_cast<ExternDecl*>(stmt.get())) {
+            if (!ext->library.empty()) {
+                for (auto& fn : ext->functions) {
+                    pe_.addImport(ext->library, fn->name);
+                    externFunctions_[fn->name] = 0;
+                }
+            }
+        }
+    }
     
     pe_.finalizeImports();
     

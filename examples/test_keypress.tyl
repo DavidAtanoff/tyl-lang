@@ -1,0 +1,122 @@
+// Keypress detector - prints which keys you're pressing
+// Uses Windows API via FFI
+
+extern "user32.dll":
+    fn GetAsyncKeyState(vKey: int) -> int
+
+// Virtual key codes (decimal values)
+VK_ESCAPE :: 27
+VK_SPACE :: 32
+VK_LEFT :: 37
+VK_UP :: 38
+VK_RIGHT :: 39
+VK_DOWN :: 40
+VK_A :: 65
+VK_B :: 66
+VK_C :: 67
+VK_D :: 68
+VK_E :: 69
+VK_F :: 70
+VK_G :: 71
+VK_H :: 72
+VK_I :: 73
+VK_J :: 74
+VK_K :: 75
+VK_L :: 76
+VK_M :: 77
+VK_N :: 78
+VK_O :: 79
+VK_P :: 80
+VK_Q :: 81
+VK_R :: 82
+VK_S :: 83
+VK_T :: 84
+VK_U :: 85
+VK_V :: 86
+VK_W :: 87
+VK_X :: 88
+VK_Y :: 89
+VK_Z :: 90
+VK_0 :: 48
+VK_1 :: 49
+VK_2 :: 50
+VK_3 :: 51
+VK_4 :: 52
+VK_5 :: 53
+VK_6 :: 54
+VK_7 :: 55
+VK_8 :: 56
+VK_9 :: 57
+VK_ENTER :: 13
+VK_SHIFT :: 16
+VK_CTRL :: 17
+VK_ALT :: 18
+
+// GetAsyncKeyState returns SHORT with high bit set if key is down
+// 0x8000 = 32768
+fn is_key_down vk: int -> int:
+    state = GetAsyncKeyState(vk)
+    masked = state & 32768
+    if masked != 0:
+        return 1
+    return 0
+
+fn check_key vk: int, name: str, was_down: int -> int:
+    now_down = is_key_down(vk)
+    if now_down == 1:
+        if was_down == 0:
+            println("Pressed: ", name)
+    return now_down
+
+fn main:
+    println("=== Tyl Keypress Detector ===")
+    println("Press keys to see them detected!")
+    println("Press ESC to exit")
+    println("")
+    
+    // Track previous states
+    mut prev_esc = 0
+    mut prev_a = 0
+    mut prev_b = 0
+    mut prev_c = 0
+    mut prev_d = 0
+    mut prev_w = 0
+    mut prev_s = 0
+    mut prev_space = 0
+    mut prev_enter = 0
+    mut prev_up = 0
+    mut prev_down = 0
+    mut prev_left = 0
+    mut prev_right = 0
+    
+    mut count = 0
+    while count < 1000:
+        // Check escape
+        esc_now = is_key_down(VK_ESCAPE)
+        if esc_now == 1:
+            if prev_esc == 0:
+                println("ESC pressed - exiting!")
+                count = 9999
+        prev_esc = esc_now
+        
+        // Only continue checking if not exiting
+        if count < 1000:
+            prev_a = check_key(VK_A, "A", prev_a)
+            prev_b = check_key(VK_B, "B", prev_b)
+            prev_c = check_key(VK_C, "C", prev_c)
+            prev_d = check_key(VK_D, "D", prev_d)
+            prev_w = check_key(VK_W, "W", prev_w)
+            prev_s = check_key(VK_S, "S", prev_s)
+            prev_space = check_key(VK_SPACE, "SPACE", prev_space)
+            prev_enter = check_key(VK_ENTER, "ENTER", prev_enter)
+            prev_up = check_key(VK_UP, "UP", prev_up)
+            prev_down = check_key(VK_DOWN, "DOWN", prev_down)
+            prev_left = check_key(VK_LEFT, "LEFT", prev_left)
+            prev_right = check_key(VK_RIGHT, "RIGHT", prev_right)
+        
+        sleep(10)
+        count = count + 1
+    
+    println("Goodbye!")
+
+main()
