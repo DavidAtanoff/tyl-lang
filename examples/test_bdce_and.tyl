@@ -1,0 +1,17 @@
+// Test BDCE - AND with constant where result bits aren't used
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn test_bdce_and(x: int) -> int:
+    // x & 65280 masks to bits 8-15 (0xFF00)
+    // But we then AND with 255 which only keeps bits 0-7
+    // So the first AND produces bits that are never used
+    let masked = x & 65280   // Only bits 8-15 survive
+    let result = masked & 255  // Only bits 0-7 survive -> always 0!
+    return result
+
+fn main():
+    let tick = GetTickCount()
+    let result = test_bdce_and(tick)
+    print(result)  // Should always be 0

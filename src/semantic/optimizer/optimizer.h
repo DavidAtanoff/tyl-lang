@@ -42,6 +42,26 @@ class JumpThreadingPass;
 class LoopRotationPass;
 class IndVarSimplifyPass;
 
+// New optimization passes (January 2026 - Phase 2)
+class LoopDeletionPass;
+class LoopIdiomRecognitionPass;
+class MemCpyOptPass;
+
+// New optimization passes (January 2026 - Phase 3)
+class BDCEPass;
+class CorrelatedValuePropagationPass;
+class ConstraintEliminationPass;
+
+// Loop canonicalization passes
+class LoopSimplifyPass;
+
+// IPO (Inter-Procedural Optimization) passes
+class IPSCCPPass;
+class DeadArgElimPass;
+class GlobalOptPass;
+class PartialInliningPass;
+class SpeculativeDevirtPass;
+
 // Base class for all optimization passes
 class OptimizationPass {
 public:

@@ -1,0 +1,17 @@
+// Test BDCE with runtime values
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn test_bdce(x: int) -> int:
+    // Compute a bunch of stuff, but only use low bits
+    let a = x * 256      // shifts x left by 8 bits
+    let b = a + 12345    // adds to upper bits
+    let c = b * 2        // more upper bit manipulation
+    // Only the low 8 bits matter - BDCE should see this
+    return c & 255
+
+fn main():
+    let tick = GetTickCount()
+    let result = test_bdce(tick)
+    print(result)

@@ -59,10 +59,15 @@ public:
     // These are function labels that should not be treated as variables
     void setFunctionNames(const std::set<std::string>* fnNames) { functionNames_ = fnNames; }
     
+    // Set registers that are reserved for global variables
+    // The function-level allocator will avoid using these registers
+    void setReservedRegisters(const std::set<VarRegister>& reserved) { reservedRegisters_ = reserved; }
+    
 private:
     std::vector<LiveRange> liveRanges_;
     std::map<std::string, VarRegister> assignments_;
     std::set<VarRegister> usedRegisters_;
+    std::set<VarRegister> reservedRegisters_;  // Registers reserved for global variables
     int currentPos_;
     const std::set<std::string>* functionNames_ = nullptr;  // Function names to skip
     

@@ -42,11 +42,13 @@ private:
     // Phase 1: Compute def/use sets for each statement
     void computeDefUse(Statement* stmt, LivenessInfo& info);
     void computeDefUseExpr(Expression* expr, std::set<std::string>& uses);
+    void computeDefUseRecursive(std::vector<StmtPtr>& stmts);  // Recurse into nested blocks
     
     // Phase 2: Mark initially live statements (side effects, returns)
     void markInitiallyLive(std::vector<StmtPtr>& stmts);
     bool hasSideEffects(Statement* stmt);
     bool exprHasSideEffects(Expression* expr);
+    bool containsFunctionCall(Expression* expr);  // Helper to check for any function call
     
     // Phase 3: Propagate liveness backwards
     void propagateLiveness(std::vector<StmtPtr>& stmts);

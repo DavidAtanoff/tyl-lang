@@ -1,0 +1,52 @@
+// Debug test for global variable register allocation
+
+GLOBAL_CONSTANT = 42
+mut MUTABLE_GLOBAL = 0
+
+fn test_global_opt:
+    x = GLOBAL_CONSTANT
+    MUTABLE_GLOBAL = 10
+    y = MUTABLE_GLOBAL
+    return x + y
+
+fn validate_input x:
+    if x < 0:
+        return -1
+    mut result = 0
+    mut i = 0
+    while i < x:
+        result = result + i * i
+        i = i + 1
+    return result
+
+fn test_partial_inlining:
+    a = validate_input(-5)
+    b = validate_input(5)
+    return a + b
+
+fn compute_simple x, y:
+    return x * y + x + y
+
+fn test_simple:
+    result = compute_simple(3, 10)
+    return result
+
+fn main:
+    print("Testing new IPO passes...\n")
+    
+    global_result = test_global_opt()
+    print("GlobalOpt test result: ")
+    print(global_result)
+    print("\n")
+    
+    partial_result = test_partial_inlining()
+    print("Partial Inlining test result: ")
+    print(partial_result)
+    print("\n")
+    
+    simple_result = test_simple()
+    print("Simple test result: ")
+    print(simple_result)
+    print("\n")
+    
+    print("All tests completed!\n")

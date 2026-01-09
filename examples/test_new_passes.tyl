@@ -1,0 +1,44 @@
+// Test file for BDCE, Correlated Value Propagation, and Constraint Elimination
+
+fn test_correlated_propagation() -> int:
+    let x = 10
+    
+    // After this check, we know x > 5, so x >= 6
+    if x > 5:
+        // This comparison should be simplified to true
+        if x >= 6:
+            return 1
+        else:
+            return 0
+    return -1
+
+fn test_constraint_elimination() -> int:
+    let arr_len = 10
+    let i = 3
+    
+    // First bounds check
+    if i >= 0 and i < arr_len:
+        // This second check is redundant - we already know i is in bounds
+        if i >= 0:
+            return i
+    return -1
+
+fn test_range_propagation() -> int:
+    let x = 5
+    let y = 3
+    
+    // x is 5, y is 3, so x > y is always true
+    if x > y:
+        return 1
+    else:
+        return 0
+
+fn main():
+    let r1 = test_correlated_propagation()
+    print(r1)  // Should print 1
+    
+    let r2 = test_constraint_elimination()
+    print(r2)  // Should print 3
+    
+    let r3 = test_range_propagation()
+    print(r3)  // Should print 1

@@ -1,0 +1,16 @@
+// Test Correlated Value Propagation specifically
+// Uses function parameter to prevent CTFE from evaluating everything
+
+fn test_cvp(x: int) -> int:
+    // After this check, we know x > 10
+    if x > 10:
+        // CVP should know x >= 11 here, so x > 5 is always true
+        if x > 5:
+            return 1
+        else:
+            return 0  // This branch should be eliminated
+    return -1
+
+fn main():
+    let result = test_cvp(15)
+    print(result)

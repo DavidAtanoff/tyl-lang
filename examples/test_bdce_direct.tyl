@@ -1,0 +1,14 @@
+// Test BDCE - Direct pattern that should trigger
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn test_bdce_direct(x: int) -> int:
+    // This should be simplified to 0 by BDCE
+    // (x & 0xFF00) & 0xFF = 0 always
+    return (x & 65280) & 255
+
+fn main():
+    let tick = GetTickCount()
+    let result = test_bdce_direct(tick)
+    print(result)

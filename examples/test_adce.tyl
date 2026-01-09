@@ -1,0 +1,128 @@
+// Test file specifically for ADCE (Aggressive Dead Code Elimination)
+// This tests that ADCE removes dead code but preserves side effects
+
+// Test 1: Dead variable that is never used - ADCE should remove
+fn test_dead_variable() -> int:
+    x := 10          // Dead - never used
+    y := 20          // Dead - never used  
+    z := x + y       // Dead - never used (x, y are dead too)
+    result := 42     // Live - returned
+    return result
+
+// Test 2: Dead computation chain - ADCE should remove
+fn test_dead_chain() -> int:
+    a := 1           // Dead
+    b := a * 2       // Dead
+    c := b + 3       // Dead
+    d := c * c       // Dead
+    // None of a, b, c, d are used
+    return 100
+
+// Test 3: Live computation - ADCE should NOT remove
+fn test_live_computation() -> int:
+    a := 5           // Live - used in b
+    b := a * 2       // Live - used in c
+    c := b + 10      // Live - returned
+    return c         // Should return 20
+
+// Test 4: Mixed dead and live - ADCE should remove only dead
+fn test_mixed() -> int:
+    dead1 := 999     // Dead
+    live1 := 10      // Live
+    dead2 := dead1 * 2  // Dead
+    live2 := live1 + 5  // Live
+    dead3 := 123     // Dead
+    return live2     // Should return 15
+
+// Test 5: Side effects must be preserved
+fn test_side_effects():
+    print("This MUST print")  // Side effect - must NOT be removed
+    dead := 42                 // Dead - can be removed
+    print("This MUST also print")  // Side effect - must NOT be removed
+
+// Test 6: Dead code after return (unreachable) - handled by other passes
+fn test_after_return() -> int:
+    return 1
+    // Code after return is unreachable - handled by DCE, not ADCE
+
+// Test 7: Complex dead code with multiple paths
+fn test_complex_dead() -> int:
+    x := 1           // Dead
+    y := 2           // Dead
+    z := 3           // Dead
+    
+    // Complex dead computation
+    temp1 := x + y   // Dead
+    temp2 := y * z   // Dead
+    temp3 := temp1 + temp2  // Dead
+    
+    // Only this is live
+    result := 50
+    return result
+
+// Test 8: Function calls are side effects - must preserve
+fn helper() -> int:
+    return 42
+
+fn test_function_call_side_effect():
+    // Even if result is unused, function call might have side effects
+    // But pure functions can be removed if result unused
+    print("Before call")
+    result := helper()  // This could be removed if helper is pure
+    print("After call")
+
+// Main function to run all tests
+fn main() -> int:
+    print("=== ADCE Test Suite ===")
+    print("")
+    
+    // Test 1
+    r1 := test_dead_variable()
+    if r1 == 42:
+        print("Test 1 PASSED: dead variable (result = 42)")
+    else:
+        print("Test 1 FAILED")
+    
+    // Test 2
+    r2 := test_dead_chain()
+    if r2 == 100:
+        print("Test 2 PASSED: dead chain (result = 100)")
+    else:
+        print("Test 2 FAILED")
+    
+    // Test 3
+    r3 := test_live_computation()
+    if r3 == 20:
+        print("Test 3 PASSED: live computation (result = 20)")
+    else:
+        print("Test 3 FAILED: expected 20, got {r3}")
+    
+    // Test 4
+    r4 := test_mixed()
+    if r4 == 15:
+        print("Test 4 PASSED: mixed dead/live (result = 15)")
+    else:
+        print("Test 4 FAILED: expected 15, got {r4}")
+    
+    // Test 5 - side effects
+    print("")
+    print("Test 5: Side effects (should see 2 messages):")
+    test_side_effects()
+    print("Test 5 PASSED if you saw both messages above")
+    
+    // Test 7
+    r7 := test_complex_dead()
+    if r7 == 50:
+        print("Test 7 PASSED: complex dead (result = 50)")
+    else:
+        print("Test 7 FAILED")
+    
+    // Test 8
+    print("")
+    print("Test 8: Function call side effects:")
+    test_function_call_side_effect()
+    print("Test 8 PASSED if you saw Before/After messages")
+    
+    print("")
+    print("=== All ADCE tests completed ===")
+    return 0

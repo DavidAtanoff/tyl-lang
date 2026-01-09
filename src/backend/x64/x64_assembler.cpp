@@ -95,6 +95,7 @@ void X64Assembler::imul_rax_rcx() { emit8(0x48); emit8(0x0F); emit8(0xAF); emit8
 void X64Assembler::cqo() { emit8(0x48); emit8(0x99); }
 void X64Assembler::idiv_rcx() { emit8(0x48); emit8(0xF7); emit8(0xF9); }
 void X64Assembler::neg_rax() { emit8(0x48); emit8(0xF7); emit8(0xD8); }
+void X64Assembler::not_rax() { emit8(0x48); emit8(0xF7); emit8(0xD0); }  // not rax
 void X64Assembler::inc_rax() { emit8(0x48); emit8(0xFF); emit8(0xC0); }
 void X64Assembler::inc_rcx() { emit8(0x48); emit8(0xFF); emit8(0xC1); }
 void X64Assembler::dec_rax() { emit8(0x48); emit8(0xFF); emit8(0xC8); }
@@ -114,6 +115,7 @@ void X64Assembler::setle_al() { emit8(0x0F); emit8(0x9E); emit8(0xC0); }
 void X64Assembler::setge_al() { emit8(0x0F); emit8(0x9D); emit8(0xC0); }
 void X64Assembler::movzx_rax_al() { emit8(0x48); emit8(0x0F); emit8(0xB6); emit8(0xC0); }
 void X64Assembler::xor_rax_rax() { emit8(0x48); emit8(0x31); emit8(0xC0); }
+void X64Assembler::xor_rax_rcx() { emit8(0x48); emit8(0x31); emit8(0xC8); }  // xor rax, rcx
 void X64Assembler::xor_ecx_ecx() { emit8(0x31); emit8(0xC9); }
 void X64Assembler::and_rax_rcx() { emit8(0x48); emit8(0x21); emit8(0xC8); }
 void X64Assembler::or_rax_rcx() { emit8(0x48); emit8(0x09); emit8(0xC8); }

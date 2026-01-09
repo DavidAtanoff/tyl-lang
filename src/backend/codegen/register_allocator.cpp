@@ -277,13 +277,14 @@ void RegisterAllocator::allocateRegisters() {
         });
     
     // Available registers (callee-saved)
-    std::vector<VarRegister> availableRegs = {
-        VarRegister::RBX,
-        VarRegister::R12,
-        VarRegister::R13,
-        VarRegister::R14,
-        VarRegister::R15
-    };
+    // Filter out registers that are reserved for global variables
+    std::vector<VarRegister> availableRegs;
+    for (auto reg : {VarRegister::RBX, VarRegister::R12, VarRegister::R13, 
+                     VarRegister::R14, VarRegister::R15}) {
+        if (reservedRegisters_.find(reg) == reservedRegisters_.end()) {
+            availableRegs.push_back(reg);
+        }
+    }
     
     // Active intervals (currently allocated)
     std::vector<LiveRange*> active;

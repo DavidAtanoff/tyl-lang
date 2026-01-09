@@ -1,0 +1,29 @@
+// Test IPO passes: IPSCCP and Dead Argument Elimination
+
+// Function with unused argument - should be eliminated
+fn unused_arg(x: int, unused: int) -> int:
+    return x * 2
+
+// Function that always returns a constant - IPSCCP should detect
+fn always_returns_42() -> int:
+    return 42
+
+// Function with constant argument propagation
+fn add_constant(x: int) -> int:
+    return x + 10
+
+fn main():
+    // Call with unused argument
+    let a = unused_arg(5, 999)
+    print(a)
+    print("\n")
+    
+    // Call function that returns constant
+    let b = always_returns_42()
+    print(b)
+    print("\n")
+    
+    // Constant propagation across calls
+    let c = add_constant(32)
+    print(c)
+    print("\n")

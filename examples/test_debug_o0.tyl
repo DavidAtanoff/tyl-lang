@@ -1,0 +1,30 @@
+// Debug O0 issue - test read-only global
+
+GLOBAL_CONSTANT = 42
+
+fn use_global_readonly() -> int:
+    let x = GLOBAL_CONSTANT
+    return x
+
+fn simple_func(x: int) -> int:
+    if x < 0:
+        return -1
+    return x * 2
+
+fn main():
+    // Call use_global_readonly first
+    let g = use_global_readonly()
+    print("use_global_readonly() = ")
+    print(g)
+    print("\n")
+    
+    // Then call simple_func
+    let a = simple_func(-5)
+    print("simple_func(-5) = ")
+    print(a)
+    print("\n")
+    
+    let b = simple_func(5)
+    print("simple_func(5) = ")
+    print(b)
+    print("\n")

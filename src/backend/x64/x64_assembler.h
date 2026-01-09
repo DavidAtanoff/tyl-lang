@@ -94,6 +94,7 @@ public:
     void idiv_rcx();
     void div_rdx();     // unsigned divide by rdx
     void neg_rax();
+    void not_rax();     // bitwise NOT
     void imul_rdx_r8(); // rdx = rdx * r8
     void add_rcx_rdx(); // rcx += rdx
     void inc_rax();
@@ -119,6 +120,7 @@ public:
     
     // Logical
     void xor_rax_rax();
+    void xor_rax_rcx();  // Bitwise XOR
     void xor_ecx_ecx();
     void xor_rcx_rcx();
     void xor_rdx_rdx();

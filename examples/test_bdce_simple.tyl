@@ -1,0 +1,15 @@
+// Test BDCE - dead expression elimination
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn test_bdce(x: int) -> int:
+    // This expression has no side effects and result is unused
+    let unused = x * 2 + 5
+    // Only return x
+    return x
+
+fn main():
+    let tick = GetTickCount()
+    let result = test_bdce(tick)
+    print(result)

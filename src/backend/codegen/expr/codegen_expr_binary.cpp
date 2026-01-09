@@ -259,6 +259,15 @@ void NativeCodeGen::visit(BinaryExpr& node) {
             asm_.setne_al();
             asm_.movzx_rax_al();
             break;
+        case TokenType::AMP:  // Bitwise AND
+            asm_.and_rax_rcx();
+            break;
+        case TokenType::PIPE:  // Bitwise OR
+            asm_.or_rax_rcx();
+            break;
+        case TokenType::CARET:  // Bitwise XOR
+            asm_.xor_rax_rcx();
+            break;
         case TokenType::QUESTION_QUESTION: {
             std::string useRight = newLabel("coalesce_right");
             std::string done = newLabel("coalesce_done");
@@ -294,6 +303,9 @@ void NativeCodeGen::visit(UnaryExpr& node) {
             asm_.test_rax_rax();
             asm_.sete_al();
             asm_.movzx_rax_al();
+            break;
+        case TokenType::TILDE:  // Bitwise NOT
+            asm_.not_rax();
             break;
         default: break;
     }

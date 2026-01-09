@@ -392,6 +392,21 @@ void NativeCodeGen::visit(FnDecl& node) {
             // before any functions are compiled
         }
         regAlloc_.setFunctionNames(&allFunctionNames_);
+        
+        // Pass reserved registers (those used by global variables) to avoid conflicts
+        // Functions must not use registers that hold global variable values
+        if (useGlobalRegisterAllocation_) {
+            std::set<VarRegister> reservedRegs;
+            for (const auto& [name, reg] : globalVarRegisters_) {
+                if (reg != VarRegister::NONE) {
+                    reservedRegs.insert(reg);
+                }
+            }
+            regAlloc_.setReservedRegisters(reservedRegs);
+        } else {
+            regAlloc_.setReservedRegisters({});
+        }
+        
         regAlloc_.analyze(node);
         
         for (const auto& range : regAlloc_.getLiveRanges()) {

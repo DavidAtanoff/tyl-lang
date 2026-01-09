@@ -1,0 +1,18 @@
+// Test validate_input function only
+
+fn validate_input x:
+    if x < 0:
+        return -1
+    mut result = 0
+    mut i = 0
+    while i < x:
+        result = result + i * i
+        i = i + 1
+    return result
+
+fn main:
+    a = validate_input(-5)
+    b = validate_input(5)
+    println("validate_input(-5) = {a}")
+    println("validate_input(5) = {b}")
+    println("sum = {a + b}")

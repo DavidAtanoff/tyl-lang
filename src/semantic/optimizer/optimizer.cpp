@@ -15,12 +15,26 @@
 #include "scalar/reassociate.h"
 #include "scalar/sroa.h"
 #include "scalar/mem2reg.h"
+#include "scalar/memcpyopt.h"
+#include "scalar/bdce.h"
+#include "scalar/correlated_propagation.h"
+#include "scalar/constraint_elimination.h"
 
 // Loop optimizations
 #include "loop/loop_optimizer.h"
 #include "loop/enhanced_licm.h"
 #include "loop/loop_rotation.h"
 #include "loop/indvar_simplify.h"
+#include "loop/loop_deletion.h"
+#include "loop/loop_idiom.h"
+#include "loop/loop_simplify.h"
+
+// IPO (Inter-Procedural Optimization)
+#include "ipo/ipsccp.h"
+#include "ipo/dead_arg_elim.h"
+#include "ipo/global_opt.h"
+#include "ipo/partial_inlining.h"
+#include "ipo/speculative_devirt.h"
 
 // Function optimizations
 #include "function/inlining.h"
@@ -268,6 +282,18 @@ void Optimizer::optimize(Program& ast) {
     
     // PHASE 2: Loop optimizations
     if (loopOptEnabled_) {
+        // Loop Simplify - canonicalize loop structure (preheader, single latch, dedicated exits)
+        // This should run first to prepare loops for other optimizations
+        if (optLevel_ >= OptLevel::O2) {
+            auto loopSimplify = std::make_unique<LoopSimplifyPass>();
+            loopSimplify->run(ast);
+            totalTransformations_ += loopSimplify->transformations();
+            if (verbose_ && loopSimplify->transformations() > 0) {
+                std::cout << "[Optimizer] LoopSimplify: " 
+                          << loopSimplify->transformations() << " transformation(s)\n";
+            }
+        }
+        
         // Loop Rotation - transform loops to have exit at bottom
         // This enables better LICM and loop unrolling
         if (optLevel_ >= OptLevel::O2) {
@@ -307,6 +333,28 @@ void Optimizer::optimize(Program& ast) {
             if (verbose_ && enhancedLicm->transformations() > 0) {
                 std::cout << "[Optimizer] EnhancedLICM: " 
                           << enhancedLicm->transformations() << " transformation(s)\n";
+            }
+        }
+        
+        // Loop Deletion - remove loops with no side effects and unused results
+        if (optLevel_ >= OptLevel::O2) {
+            auto loopDel = std::make_unique<LoopDeletionPass>();
+            loopDel->run(ast);
+            totalTransformations_ += loopDel->transformations();
+            if (verbose_ && loopDel->transformations() > 0) {
+                std::cout << "[Optimizer] LoopDeletion: " 
+                          << loopDel->transformations() << " transformation(s)\n";
+            }
+        }
+        
+        // Loop Idiom Recognition - convert loops to memset/memcpy
+        if (optLevel_ >= OptLevel::O2) {
+            auto loopIdiom = std::make_unique<LoopIdiomRecognitionPass>();
+            loopIdiom->run(ast);
+            totalTransformations_ += loopIdiom->transformations();
+            if (verbose_ && loopIdiom->transformations() > 0) {
+                std::cout << "[Optimizer] LoopIdiomRecognition: " 
+                          << loopIdiom->transformations() << " transformation(s)\n";
             }
         }
     }
@@ -384,6 +432,62 @@ void Optimizer::optimize(Program& ast) {
         }
     }
     
+    // PHASE 4.5: Inter-Procedural Optimizations (IPO)
+    // IPSCCP - Inter-Procedural Sparse Conditional Constant Propagation
+    if (optLevel_ >= OptLevel::O2) {
+        auto ipsccp = std::make_unique<IPSCCPPass>();
+        ipsccp->run(ast);
+        totalTransformations_ += ipsccp->transformations();
+        if (verbose_ && ipsccp->transformations() > 0) {
+            std::cout << "[Optimizer] IPSCCP: " 
+                      << ipsccp->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // Dead Argument Elimination - remove unused function arguments
+    if (optLevel_ >= OptLevel::O2) {
+        auto deadArgElim = std::make_unique<DeadArgElimPass>();
+        deadArgElim->run(ast);
+        totalTransformations_ += deadArgElim->transformations();
+        if (verbose_ && deadArgElim->transformations() > 0) {
+            std::cout << "[Optimizer] DeadArgElim: " 
+                      << deadArgElim->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // GlobalOpt - Optimize global variables (constify, eliminate unused, etc.)
+    if (optLevel_ >= OptLevel::O2) {
+        auto globalOpt = std::make_unique<GlobalOptPass>();
+        globalOpt->run(ast);
+        totalTransformations_ += globalOpt->transformations();
+        if (verbose_ && globalOpt->transformations() > 0) {
+            std::cout << "[Optimizer] GlobalOpt: " 
+                      << globalOpt->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // Speculative Devirtualization - convert virtual calls to direct calls
+    if (optLevel_ >= OptLevel::O2) {
+        auto specDevirt = std::make_unique<SpeculativeDevirtPass>();
+        specDevirt->run(ast);
+        totalTransformations_ += specDevirt->transformations();
+        if (verbose_ && specDevirt->transformations() > 0) {
+            std::cout << "[Optimizer] SpeculativeDevirt: " 
+                      << specDevirt->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // Partial Inlining - inline hot paths, keep cold paths as calls (O3/Ofast)
+    if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+        auto partialInline = std::make_unique<PartialInliningPass>();
+        partialInline->run(ast);
+        totalTransformations_ += partialInline->transformations();
+        if (verbose_ && partialInline->transformations() > 0) {
+            std::cout << "[Optimizer] PartialInlining: " 
+                      << partialInline->transformations() << " transformation(s)\n";
+        }
+    }
+    
     // PHASE 5: Advanced optimizations (O3/Ofast only)
     if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
         // GVN-PRE for load/store optimization and partial redundancy elimination
@@ -426,6 +530,28 @@ void Optimizer::optimize(Program& ast) {
         }
     }
     
+    // Correlated Value Propagation - use range analysis to simplify comparisons
+    if (optLevel_ >= OptLevel::O2) {
+        auto cvp = std::make_unique<CorrelatedValuePropagationPass>();
+        cvp->run(ast);
+        totalTransformations_ += cvp->transformations();
+        if (verbose_ && cvp->transformations() > 0) {
+            std::cout << "[Optimizer] CorrelatedValuePropagation: " 
+                      << cvp->transformations() << " transformation(s)\n";
+        }
+    }
+    
+    // Constraint Elimination - use constraint solving to eliminate redundant checks
+    if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+        auto constraintElim = std::make_unique<ConstraintEliminationPass>();
+        constraintElim->run(ast);
+        totalTransformations_ += constraintElim->transformations();
+        if (verbose_ && constraintElim->transformations() > 0) {
+            std::cout << "[Optimizer] ConstraintElimination: " 
+                      << constraintElim->transformations() << " transformation(s)\n";
+        }
+    }
+    
     if (simplifyCFGEnabled_) {
         auto cfg = std::make_unique<SimplifyCFGPass>();
         cfg->run(ast);
@@ -457,6 +583,17 @@ void Optimizer::optimize(Program& ast) {
                       << dse->transformations() << " transformation(s)\n";
         }
     }
+    
+    // MemCpyOpt - merge adjacent stores into memset/memcpy
+    if (optLevel_ >= OptLevel::O2) {
+        auto memcpyopt = std::make_unique<MemCpyOptPass>();
+        memcpyopt->run(ast);
+        totalTransformations_ += memcpyopt->transformations();
+        if (verbose_ && memcpyopt->transformations() > 0) {
+            std::cout << "[Optimizer] MemCpyOpt: " 
+                      << memcpyopt->transformations() << " transformation(s)\n";
+        }
+    }
 
     if (deadCodeEnabled_) {
         auto dce = std::make_unique<DeadCodeEliminationPass>();
@@ -475,6 +612,15 @@ void Optimizer::optimize(Program& ast) {
             if (verbose_ && adce->transformations() > 0) {
                 std::cout << "[Optimizer] ADCE: " 
                           << adce->transformations() << " transformation(s)\n";
+            }
+            
+            // BDCE - Bit-Tracking Dead Code Elimination
+            auto bdce = std::make_unique<BDCEPass>();
+            bdce->run(ast);
+            totalTransformations_ += bdce->transformations();
+            if (verbose_ && bdce->transformations() > 0) {
+                std::cout << "[Optimizer] BDCE: " 
+                          << bdce->transformations() << " transformation(s)\n";
             }
         }
     }

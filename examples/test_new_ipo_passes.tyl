@@ -1,0 +1,87 @@
+// Test file for new IPO passes: GlobalOpt, Partial Inlining, Speculative Devirtualization
+// Run with: tylc -O3 test_new_ipo_passes.tyl
+
+// ============================================
+// Test 1: GlobalOpt - Global Variable Optimization
+// ============================================
+
+// This global is never written after initialization - should be constified
+GLOBAL_CONSTANT = 42
+
+// This global is both read and written - should NOT be optimized
+mut MUTABLE_GLOBAL = 0
+
+fn test_global_opt:
+    // Read from constant global - should be replaced with 42
+    x = GLOBAL_CONSTANT
+    
+    // Write to mutable global
+    MUTABLE_GLOBAL = 10
+    
+    // Read from mutable global
+    y = MUTABLE_GLOBAL
+    
+    return x + y
+
+// ============================================
+// Test 2: Partial Inlining
+// ============================================
+
+// Function with early return pattern - hot path should be inlined
+fn validate_input x:
+    // Early return for invalid input (hot path - inline this)
+    if x < 0:
+        return -1
+    
+    // Complex computation (cold path - keep as separate call)
+    mut result = 0
+    mut i = 0
+    while i < x:
+        result = result + i * i
+        i = i + 1
+    return result
+
+fn test_partial_inlining:
+    // Call to function with early return - should partially inline
+    a = validate_input(-5)
+    b = validate_input(5)
+    
+    return a + b
+
+// ============================================
+// Test 3: Simple computation test
+// ============================================
+
+fn compute_simple x, y:
+    return x * y + x + y
+
+fn test_simple:
+    result = compute_simple(3, 10)
+    return result
+
+// ============================================
+// Main function to run all tests
+// ============================================
+
+fn main:
+    print("Testing new IPO passes...\n")
+    
+    // Test GlobalOpt
+    global_result = test_global_opt()
+    print("GlobalOpt test result: ")
+    print(global_result)
+    print("\n")
+    
+    // Test Partial Inlining
+    partial_result = test_partial_inlining()
+    print("Partial Inlining test result: ")
+    print(partial_result)
+    print("\n")
+    
+    // Test Simple
+    simple_result = test_simple()
+    print("Simple test result: ")
+    print(simple_result)
+    print("\n")
+    
+    print("All tests completed!\n")

@@ -39,12 +39,8 @@ void ADCEPass::processFunction(FnDecl* fn) {
     livenessInfo_.clear();
     liveStatements_.clear();
     
-    // Phase 1: Compute def/use for all statements
-    for (auto& stmt : body->statements) {
-        LivenessInfo info;
-        computeDefUse(stmt.get(), info);
-        livenessInfo_[stmt.get()] = info;
-    }
+    // Phase 1: Compute def/use for all statements (including nested)
+    computeDefUseRecursive(body->statements);
     
     // Phase 2: Mark initially live statements
     markInitiallyLive(body->statements);
@@ -56,6 +52,65 @@ void ADCEPass::processFunction(FnDecl* fn) {
     removeDeadStatements(body->statements);
 }
 
+void ADCEPass::computeDefUseRecursive(std::vector<StmtPtr>& stmts) {
+    for (auto& stmt : stmts) {
+        LivenessInfo info;
+        computeDefUse(stmt.get(), info);
+        livenessInfo_[stmt.get()] = info;
+        
+        // Recurse into nested blocks
+        if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt.get())) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                computeDefUseRecursive(thenBlock->statements);
+            } else if (ifStmt->thenBranch) {
+                // Single statement, not a block
+                std::vector<StmtPtr> temp;
+                // Can't move, just process in place
+                LivenessInfo thenInfo;
+                computeDefUse(ifStmt->thenBranch.get(), thenInfo);
+                livenessInfo_[ifStmt->thenBranch.get()] = thenInfo;
+            }
+            for (auto& elif : ifStmt->elifBranches) {
+                if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
+                    computeDefUseRecursive(elifBlock->statements);
+                } else if (elif.second) {
+                    LivenessInfo elifInfo;
+                    computeDefUse(elif.second.get(), elifInfo);
+                    livenessInfo_[elif.second.get()] = elifInfo;
+                }
+            }
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                computeDefUseRecursive(elseBlock->statements);
+            } else if (ifStmt->elseBranch) {
+                LivenessInfo elseInfo;
+                computeDefUse(ifStmt->elseBranch.get(), elseInfo);
+                livenessInfo_[ifStmt->elseBranch.get()] = elseInfo;
+            }
+        }
+        else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt.get())) {
+            if (auto* body = dynamic_cast<Block*>(whileStmt->body.get())) {
+                computeDefUseRecursive(body->statements);
+            } else if (whileStmt->body) {
+                LivenessInfo bodyInfo;
+                computeDefUse(whileStmt->body.get(), bodyInfo);
+                livenessInfo_[whileStmt->body.get()] = bodyInfo;
+            }
+        }
+        else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt.get())) {
+            if (auto* body = dynamic_cast<Block*>(forStmt->body.get())) {
+                computeDefUseRecursive(body->statements);
+            } else if (forStmt->body) {
+                LivenessInfo bodyInfo;
+                computeDefUse(forStmt->body.get(), bodyInfo);
+                livenessInfo_[forStmt->body.get()] = bodyInfo;
+            }
+        }
+        else if (auto* block = dynamic_cast<Block*>(stmt.get())) {
+            computeDefUseRecursive(block->statements);
+        }
+    }
+}
+
 void ADCEPass::computeDefUse(Statement* stmt, LivenessInfo& info) {
     if (!stmt) return;
     
@@ -63,6 +118,10 @@ void ADCEPass::computeDefUse(Statement* stmt, LivenessInfo& info) {
         info.def.insert(varDecl->name);
         if (varDecl->initializer) {
             computeDefUseExpr(varDecl->initializer.get(), info.use);
+            // Mark as having side effects if initializer has function call
+            if (containsFunctionCall(varDecl->initializer.get())) {
+                info.hasSideEffects = true;
+            }
         }
     }
     else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
@@ -73,13 +132,23 @@ void ADCEPass::computeDefUse(Statement* stmt, LivenessInfo& info) {
             }
             info.def.insert(target->name);
         } else {
-            // Complex target (array index, member access) - treat as use
+            // Complex target (array index, member access) - treat as use and side effect
             computeDefUseExpr(assignStmt->target.get(), info.use);
+            info.hasSideEffects = true;  // Array/member assignment is a side effect
         }
         computeDefUseExpr(assignStmt->value.get(), info.use);
+        // Mark as having side effects if value has function call
+        if (containsFunctionCall(assignStmt->value.get())) {
+            info.hasSideEffects = true;
+        }
     }
     else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
         computeDefUseExpr(exprStmt->expr.get(), info.use);
+        
+        // Expression statements with function calls have side effects
+        if (containsFunctionCall(exprStmt->expr.get())) {
+            info.hasSideEffects = true;
+        }
         
         // Handle AssignExpr inside ExprStmt
         if (auto* assignExpr = dynamic_cast<AssignExpr*>(exprStmt->expr.get())) {
@@ -88,6 +157,9 @@ void ADCEPass::computeDefUse(Statement* stmt, LivenessInfo& info) {
                     info.use.insert(target->name);
                 }
                 info.def.insert(target->name);
+            } else {
+                // Complex target - side effect
+                info.hasSideEffects = true;
             }
         }
     }
@@ -112,6 +184,10 @@ void ADCEPass::computeDefUse(Statement* stmt, LivenessInfo& info) {
     }
     else if (dynamic_cast<BreakStmt*>(stmt) || dynamic_cast<ContinueStmt*>(stmt)) {
         info.hasSideEffects = true;
+    }
+    else if (dynamic_cast<Block*>(stmt)) {
+        // Blocks themselves don't have side effects, but their contents might
+        // The contents are handled by computeDefUseRecursive
     }
 }
 
@@ -185,6 +261,9 @@ void ADCEPass::markInitiallyLive(std::vector<StmtPtr>& stmts) {
         
         // Process nested blocks
         if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt.get())) {
+            // Mark the if statement itself as live (it has control flow)
+            markLive(stmt.get());
+            
             if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
                 markInitiallyLive(thenBlock->statements);
             }
@@ -198,6 +277,9 @@ void ADCEPass::markInitiallyLive(std::vector<StmtPtr>& stmts) {
             }
         }
         else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt.get())) {
+            // Mark the while statement itself as live
+            markLive(stmt.get());
+            
             // Mark all statements in loop body as live (conservative)
             // Loop bodies are complex - modifications may be read in next iteration
             if (auto* body = dynamic_cast<Block*>(whileStmt->body.get())) {
@@ -208,6 +290,9 @@ void ADCEPass::markInitiallyLive(std::vector<StmtPtr>& stmts) {
             }
         }
         else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt.get())) {
+            // Mark the for statement itself as live
+            markLive(stmt.get());
+            
             // Mark all statements in loop body as live (conservative)
             // Loop bodies are complex - modifications may be read in next iteration
             if (auto* body = dynamic_cast<Block*>(forStmt->body.get())) {
@@ -219,6 +304,12 @@ void ADCEPass::markInitiallyLive(std::vector<StmtPtr>& stmts) {
         }
         else if (auto* block = dynamic_cast<Block*>(stmt.get())) {
             markInitiallyLive(block->statements);
+        }
+        else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt.get())) {
+            // Expression statements with function calls are always live
+            if (containsFunctionCall(exprStmt->expr.get())) {
+                markLive(stmt.get());
+            }
         }
     }
 }
@@ -234,11 +325,23 @@ bool ADCEPass::hasSideEffects(Statement* stmt) {
     if (dynamic_cast<ForStmt*>(stmt)) return true;
     
     if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+        // Any expression statement with a function call has side effects
+        // This is conservative but safe
+        if (containsFunctionCall(exprStmt->expr.get())) {
+            return true;
+        }
         return exprHasSideEffects(exprStmt->expr.get());
     }
     
     if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
-        return varDecl->initializer && exprHasSideEffects(varDecl->initializer.get());
+        if (varDecl->initializer) {
+            // Variable declarations with function calls have side effects
+            if (containsFunctionCall(varDecl->initializer.get())) {
+                return true;
+            }
+            return exprHasSideEffects(varDecl->initializer.get());
+        }
+        return false;
     }
     
     if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
@@ -246,7 +349,51 @@ bool ADCEPass::hasSideEffects(Statement* stmt) {
         if (!dynamic_cast<Identifier*>(assignStmt->target.get())) {
             return true;  // Array/member assignment
         }
+        // Assignments with function calls have side effects
+        if (containsFunctionCall(assignStmt->value.get())) {
+            return true;
+        }
         return exprHasSideEffects(assignStmt->value.get());
+    }
+    
+    return false;
+}
+
+bool ADCEPass::containsFunctionCall(Expression* expr) {
+    if (!expr) return false;
+    
+    if (dynamic_cast<CallExpr*>(expr)) {
+        return true;
+    }
+    
+    if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        return containsFunctionCall(binary->left.get()) || 
+               containsFunctionCall(binary->right.get());
+    }
+    
+    if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+        return containsFunctionCall(unary->operand.get());
+    }
+    
+    if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {
+        return containsFunctionCall(ternary->condition.get()) ||
+               containsFunctionCall(ternary->thenExpr.get()) ||
+               containsFunctionCall(ternary->elseExpr.get());
+    }
+    
+    if (auto* index = dynamic_cast<IndexExpr*>(expr)) {
+        return containsFunctionCall(index->object.get()) ||
+               containsFunctionCall(index->index.get());
+    }
+    
+    if (auto* member = dynamic_cast<MemberExpr*>(expr)) {
+        return containsFunctionCall(member->object.get());
+    }
+    
+    if (auto* list = dynamic_cast<ListExpr*>(expr)) {
+        for (auto& elem : list->elements) {
+            if (containsFunctionCall(elem.get())) return true;
+        }
     }
     
     return false;
@@ -403,11 +550,17 @@ void ADCEPass::removeDeadStatements(std::vector<StmtPtr>& stmts) {
         
         // Check if this statement is dead
         auto infoIt = livenessInfo_.find(stmt);
-        if (infoIt != livenessInfo_.end() && !infoIt->second.isLive && !infoIt->second.hasSideEffects) {
+        bool hasInfo = (infoIt != livenessInfo_.end());
+        bool isLive = hasInfo && infoIt->second.isLive;
+        bool hasSideEffectsFlag = hasInfo && infoIt->second.hasSideEffects;
+        
+        // Only remove if we have liveness info and it's not live and has no side effects
+        if (hasInfo && !isLive && !hasSideEffectsFlag) {
             // Don't remove control flow statements
             if (!dynamic_cast<IfStmt*>(stmt) && 
                 !dynamic_cast<WhileStmt*>(stmt) && 
-                !dynamic_cast<ForStmt*>(stmt)) {
+                !dynamic_cast<ForStmt*>(stmt) &&
+                !dynamic_cast<Block*>(stmt)) {
                 it = stmts.erase(it);
                 transformations_++;
                 continue;

@@ -1,0 +1,23 @@
+// Test CVP with runtime values that CTFE can't evaluate
+// Uses GetTickCount to get a runtime value
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn test_cvp_runtime(x: int) -> int:
+    // x is unknown at compile time
+    if x > 100:
+        // CVP should know x >= 101 here
+        // So x > 50 should always be true
+        if x > 50:
+            return 1
+        else:
+            return 0  // dead branch - CVP should eliminate
+    return -1
+
+fn main():
+    let tick = GetTickCount()  // Runtime value, CTFE can't evaluate
+    let x = tick % 1000 + 200  // Always >= 200, but CTFE doesn't know
+    
+    let result = test_cvp_runtime(x)
+    print(result)  // Should always print 1

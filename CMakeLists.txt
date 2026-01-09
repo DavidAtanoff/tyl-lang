@@ -78,11 +78,24 @@ set(SEMANTIC_SOURCES
     src/semantic/optimizer/scalar/reassociate.cpp
     src/semantic/optimizer/scalar/sroa.cpp
     src/semantic/optimizer/scalar/mem2reg.cpp
+    src/semantic/optimizer/scalar/memcpyopt.cpp
+    src/semantic/optimizer/scalar/bdce.cpp
+    src/semantic/optimizer/scalar/correlated_propagation.cpp
+    src/semantic/optimizer/scalar/constraint_elimination.cpp
     # Loop optimizations
     src/semantic/optimizer/loop/loop_optimizer.cpp
     src/semantic/optimizer/loop/enhanced_licm.cpp
     src/semantic/optimizer/loop/loop_rotation.cpp
     src/semantic/optimizer/loop/indvar_simplify.cpp
+    src/semantic/optimizer/loop/loop_deletion.cpp
+    src/semantic/optimizer/loop/loop_idiom.cpp
+    src/semantic/optimizer/loop/loop_simplify.cpp
+    # IPO (Inter-Procedural Optimization)
+    src/semantic/optimizer/ipo/ipsccp.cpp
+    src/semantic/optimizer/ipo/dead_arg_elim.cpp
+    src/semantic/optimizer/ipo/global_opt.cpp
+    src/semantic/optimizer/ipo/partial_inlining.cpp
+    src/semantic/optimizer/ipo/speculative_devirt.cpp
     # Function optimizations
     src/semantic/optimizer/function/inlining.cpp
     src/semantic/optimizer/function/tail_call.cpp
@@ -210,6 +223,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer/loop
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer/function
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer/cfg
+    ${CMAKE_SOURCE_DIR}/src/semantic/optimizer/ipo
     ${CMAKE_SOURCE_DIR}/src/semantic/optimizer/analysis
     ${CMAKE_SOURCE_DIR}/src/semantic/generics
     ${CMAKE_SOURCE_DIR}/src/semantic/ownership

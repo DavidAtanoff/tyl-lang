@@ -1,0 +1,27 @@
+// Test all bitwise operations
+
+extern "kernel32.dll":
+    fn GetTickCount() -> int
+
+fn main():
+    let x = GetTickCount()
+    
+    // Test AND
+    let and_result = x & 255
+    print(and_result)
+    print(" ")
+    
+    // Test OR
+    let or_result = (x & 15) | 240  // Low 4 bits from x, high 4 bits set
+    print(or_result)
+    print(" ")
+    
+    // Test XOR
+    let xor_result = (x & 255) ^ 255  // Flip low 8 bits
+    print(xor_result)
+    print(" ")
+    
+    // Test NOT (bitwise complement)
+    let not_result = ~0  // Should be -1 (all bits set)
+    print(not_result)
+    print("\n")
