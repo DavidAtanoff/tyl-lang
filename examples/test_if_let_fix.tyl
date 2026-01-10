@@ -1,0 +1,8 @@
+// Test if-let syntax - debug version
+
+fn main:
+    // Test if let with literal
+    if let val = 42:
+        println("Got value: ", val)
+    
+    println("Done!")

@@ -1,0 +1,12 @@
+// Test walrus operator with O2
+
+fn test3:
+    println("test3")
+    items = [1, 2, 3]
+    if (n := len(items)) > 0:
+        println("len=", n)
+
+fn main:
+    test3()
+
+main()

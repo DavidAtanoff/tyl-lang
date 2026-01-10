@@ -1,0 +1,7 @@
+// Test multi-constant declaration
+
+fn main:
+    X :: Y :: Z :: 100
+    println("X=", X, " Y=", Y, " Z=", Z)
+
+main()

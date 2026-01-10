@@ -702,4 +702,33 @@ void GenericCollector::visit(FieldTypeExpr& node) {
     }
 }
 
+// New Syntax Enhancements
+
+void GenericCollector::visit(IfLetStmt& node) {
+    if (node.value) {
+        node.value->accept(*this);
+    }
+    if (node.guard) {
+        node.guard->accept(*this);
+    }
+    if (node.thenBranch) {
+        node.thenBranch->accept(*this);
+    }
+    if (node.elseBranch) {
+        node.elseBranch->accept(*this);
+    }
+}
+
+void GenericCollector::visit(MultiVarDecl& node) {
+    if (node.initializer) {
+        node.initializer->accept(*this);
+    }
+}
+
+void GenericCollector::visit(WalrusExpr& node) {
+    if (node.value) {
+        node.value->accept(*this);
+    }
+}
+
 } // namespace tyl

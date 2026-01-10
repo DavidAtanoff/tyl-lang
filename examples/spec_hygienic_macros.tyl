@@ -1,0 +1,117 @@
+// Flex Syntax Specification - Hygienic Macros
+// This file tests the proposed hygienic macro system
+
+// ===========================================
+// 1. Basic Hygienic Macro
+// ===========================================
+
+// Variables in macro body are auto-renamed
+macro log($msg:expr):
+    prefix = "[LOG]"           // This 'prefix' won't shadow user's
+    println(prefix, " ", $msg)
+
+// Test: user's 'prefix' should NOT be affected
+fn test_hygiene:
+    prefix = "USER_PREFIX"
+    log("Hello")               // Should print: [LOG] Hello
+    println(prefix)            // Should print: USER_PREFIX (not affected)
+
+// ===========================================
+// 2. Swap Macro (Classic Hygiene Test)
+// ===========================================
+
+macro swap($a:expr, $b:expr):
+    temp = $a                  // 'temp' is hygienic
+    $a = $b
+    $b = temp
+
+fn test_swap:
+    mut x = 10
+    mut y = 20
+    mut temp = 999             // User's 'temp' - should NOT be affected
+    
+    swap(x, y)
+    
+    println("x = ", x)         // Should be 20
+    println("y = ", y)         // Should be 10
+    println("temp = ", temp)   // Should be 999 (not affected!)
+
+// ===========================================
+// 3. Explicit Gensym
+// ===========================================
+
+macro with_counter($body:block):
+    #gensym counter            // Explicitly generate unique name
+    counter = 0
+    $body
+    println("Counter: ", counter)
+
+fn test_gensym:
+    counter = 100              // User's counter
+    with_counter:
+        // This block runs with macro's counter = 0
+        println("In block")
+    println("User counter: ", counter)  // Should be 100
+
+// ===========================================
+// 4. Unhygienic Injection (Escape Hatch)
+// ===========================================
+
+// Sometimes you WANT to inject into user scope
+macro define($name:ident, $val:expr):
+    #inject $name = $val       // Deliberately unhygienic
+
+fn test_injection:
+    define(my_var, 42)
+    println("my_var = ", my_var)  // Should work - my_var exists
+
+// ===========================================
+// 5. Pattern Types
+// ===========================================
+
+// $x:expr  - Any expression
+// $x:ident - Identifier only
+// $x:block - Block of statements
+// $x:ty    - Type annotation
+// $x:pat   - Pattern (for match)
+// $x:tt    - Token tree (anything)
+
+macro debug_type[$T:ty]($val:expr):
+    println("Type: ", type_name[$T]())
+    println("Value: ", $val)
+
+macro repeat($n:expr, $body:block):
+    for _i in 0..$n:
+        $body
+
+fn test_patterns:
+    debug_type[int](42)
+    
+    repeat(3):
+        println("Hello!")
+
+// ===========================================
+// 6. Variadic Macros
+// ===========================================
+
+macro println_all($first:expr, $($rest:expr),*):
+    print($first)
+    $(print(", ", $rest))*
+    print("\n")
+
+fn test_variadic:
+    println_all(1, 2, 3, 4, 5)  // Prints: 1, 2, 3, 4, 5
+
+// ===========================================
+// Main
+// ===========================================
+
+fn main:
+    println("=== Hygienic Macro Tests ===")
+    test_hygiene()
+    test_swap()
+    test_gensym()
+    test_injection()
+    test_patterns()
+    test_variadic()
+    println("=== All Tests Complete ===")

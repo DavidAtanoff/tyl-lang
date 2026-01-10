@@ -1,0 +1,30 @@
+// Test string parameter type inference
+// Functions without explicit type annotations should infer string types from call sites
+
+// Function without explicit type annotation for parameter
+fn greet name:
+    println("Hello, ", name)
+
+// Function that takes a string and returns it
+fn echo msg:
+    println("Echo: ", msg)
+    return msg
+
+// Function with multiple parameters
+fn format_message prefix, content, suffix:
+    println(prefix, content, suffix)
+
+fn main:
+    // Call with string literals - should infer string type
+    greet("World")
+    greet("Tyl User")
+    
+    // Echo should work with strings
+    result = echo("Testing inference")
+    println("Got back: ", result)
+    
+    // Multiple string parameters
+    format_message("[", "Message", "]")
+    format_message("<<", "Important", ">>")
+    
+    println("String inference test complete!")

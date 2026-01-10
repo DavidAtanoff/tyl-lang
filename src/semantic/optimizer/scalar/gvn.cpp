@@ -11,7 +11,12 @@ namespace tyl {
 void GVNPass::run(Program& ast) {
     transformations_ = 0;
     resetState();
+    
+    // First pass: collect all expressions and assign value numbers
     processBlock(ast.statements);
+    
+    // Second pass: perform CSE by replacing duplicate expressions
+    performCSE(ast.statements);
 }
 
 void GVNPass::resetState() {
@@ -24,6 +29,68 @@ void GVNPass::resetState() {
 
 void GVNPass::invalidateVar(const std::string& name) {
     varToVN_.erase(name);
+    invalidateExpressionsUsing(name);
+}
+
+void GVNPass::invalidateExpressionsUsing(const std::string& var) {
+    // Remove expressions from cache that depend on this variable
+    std::vector<VNKey> toRemove;
+    for (const auto& [key, vn] : exprToVN_) {
+        // Check if this expression uses the variable
+        // We need to check if the VN corresponds to this variable
+        auto it = varToVN_.find(var);
+        if (it != varToVN_.end()) {
+            if (key.left == it->second || key.right == it->second) {
+                toRemove.push_back(key);
+            }
+        }
+        // Also check literal field for identifier references
+        if (key.op == TokenType::IDENTIFIER && key.literal == var) {
+            toRemove.push_back(key);
+        }
+    }
+    for (const auto& key : toRemove) {
+        exprToVN_.erase(key);
+    }
+}
+
+void GVNPass::collectModifiedVars(Statement* stmt, std::set<std::string>& modified) {
+    if (!stmt) return;
+    
+    if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+        modified.insert(varDecl->name);
+    }
+    else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
+        if (auto* target = dynamic_cast<Identifier*>(assignStmt->target.get())) {
+            modified.insert(target->name);
+        }
+    }
+    else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+        if (auto* assign = dynamic_cast<AssignExpr*>(exprStmt->expr.get())) {
+            if (auto* target = dynamic_cast<Identifier*>(assign->target.get())) {
+                modified.insert(target->name);
+            }
+        }
+    }
+    else if (auto* block = dynamic_cast<Block*>(stmt)) {
+        for (auto& s : block->statements) {
+            collectModifiedVars(s.get(), modified);
+        }
+    }
+    else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+        collectModifiedVars(ifStmt->thenBranch.get(), modified);
+        for (auto& elif : ifStmt->elifBranches) {
+            collectModifiedVars(elif.second.get(), modified);
+        }
+        collectModifiedVars(ifStmt->elseBranch.get(), modified);
+    }
+    else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt)) {
+        collectModifiedVars(whileStmt->body.get(), modified);
+    }
+    else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt)) {
+        modified.insert(forStmt->var);
+        collectModifiedVars(forStmt->body.get(), modified);
+    }
 }
 
 ValueNumber GVNPass::getValueNumber(Expression* expr) {
@@ -104,6 +171,12 @@ VNKey GVNPass::makeKey(Expression* expr) {
         key.op = unary->op;
         key.left = getValueNumber(unary->operand.get());
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression - get value number of the value
+        key.op = TokenType::WALRUS;
+        key.left = getValueNumber(walrus->value.get());
+        key.literal = walrus->varName;
+    }
     
     return key;
 }
@@ -155,15 +228,28 @@ void GVNPass::processStatement(StmtPtr& stmt) {
         
         // Save state for branches
         auto savedVarToVN = varToVN_;
+        auto savedExprToVN = exprToVN_;
+        
+        // Track variables modified in each branch
+        std::set<std::string> thenModified;
+        std::set<std::string> elseModified;
         
         if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
             processBlock(thenBlock->statements);
+            // Find what was modified in then branch
+            for (const auto& [var, vn] : varToVN_) {
+                auto it = savedVarToVN.find(var);
+                if (it == savedVarToVN.end() || it->second != vn) {
+                    thenModified.insert(var);
+                }
+            }
         } else {
             processStatement(ifStmt->thenBranch);
         }
         
         for (auto& elif : ifStmt->elifBranches) {
             varToVN_ = savedVarToVN;
+            exprToVN_ = savedExprToVN;
             auto elifCondReplacement = processExpression(elif.first);
             if (elifCondReplacement) {
                 elif.first = std::move(elifCondReplacement);
@@ -177,18 +263,48 @@ void GVNPass::processStatement(StmtPtr& stmt) {
         
         if (ifStmt->elseBranch) {
             varToVN_ = savedVarToVN;
+            exprToVN_ = savedExprToVN;
             if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
                 processBlock(elseBlock->statements);
+                // Find what was modified in else branch
+                for (const auto& [var, vn] : varToVN_) {
+                    auto it = savedVarToVN.find(var);
+                    if (it == savedVarToVN.end() || it->second != vn) {
+                        elseModified.insert(var);
+                    }
+                }
             } else {
                 processStatement(ifStmt->elseBranch);
             }
         }
         
-        // After if, conservatively clear variable VNs
-        varToVN_.clear();
+        // After if, only invalidate variables that were modified in any branch
+        // Keep VNs for variables that weren't modified
+        varToVN_ = savedVarToVN;
+        exprToVN_ = savedExprToVN;
+        
+        // Invalidate variables modified in any branch
+        std::set<std::string> allModified;
+        allModified.insert(thenModified.begin(), thenModified.end());
+        allModified.insert(elseModified.begin(), elseModified.end());
+        
+        for (const auto& var : allModified) {
+            varToVN_.erase(var);
+            // Also invalidate expressions that use this variable
+            invalidateExpressionsUsing(var);
+        }
     }
     else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt.get())) {
-        varToVN_.clear();  // Loops invalidate all
+        // For loops, we need to be more careful
+        // First, find all variables modified in the loop
+        std::set<std::string> loopModified;
+        collectModifiedVars(whileStmt->body.get(), loopModified);
+        
+        // Invalidate only those variables before processing
+        for (const auto& var : loopModified) {
+            varToVN_.erase(var);
+            invalidateExpressionsUsing(var);
+        }
         
         auto condReplacement = processExpression(whileStmt->condition);
         if (condReplacement) {
@@ -201,10 +317,23 @@ void GVNPass::processStatement(StmtPtr& stmt) {
             processStatement(whileStmt->body);
         }
         
-        varToVN_.clear();
+        // After loop, invalidate loop-modified variables again
+        for (const auto& var : loopModified) {
+            varToVN_.erase(var);
+            invalidateExpressionsUsing(var);
+        }
     }
     else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt.get())) {
-        varToVN_.clear();
+        // Find all variables modified in the loop
+        std::set<std::string> loopModified;
+        loopModified.insert(forStmt->var);  // Loop variable is always modified
+        collectModifiedVars(forStmt->body.get(), loopModified);
+        
+        // Invalidate those variables
+        for (const auto& var : loopModified) {
+            varToVN_.erase(var);
+            invalidateExpressionsUsing(var);
+        }
         
         if (auto* body = dynamic_cast<Block*>(forStmt->body.get())) {
             processBlock(body->statements);
@@ -212,7 +341,11 @@ void GVNPass::processStatement(StmtPtr& stmt) {
             processStatement(forStmt->body);
         }
         
-        varToVN_.clear();
+        // After loop, invalidate again
+        for (const auto& var : loopModified) {
+            varToVN_.erase(var);
+            invalidateExpressionsUsing(var);
+        }
     }
     else if (auto* block = dynamic_cast<Block*>(stmt.get())) {
         processBlock(block->statements);
@@ -322,8 +455,193 @@ ExprPtr GVNPass::processExpression(ExprPtr& expr) {
         auto elseReplacement = processExpression(ternary->elseExpr);
         if (elseReplacement) ternary->elseExpr = std::move(elseReplacement);
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr.get())) {
+        auto valueReplacement = processExpression(walrus->value);
+        if (valueReplacement) walrus->value = std::move(valueReplacement);
+    }
     
     return nullptr;
+}
+
+// ============================================
+// CSE (Common Subexpression Elimination)
+// ============================================
+
+void GVNPass::performCSE(std::vector<StmtPtr>& statements) {
+    for (auto& stmt : statements) {
+        performCSEOnStatement(stmt);
+    }
+}
+
+void GVNPass::performCSEOnStatement(StmtPtr& stmt) {
+    if (!stmt) return;
+    
+    if (auto* fnDecl = dynamic_cast<FnDecl*>(stmt.get())) {
+        if (auto* body = dynamic_cast<Block*>(fnDecl->body.get())) {
+            performCSEOnBlock(body->statements);
+        }
+    }
+    else if (auto* block = dynamic_cast<Block*>(stmt.get())) {
+        performCSEOnBlock(block->statements);
+    }
+}
+
+void GVNPass::performCSEOnBlock(std::vector<StmtPtr>& statements) {
+    // Map: expression signature -> (temp var name, defining statement index)
+    std::map<std::string, std::pair<std::string, size_t>> exprToTemp;
+    std::set<std::string> modifiedVars;
+    
+    // First pass: identify duplicate expressions
+    std::vector<std::pair<size_t, std::string>> duplicates;  // (stmt index, expr signature)
+    
+    for (size_t i = 0; i < statements.size(); ++i) {
+        auto* stmt = statements[i].get();
+        
+        // Track variable modifications
+        if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+            modifiedVars.insert(varDecl->name);
+            
+            if (varDecl->initializer) {
+                std::string sig = getExprSignature(varDecl->initializer.get());
+                if (!sig.empty() && isCSECandidate(varDecl->initializer.get())) {
+                    auto it = exprToTemp.find(sig);
+                    if (it != exprToTemp.end()) {
+                        // Found duplicate - check if variables used haven't been modified
+                        if (!exprUsesModifiedVars(varDecl->initializer.get(), modifiedVars, it->second.second)) {
+                            duplicates.push_back({i, sig});
+                        }
+                    } else {
+                        // First occurrence - record it
+                        exprToTemp[sig] = {varDecl->name, i};
+                    }
+                }
+            }
+        }
+        else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
+            if (auto* target = dynamic_cast<Identifier*>(assignStmt->target.get())) {
+                modifiedVars.insert(target->name);
+            }
+        }
+        else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+            if (auto* assign = dynamic_cast<AssignExpr*>(exprStmt->expr.get())) {
+                if (auto* target = dynamic_cast<Identifier*>(assign->target.get())) {
+                    modifiedVars.insert(target->name);
+                }
+            }
+        }
+        else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+            // Process nested blocks
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                performCSEOnBlock(thenBlock->statements);
+            }
+            for (auto& elif : ifStmt->elifBranches) {
+                if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
+                    performCSEOnBlock(elifBlock->statements);
+                }
+            }
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                performCSEOnBlock(elseBlock->statements);
+            }
+            // Conservatively invalidate all expressions after control flow
+            exprToTemp.clear();
+        }
+        else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt)) {
+            modifiedVars.insert(forStmt->var);
+            if (auto* body = dynamic_cast<Block*>(forStmt->body.get())) {
+                performCSEOnBlock(body->statements);
+            }
+            exprToTemp.clear();
+        }
+        else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt)) {
+            if (auto* body = dynamic_cast<Block*>(whileStmt->body.get())) {
+                performCSEOnBlock(body->statements);
+            }
+            exprToTemp.clear();
+        }
+    }
+    
+    // Second pass: replace duplicates with references to first occurrence
+    for (auto& [stmtIdx, sig] : duplicates) {
+        auto it = exprToTemp.find(sig);
+        if (it != exprToTemp.end()) {
+            auto* varDecl = dynamic_cast<VarDecl*>(statements[stmtIdx].get());
+            if (varDecl && varDecl->initializer) {
+                // Replace the expression with a reference to the first variable
+                varDecl->initializer = std::make_unique<Identifier>(
+                    it->second.first, varDecl->initializer->location);
+                transformations_++;
+            }
+        }
+    }
+}
+
+std::string GVNPass::getExprSignature(Expression* expr) {
+    if (!expr) return "";
+    
+    if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        std::string left = getExprSignature(binary->left.get());
+        std::string right = getExprSignature(binary->right.get());
+        if (left.empty() || right.empty()) return "";
+        
+        // For commutative ops, normalize order
+        bool isCommutative = (binary->op == TokenType::PLUS || 
+                             binary->op == TokenType::STAR ||
+                             binary->op == TokenType::EQ ||
+                             binary->op == TokenType::NE);
+        if (isCommutative && left > right) {
+            std::swap(left, right);
+        }
+        
+        return "(" + left + " " + std::to_string(static_cast<int>(binary->op)) + " " + right + ")";
+    }
+    else if (auto* ident = dynamic_cast<Identifier*>(expr)) {
+        return "var:" + ident->name;
+    }
+    else if (auto* intLit = dynamic_cast<IntegerLiteral*>(expr)) {
+        return "int:" + std::to_string(intLit->value);
+    }
+    else if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+        std::string operand = getExprSignature(unary->operand.get());
+        if (operand.empty()) return "";
+        return "unary:" + std::to_string(static_cast<int>(unary->op)) + ":" + operand;
+    }
+    
+    return "";
+}
+
+bool GVNPass::isCSECandidate(Expression* expr) {
+    // Only consider binary expressions with non-trivial computation
+    if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        // Skip simple operations that are cheaper to recompute
+        if (binary->op == TokenType::PLUS || binary->op == TokenType::MINUS) {
+            // Only CSE if operands are complex
+            bool leftComplex = dynamic_cast<BinaryExpr*>(binary->left.get()) != nullptr;
+            bool rightComplex = dynamic_cast<BinaryExpr*>(binary->right.get()) != nullptr;
+            return leftComplex || rightComplex;
+        }
+        // Always CSE multiplication, division, modulo
+        return binary->op == TokenType::STAR || 
+               binary->op == TokenType::SLASH ||
+               binary->op == TokenType::PERCENT;
+    }
+    return false;
+}
+
+bool GVNPass::exprUsesModifiedVars(Expression* expr, const std::set<std::string>& modified, size_t sinceIdx) {
+    if (!expr) return false;
+    
+    if (auto* ident = dynamic_cast<Identifier*>(expr)) {
+        return modified.count(ident->name) > 0;
+    }
+    else if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        return exprUsesModifiedVars(binary->left.get(), modified, sinceIdx) ||
+               exprUsesModifiedVars(binary->right.get(), modified, sinceIdx);
+    }
+    else if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+        return exprUsesModifiedVars(unary->operand.get(), modified, sinceIdx);
+    }
+    
+    return false;
 }
 
 // ============================================
@@ -573,6 +891,10 @@ ExprPtr CopyPropagationPass::processExpression(ExprPtr& expr) {
         
         auto elseReplacement = processExpression(ternary->elseExpr);
         if (elseReplacement) ternary->elseExpr = std::move(elseReplacement);
+    }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr.get())) {
+        auto valueReplacement = processExpression(walrus->value);
+        if (valueReplacement) walrus->value = std::move(valueReplacement);
     }
     
     return nullptr;

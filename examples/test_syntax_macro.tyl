@@ -3,8 +3,8 @@
 // Define a simple DSL transformer (single line form)
 syntax html => render_html(content)
 
-// Define the render function
-fn render_html content:
+// Define the render function with explicit string type
+fn render_html content: str -> str:
     println("Rendering HTML: ", content)
     return content
 
@@ -18,7 +18,7 @@ println("Result: ", result)
 // Another DSL example
 syntax sql => db_query(content)
 
-fn db_query query:
+fn db_query query: str -> int:
     println("Executing SQL: ", query)
     return 42
 

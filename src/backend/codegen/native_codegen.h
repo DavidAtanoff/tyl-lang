@@ -37,6 +37,11 @@ public:
     void setOptLevel(CodeGenOptLevel level) { optLevel_ = level; }
     CodeGenOptLevel optLevel() const { return optLevel_; }
     
+    // Add functions that may return strings (from type checker analysis)
+    void addStringReturningFunctions(const std::set<std::string>& funcs) {
+        stringReturningFunctions_.insert(funcs.begin(), funcs.end());
+    }
+    
     // Dump generated assembly (for debugging)
     void dumpAssembly(std::ostream& out) const;
     
@@ -63,6 +68,9 @@ private:
     // Float support
     std::set<std::string> floatVars;           // Variables that are floats
     std::map<std::string, double> constFloatVars;  // Constant float values
+    
+    // Boolean support
+    std::set<std::string> boolVars_;           // Variables that are booleans
     uint32_t negZeroRVA_ = 0;                  // RVA for -0.0 constant (for negation)
     bool lastExprWasFloat_ = false;            // Track if last expression result is float
     bool lastExprWasComplex_ = false;          // Track if last expression result is complex
@@ -188,6 +196,7 @@ private:
         std::string traitName;
         std::string typeName;
         std::map<std::string, std::string> methodLabels;  // Method name -> label
+        std::map<std::string, std::string> methodReturnTypes;  // Method name -> return type
     };
     std::map<std::string, TraitInfo> traits_;             // Trait name -> info
     std::map<std::string, ImplInfo> impls_;               // "trait:type" -> impl info
@@ -217,6 +226,16 @@ private:
     
     // All user-defined function names (for UFCS lookup)
     std::set<std::string> allFunctionNames_;                       // All function names including inlined ones
+    
+    // Function declarations for default parameter lookup
+    std::map<std::string, FnDecl*> functionDecls_;                 // Function name -> declaration
+    
+    // User-defined functions that return strings
+    std::set<std::string> stringReturningFunctions_;               // Functions that return str type
+    
+    // Inferred parameter types from call sites (for functions without explicit type annotations)
+    // Maps function name -> parameter index -> inferred type ("str", "int", "float", etc.)
+    std::map<std::string, std::map<size_t, std::string>> inferredParamTypes_;
     
     // Refinement type information
     struct RefinementTypeInfo {
@@ -349,6 +368,7 @@ private:
     // Borrow parameter tracking for auto-dereference on return
     std::map<std::string, std::string> borrowParams_;          // Parameter name -> base type (e.g., "x" -> "int" for &int)
     std::string currentFnReturnType_;                          // Return type of current function
+    std::string currentImplTypeName_;                          // Type name of current impl block (for self parameter)
     
     // CTFE (Compile-Time Function Evaluation) support
     CTFEInterpreter ctfe_;                                     // CTFE interpreter instance
@@ -681,6 +701,11 @@ private:
     void emitSpecializedFunctions();                       // Emit code for specialized functions
     std::string resolveGenericCall(const std::string& fnName, const std::vector<TypePtr>& typeArgs);
     
+    // Type inference helper methods
+    void inferParamTypesFromCallSites(Program& program, const std::vector<FnDecl*>& functions);
+    void inferParamTypesFromExpr(Expression* expr, const std::set<std::string>& functionNames);
+    void inferParamTypesFromStmt(Statement* stmt, const std::set<std::string>& functionNames);
+    
     // GC helper methods
     void emitGCInit();                                     // Emit GC initialization at program start
     void emitGCShutdown();                                 // Emit GC shutdown at program end
@@ -858,6 +883,10 @@ private:
     void visit(HasFieldExpr& node) override;
     void visit(HasMethodExpr& node) override;
     void visit(FieldTypeExpr& node) override;
+    // New Syntax Enhancements
+    void visit(IfLetStmt& node) override;
+    void visit(MultiVarDecl& node) override;
+    void visit(WalrusExpr& node) override;
     void visit(Program& node) override;
 };
 

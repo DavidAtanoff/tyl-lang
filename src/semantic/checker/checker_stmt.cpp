@@ -185,7 +185,13 @@ void TypeChecker::visit(MatchStmt& node) {
 }
 
 void TypeChecker::visit(ReturnStmt& node) {
-    if (node.value) inferType(node.value.get());
+    if (node.value) {
+        TypePtr retType = inferType(node.value.get());
+        // Store the inferred return type for later use in return type inference
+        if (retType && retType->kind != TypeKind::UNKNOWN) {
+            inferredReturnTypes_.push_back(retType);
+        }
+    }
 }
 
 void TypeChecker::visit(BreakStmt& node) {
@@ -245,6 +251,8 @@ void TypeChecker::visit(DestructuringDecl& node) {
             for (const auto& name : node.names) {
                 Symbol sym(name, SymbolKind::VARIABLE, listType->element);
                 sym.isMutable = node.isMutable;
+                sym.ownershipState = OwnershipState::OWNED;
+                sym.isCopyType = listType->element->isPrimitive();
                 symbols_.define(sym);
             }
         } else {
@@ -252,6 +260,8 @@ void TypeChecker::visit(DestructuringDecl& node) {
             for (const auto& name : node.names) {
                 Symbol sym(name, SymbolKind::VARIABLE, reg.anyType());
                 sym.isMutable = node.isMutable;
+                sym.ownershipState = OwnershipState::OWNED;
+                sym.isCopyType = true;  // Assume copy for unknown types
                 symbols_.define(sym);
             }
         }
@@ -262,12 +272,16 @@ void TypeChecker::visit(DestructuringDecl& node) {
                 TypePtr fieldType = recType->getField(name);
                 Symbol sym(name, SymbolKind::VARIABLE, fieldType ? fieldType : reg.anyType());
                 sym.isMutable = node.isMutable;
+                sym.ownershipState = OwnershipState::OWNED;
+                sym.isCopyType = fieldType ? fieldType->isPrimitive() : true;
                 symbols_.define(sym);
             }
         } else {
             for (const auto& name : node.names) {
                 Symbol sym(name, SymbolKind::VARIABLE, reg.anyType());
                 sym.isMutable = node.isMutable;
+                sym.ownershipState = OwnershipState::OWNED;
+                sym.isCopyType = true;
                 symbols_.define(sym);
             }
         }
@@ -577,6 +591,98 @@ void TypeChecker::visit(FieldTypeExpr& node) {
         node.fieldName->accept(*this);
     }
     currentType_ = reg.stringType();
+}
+
+// New Syntax Enhancements
+
+void TypeChecker::visit(IfLetStmt& node) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Type check the value expression
+    node.value->accept(*this);
+    TypePtr valueType = currentType_;
+    
+    // Create a new scope for the if-let body
+    symbols_.pushScope(Scope::Kind::BLOCK);
+    
+    // Bind the variable to the unwrapped type (for nullable types, unwrap the optional)
+    // For now, just use the value type directly
+    Symbol sym(node.varName, SymbolKind::VARIABLE, valueType);
+    sym.isMutable = true;
+    sym.isInitialized = true;
+    sym.ownershipState = OwnershipState::OWNED;  // Mark as initialized/owned
+    symbols_.define(sym);
+    
+    // Type check the guard if present
+    if (node.guard) {
+        node.guard->accept(*this);
+        if (currentType_ != reg.boolType()) {
+            error("if-let guard must be a boolean expression", node.location);
+        }
+    }
+    
+    // Type check the then branch
+    node.thenBranch->accept(*this);
+    
+    symbols_.popScope();
+    
+    // Type check the else branch if present
+    if (node.elseBranch) {
+        node.elseBranch->accept(*this);
+    }
+}
+
+void TypeChecker::visit(MultiVarDecl& node) {
+    auto& reg = TypeRegistry::instance();
+    
+    // Type check the initializer
+    TypePtr initType = reg.intType();  // Default type
+    if (node.initializer) {
+        node.initializer->accept(*this);
+        initType = currentType_;
+    }
+    
+    // Define all variables with the same type
+    for (const auto& name : node.names) {
+        if (symbols_.lookupLocal(name)) {
+            error("Variable '" + name + "' already defined in this scope", node.location);
+            continue;
+        }
+        Symbol sym(name, node.isConst ? SymbolKind::VARIABLE : SymbolKind::VARIABLE, initType);
+        sym.isMutable = node.isMutable && !node.isConst;
+        sym.isInitialized = true;
+        sym.ownershipState = OwnershipState::OWNED;  // Mark as initialized
+        if (!symbols_.define(sym)) {
+            error("Failed to define variable '" + name + "'", node.location);
+        }
+    }
+}
+
+void TypeChecker::visit(WalrusExpr& node) {
+    auto& reg = TypeRegistry::instance();
+    (void)reg;  // Suppress unused variable warning
+    
+    // Type check the value expression
+    node.value->accept(*this);
+    TypePtr valueType = currentType_;
+    
+    // Define the variable if it doesn't exist
+    if (!symbols_.lookup(node.varName)) {
+        Symbol sym(node.varName, SymbolKind::VARIABLE, valueType);
+        sym.isMutable = true;
+        sym.isInitialized = true;
+        sym.ownershipState = OwnershipState::OWNED;  // Mark as initialized/owned
+        symbols_.define(sym);
+    } else {
+        // Variable already exists, just update it
+        Symbol* existingSym = symbols_.lookup(node.varName);
+        if (existingSym) {
+            existingSym->ownershipState = OwnershipState::OWNED;
+        }
+    }
+    
+    // The walrus expression returns the assigned value
+    currentType_ = valueType;
 }
 
 void TypeChecker::visit(Program& node) {

@@ -1,0 +1,9 @@
+// Simple hygiene test - check macro body parsing
+macro test_hygiene x:
+    temp = x
+    println("macro temp = ", temp)
+
+fn main:
+    println("hello")
+
+main()

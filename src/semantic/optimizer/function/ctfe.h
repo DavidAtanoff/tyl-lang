@@ -1,5 +1,6 @@
 // Tyl Compiler - Compile-Time Function Execution (CTFE)
 // Evaluates pure functions with constant arguments at compile time
+// Enhanced for O3 optimization with better loop handling
 #ifndef TYL_CTFE_H
 #define TYL_CTFE_H
 
@@ -25,6 +26,9 @@ struct CTFEFunctionInfo {
     bool isRecursive = false;      // Contains recursive calls
     bool canCTFE = false;          // Can be executed at compile time
     size_t maxRecursionDepth = 100; // Limit for recursive evaluation
+    
+    // Cached results for memoization (function name + args -> result)
+    mutable std::map<std::vector<int64_t>, int64_t> memoizedResults;
 };
 
 class CTFEPass : public OptimizationPass {
@@ -35,6 +39,7 @@ public:
     // Configuration
     void setMaxRecursionDepth(size_t depth) { maxRecursionDepth_ = depth; }
     void setMaxIterations(size_t iters) { maxIterations_ = iters; }
+    void setAggressiveMode(bool aggressive) { aggressiveMode_ = aggressive; }
     
 private:
     // Analysis phase
@@ -49,6 +54,11 @@ private:
     void processStatement(StmtPtr& stmt);
     void processBlock(std::vector<StmtPtr>& statements);
     ExprPtr processExpression(ExprPtr& expr);
+    
+    // Enhanced loop optimization
+    bool tryOptimizeLoopWithConstantCall(std::vector<StmtPtr>& stmts, size_t index, ForStmt* loop);
+    bool isLoopAccumulatingConstantCall(ForStmt* loop, std::string& accumVar, 
+                                         std::string& funcName, std::vector<int64_t>& args);
     
     // CTFE evaluation
     std::optional<CTFEValue> evaluateCall(CallExpr* call);
@@ -68,7 +78,8 @@ private:
     
     // Configuration
     size_t maxRecursionDepth_ = 100;
-    size_t maxIterations_ = 10000;
+    size_t maxIterations_ = 100000;  // Increased for O3
+    bool aggressiveMode_ = true;     // Enable aggressive optimizations
     
     // State during evaluation
     size_t currentIterations_ = 0;

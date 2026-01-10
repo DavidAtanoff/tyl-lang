@@ -1,0 +1,7 @@
+// Simple walrus test
+fn main:
+    x = 5
+    if (y := x) > 0:
+        println("y=", y)
+
+main()

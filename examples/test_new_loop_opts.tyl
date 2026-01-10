@@ -1,0 +1,67 @@
+// Test file for new loop optimization passes
+// Tests: Loop Unswitching, Loop Peeling, Jump Threading improvements
+
+// Test 1: Loop Unswitching - move invariant conditional out of loop
+fn test_unswitch(flag: int) -> int {
+    mut sum := 0
+    for i in range(10) {
+        if flag > 0 {
+            sum = sum + i * 2
+        } else {
+            sum = sum + i
+        }
+    }
+    return sum
+}
+
+// Test 2: Loop Peeling - peel first iteration
+fn test_peel() -> int {
+    mut sum := 0
+    for i in range(5) {
+        sum = sum + i
+    }
+    return sum
+}
+
+// Test 3: Jump Threading - correlated conditions
+fn test_jump_thread(x: int) -> int {
+    mut result := 0
+    if x > 10 {
+        result = 1
+    }
+    // This condition is correlated with the first
+    if x > 5 {
+        result = result + 10
+    }
+    return result
+}
+
+// Test 4: Combined test
+fn test_combined(n: int, flag: int) -> int {
+    mut total := 0
+    for i in range(n) {
+        if flag == 1 {
+            total = total + i * 3
+        } else {
+            total = total + i
+        }
+    }
+    return total
+}
+
+// Main
+fn main() -> int {
+    r1 := test_unswitch(1)
+    print("Unswitch: {r1}")  // Expected: 90 (0+2+4+6+8+10+12+14+16+18)
+
+    r2 := test_peel()
+    print("Peel: {r2}")  // Expected: 10 (0+1+2+3+4)
+
+    r3 := test_jump_thread(15)
+    print("JumpThread: {r3}")  // Expected: 11 (1 + 10)
+
+    r4 := test_combined(5, 1)
+    print("Combined: {r4}")  // Expected: 30 (0+3+6+9+12)
+    
+    return 0
+}

@@ -16,7 +16,8 @@ static Parser::Precedence getInfixPrecedence(TokenType type) {
         case TokenType::MINUS_ASSIGN:
         case TokenType::STAR_ASSIGN:
         case TokenType::SLASH_ASSIGN:
-        case TokenType::PERCENT_ASSIGN: return Parser::Precedence::ASSIGNMENT;
+        case TokenType::PERCENT_ASSIGN:
+        case TokenType::WALRUS: return Parser::Precedence::ASSIGNMENT;  // := walrus operator
         case TokenType::CHAN_SEND: return Parser::Precedence::ASSIGNMENT;  // ch <- value has low precedence
         case TokenType::QUESTION_QUESTION: return Parser::Precedence::NULL_COALESCE;
         case TokenType::OR:
@@ -306,6 +307,16 @@ ExprPtr Parser::parseInfix(ExprPtr left, Precedence prec) {
         op == TokenType::STAR_ASSIGN || op == TokenType::SLASH_ASSIGN || op == TokenType::PERCENT_ASSIGN) {
         auto right = parsePrecedence(Precedence::ASSIGNMENT);
         return std::make_unique<AssignExpr>(std::move(left), op, std::move(right), loc);
+    }
+    
+    // Walrus operator: (n := expr) - assignment that returns value
+    if (op == TokenType::WALRUS) {
+        if (auto* id = dynamic_cast<Identifier*>(left.get())) {
+            auto right = parsePrecedence(Precedence::ASSIGNMENT);
+            return std::make_unique<WalrusExpr>(id->name, std::move(right), loc);
+        }
+        auto diag = errors::unexpectedToken(":=", loc);
+        throw TylDiagnosticError(diag);
     }
     
     // Arrow lambda: identifier => expr

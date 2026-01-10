@@ -1,0 +1,24 @@
+// Test: Range patterns in match with function
+
+fn get_grade score: int -> str:
+    println("Checking score: ", score)
+    match score:
+        90..100:
+            println("Matched 90..100")
+            return "A"
+        80..89:
+            println("Matched 80..89")
+            return "B"
+        70..79:
+            println("Matched 70..79")
+            return "C"
+        60..69:
+            println("Matched 60..69")
+            return "D"
+        _:
+            println("Matched default")
+            return "F"
+
+fn main:
+    let g = get_grade(95)
+    println("Grade: ", g)

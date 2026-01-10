@@ -71,13 +71,24 @@ void NativeCodeGen::visit(ForStmt& node) {
     
     loopStack.push_back({node.label, continueLabel, endLabel});
     
-    varRegisters_.erase(node.var);
+    // Check if loop variable is allocated to a register
+    VarRegister loopVarReg = VarRegister::NONE;
+    auto regIt = varRegisters_.find(node.var);
+    if (regIt != varRegisters_.end()) {
+        loopVarReg = regIt->second;
+    }
     
     // Handle range expression: for i in 1..10 (INCLUSIVE - includes both start and end)
     if (auto* range = dynamic_cast<RangeExpr*>(node.iterable.get())) {
         range->start->accept(*this);
-        allocLocal(node.var);
-        asm_.mov_mem_rbp_rax(locals[node.var]);
+        
+        if (loopVarReg != VarRegister::NONE) {
+            // Store loop variable in register
+            emitStoreRaxToVar(node.var);
+        } else {
+            allocLocal(node.var);
+            asm_.mov_mem_rbp_rax(locals[node.var]);
+        }
         
         range->end->accept(*this);
         allocLocal("$end");
@@ -103,25 +114,41 @@ void NativeCodeGen::visit(ForStmt& node) {
         constVars.erase(node.var);
         
         asm_.label(loopLabel);
-        asm_.mov_rax_mem_rbp(locals[node.var]);
+        
+        // Load loop variable
+        if (loopVarReg != VarRegister::NONE) {
+            emitLoadVarToRax(node.var);
+        } else {
+            asm_.mov_rax_mem_rbp(locals[node.var]);
+        }
         asm_.cmp_rax_mem_rbp(locals["$end"]);
         asm_.jg_rel32(endLabel);  // Exit when i > end (inclusive)
         
         node.body->accept(*this);
         
         asm_.label(continueLabel);
-        asm_.mov_rax_mem_rbp(locals[node.var]);
+        
+        // Load, increment, store loop variable
+        if (loopVarReg != VarRegister::NONE) {
+            emitLoadVarToRax(node.var);
+        } else {
+            asm_.mov_rax_mem_rbp(locals[node.var]);
+        }
+        
         if (hasConstStep) {
-            // Constant step
             asm_.add_rax_imm32(static_cast<int32_t>(stepValue));
         } else if (hasVarStep) {
-            // Non-constant step: load step, add to rax
             asm_.mov_rcx_mem_rbp(locals["$step"]);
             asm_.add_rax_rcx();
         } else {
             asm_.inc_rax();
         }
-        asm_.mov_mem_rbp_rax(locals[node.var]);
+        
+        if (loopVarReg != VarRegister::NONE) {
+            emitStoreRaxToVar(node.var);
+        } else {
+            asm_.mov_mem_rbp_rax(locals[node.var]);
+        }
         asm_.jmp_rel32(loopLabel);
         
         asm_.label(endLabel);
@@ -140,8 +167,12 @@ void NativeCodeGen::visit(ForStmt& node) {
                 if (call->args.size() == 1) {
                     // range(end) - start at 0
                     asm_.xor_rax_rax();
-                    allocLocal(node.var);
-                    asm_.mov_mem_rbp_rax(locals[node.var]);
+                    if (loopVarReg != VarRegister::NONE) {
+                        emitStoreRaxToVar(node.var);
+                    } else {
+                        allocLocal(node.var);
+                        asm_.mov_mem_rbp_rax(locals[node.var]);
+                    }
                     
                     call->args[0]->accept(*this);
                     allocLocal("$end");
@@ -149,8 +180,12 @@ void NativeCodeGen::visit(ForStmt& node) {
                 } else {
                     // range(start, end) or range(start, end, step)
                     call->args[0]->accept(*this);
-                    allocLocal(node.var);
-                    asm_.mov_mem_rbp_rax(locals[node.var]);
+                    if (loopVarReg != VarRegister::NONE) {
+                        emitStoreRaxToVar(node.var);
+                    } else {
+                        allocLocal(node.var);
+                        asm_.mov_mem_rbp_rax(locals[node.var]);
+                    }
                     
                     call->args[1]->accept(*this);
                     allocLocal("$end");
@@ -174,25 +209,41 @@ void NativeCodeGen::visit(ForStmt& node) {
                 constVars.erase(node.var);
                 
                 asm_.label(loopLabel);
-                asm_.mov_rax_mem_rbp(locals[node.var]);
+                
+                // Load loop variable
+                if (loopVarReg != VarRegister::NONE) {
+                    emitLoadVarToRax(node.var);
+                } else {
+                    asm_.mov_rax_mem_rbp(locals[node.var]);
+                }
                 asm_.cmp_rax_mem_rbp(locals["$end"]);
                 asm_.jge_rel32(endLabel);
                 
                 node.body->accept(*this);
                 
                 asm_.label(continueLabel);
-                asm_.mov_rax_mem_rbp(locals[node.var]);
+                
+                // Load, increment, store loop variable
+                if (loopVarReg != VarRegister::NONE) {
+                    emitLoadVarToRax(node.var);
+                } else {
+                    asm_.mov_rax_mem_rbp(locals[node.var]);
+                }
+                
                 if (hasConstStep) {
-                    // Constant step
                     asm_.add_rax_imm32(static_cast<int32_t>(stepValue));
                 } else if (hasVarStep) {
-                    // Non-constant step: load step, add to rax
                     asm_.mov_rcx_mem_rbp(locals["$step"]);
                     asm_.add_rax_rcx();
                 } else {
                     asm_.inc_rax();
                 }
-                asm_.mov_mem_rbp_rax(locals[node.var]);
+                
+                if (loopVarReg != VarRegister::NONE) {
+                    emitStoreRaxToVar(node.var);
+                } else {
+                    asm_.mov_mem_rbp_rax(locals[node.var]);
+                }
                 asm_.jmp_rel32(loopLabel);
                 
                 asm_.label(endLabel);
@@ -221,7 +272,9 @@ void NativeCodeGen::visit(ForStmt& node) {
             asm_.mov_rax_imm64((int64_t)listSize);
             asm_.mov_mem_rbp_rax(locals["$for_list_size"]);
             
-            allocLocal(node.var);
+            if (loopVarReg == VarRegister::NONE) {
+                allocLocal(node.var);
+            }
             constVars.erase(node.var);
             
             asm_.label(loopLabel);
@@ -236,7 +289,12 @@ void NativeCodeGen::visit(ForStmt& node) {
             asm_.code.push_back(0xE0); asm_.code.push_back(0x03);
             asm_.add_rax_rcx();
             asm_.mov_rax_mem_rax();
-            asm_.mov_mem_rbp_rax(locals[node.var]);
+            
+            if (loopVarReg != VarRegister::NONE) {
+                emitStoreRaxToVar(node.var);
+            } else {
+                asm_.mov_mem_rbp_rax(locals[node.var]);
+            }
             
             node.body->accept(*this);
             
@@ -266,7 +324,9 @@ void NativeCodeGen::visit(ForStmt& node) {
     asm_.mov_rax_mem_rax();
     asm_.mov_mem_rbp_rax(locals["$for_list_size"]);
     
-    allocLocal(node.var);
+    if (loopVarReg == VarRegister::NONE) {
+        allocLocal(node.var);
+    }
     constVars.erase(node.var);
     
     asm_.label(loopLabel);
@@ -282,7 +342,12 @@ void NativeCodeGen::visit(ForStmt& node) {
     asm_.code.push_back(0xE0); asm_.code.push_back(0x03);
     asm_.add_rax_rcx();
     asm_.mov_rax_mem_rax();
-    asm_.mov_mem_rbp_rax(locals[node.var]);
+    
+    if (loopVarReg != VarRegister::NONE) {
+        emitStoreRaxToVar(node.var);
+    } else {
+        asm_.mov_mem_rbp_rax(locals[node.var]);
+    }
     
     node.body->accept(*this);
     
@@ -316,6 +381,39 @@ void NativeCodeGen::visit(MatchStmt& node) {
             asm_.mov_rax_mem_rbp(locals["$match_val"]);
             asm_.cmp_rax_imm32(boolLit->value ? 1 : 0);
             asm_.jnz_rel32(nextCase);
+        } else if (auto* rangeExpr = dynamic_cast<RangeExpr*>(matchCase.pattern.get())) {
+            // Range pattern: match value in start..end (inclusive)
+            // Check: value >= start AND value <= end
+            std::string inRange = newLabel("range_check");
+            
+            // First check: value >= start
+            asm_.mov_rax_mem_rbp(locals["$match_val"]);
+            if (auto* startLit = dynamic_cast<IntegerLiteral*>(rangeExpr->start.get())) {
+                asm_.cmp_rax_imm32((int32_t)startLit->value);
+            } else {
+                // Evaluate start expression
+                asm_.push_rax();
+                rangeExpr->start->accept(*this);
+                asm_.mov_rcx_rax();
+                asm_.pop_rax();
+                asm_.cmp_rax_rcx();
+            }
+            asm_.jl_rel32(nextCase);  // value < start, skip
+            
+            // Second check: value <= end
+            asm_.mov_rax_mem_rbp(locals["$match_val"]);
+            if (auto* endLit = dynamic_cast<IntegerLiteral*>(rangeExpr->end.get())) {
+                asm_.cmp_rax_imm32((int32_t)endLit->value);
+            } else {
+                // Evaluate end expression
+                asm_.push_rax();
+                rangeExpr->end->accept(*this);
+                asm_.mov_rcx_rax();
+                asm_.pop_rax();
+                asm_.cmp_rax_rcx();
+            }
+            asm_.jg_rel32(nextCase);  // value > end, skip
+            
         } else if (auto* ident = dynamic_cast<Identifier*>(matchCase.pattern.get())) {
             if (ident->name == "_") {
                 // Wildcard - always matches

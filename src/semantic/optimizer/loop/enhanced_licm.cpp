@@ -107,6 +107,10 @@ std::set<MemoryLocation> AliasAnalysis::getReads(Expression* expr) {
         reads.insert(then_.begin(), then_.end());
         reads.insert(else_.begin(), else_.end());
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        auto valueReads = getReads(walrus->value.get());
+        reads.insert(valueReads.begin(), valueReads.end());
+    }
     
     return reads;
 }
@@ -387,6 +391,11 @@ bool EnhancedLICMPass::isLoopInvariant(Expression* expr, const std::string& indu
         return isLoopInvariant(member->object.get(), inductionVar);
     }
     
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus creates a variable, so it's not loop invariant
+        return false;
+    }
+    
     return false;
 }
 
@@ -456,6 +465,10 @@ bool EnhancedLICMPass::hasSideEffects(Expression* expr) {
         return hasSideEffects(ternary->condition.get()) ||
                hasSideEffects(ternary->thenExpr.get()) ||
                hasSideEffects(ternary->elseExpr.get());
+    }
+    
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return true;  // Walrus creates a variable - has side effects
     }
     
     return false;
@@ -633,6 +646,11 @@ bool InvariantExpressionHoistingPass::isInvariant(Expression* expr, const std::s
     
     if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
         return isInvariant(unary->operand.get(), inductionVar);
+    }
+    
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus creates a variable, so it's not invariant
+        return false;
     }
     
     return false;

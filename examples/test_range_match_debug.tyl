@@ -1,0 +1,11 @@
+// Test: Range patterns in match statements - debug version
+
+fn main:
+    let score = 95
+    println("Testing score: ", score)
+    
+    match score:
+        90..100 -> println("A")
+        80..89 -> println("B")
+        70..79 -> println("C")
+        _ -> println("F")

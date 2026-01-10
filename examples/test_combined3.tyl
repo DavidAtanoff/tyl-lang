@@ -1,0 +1,10 @@
+// Test combined features - test1 only
+fn test1:
+    println("test1")
+    a = b = c = 42
+    println("a=", a)
+
+fn main:
+    test1()
+
+main()

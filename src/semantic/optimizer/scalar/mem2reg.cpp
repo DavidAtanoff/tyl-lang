@@ -182,6 +182,9 @@ void Mem2RegPass::checkAddressTaken(Expression* expr) {
         checkAddressTaken(ternary->thenExpr.get());
         checkAddressTaken(ternary->elseExpr.get());
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        checkAddressTaken(walrus->value.get());
+    }
 }
 
 bool Mem2RegPass::isSimpleType(const std::string& typeName) {

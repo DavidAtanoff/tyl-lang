@@ -7,9 +7,22 @@ namespace tyl {
 
 // Check if itoa should be inlined based on optimization level
 bool NativeCodeGen::shouldInlineItoa() const {
-    // Always inline itoa for now - the shared routine requires
-    // emitRuntimeRoutines() to be called, which is not currently integrated
-    return true;
+    // At O3/Ofast, inline everything for maximum performance
+    // At O2 and below, use shared routine to reduce code size
+    // The itoa routine is ~100 bytes, so outlining saves significant space
+    // when printing multiple integers
+    switch (optLevel_) {
+        case CodeGenOptLevel::O3:
+        case CodeGenOptLevel::Ofast:
+            return true;   // Inline for speed
+        case CodeGenOptLevel::O0:
+        case CodeGenOptLevel::O1:
+        case CodeGenOptLevel::O2:
+        case CodeGenOptLevel::Os:
+        case CodeGenOptLevel::Oz:
+        default:
+            return false;  // Outline for size
+    }
 }
 
 // Check if ftoa should be inlined based on optimization level
@@ -79,7 +92,7 @@ void NativeCodeGen::emitPrintIntCall() {
 // These are called by multiple print statements to reduce code size
 void NativeCodeGen::emitRuntimeRoutines() {
     if (runtimeRoutinesEmitted_) return;
-    // O3/Ofast inline everything, skip shared routines
+    // Only skip at O3/Ofast where we inline everything
     if (optLevel_ == CodeGenOptLevel::O3 || optLevel_ == CodeGenOptLevel::Ofast) return;
     
     runtimeRoutinesEmitted_ = true;
@@ -342,7 +355,7 @@ void NativeCodeGen::emitPrintNewline() {
 
 void NativeCodeGen::emitPrintRuntimeValue() {
     asm_.push_rax();
-    emitItoa();
+    emitItoaCall();
     
     // rax = string pointer, rcx = length
     asm_.mov_rdx_rax();

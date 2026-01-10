@@ -1,0 +1,10 @@
+// Test Lua-style do/end blocks
+
+fn main:
+    mut i = 0
+    while i < 3 do
+        println("i = ", i)
+        i += 1
+    end
+
+main()

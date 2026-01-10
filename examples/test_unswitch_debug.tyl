@@ -1,0 +1,18 @@
+// Debug test for loop unswitching
+fn test_with_if(flag: int) -> int {
+    mut sum := 0
+    for i in range(5) {
+        if flag > 0 {
+            sum = sum + i
+        } else {
+            sum = sum + 1
+        }
+    }
+    return sum
+}
+
+fn main() -> int {
+    r := test_with_if(1)
+    print("WithIf: {r}")
+    return 0
+}

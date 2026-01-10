@@ -1,0 +1,10 @@
+// Simple test for multi-constant
+
+fn main:
+    // Test multi-constant
+    X :: Y :: Z :: 100
+    println("X=", X)
+    println("Y=", Y)
+    println("Z=", Z)
+
+main()

@@ -424,6 +424,7 @@ void Lexer::scanToken() {
             break;
         case ':':
             if (match(':')) addToken(TokenType::DOUBLE_COLON);
+            else if (match('=')) addToken(TokenType::WALRUS);  // := walrus operator
             else addToken(TokenType::COLON);
             break;
         case '+':

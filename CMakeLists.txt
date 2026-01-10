@@ -90,6 +90,8 @@ set(SEMANTIC_SOURCES
     src/semantic/optimizer/loop/loop_deletion.cpp
     src/semantic/optimizer/loop/loop_idiom.cpp
     src/semantic/optimizer/loop/loop_simplify.cpp
+    src/semantic/optimizer/loop/loop_unswitch.cpp
+    src/semantic/optimizer/loop/loop_peeling.cpp
     # IPO (Inter-Procedural Optimization)
     src/semantic/optimizer/ipo/ipsccp.cpp
     src/semantic/optimizer/ipo/dead_arg_elim.cpp

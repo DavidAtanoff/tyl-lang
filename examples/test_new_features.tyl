@@ -1,0 +1,100 @@
+// Test file for newly implemented syntax features
+
+// ===========================================
+// 1. Associated Types in Traits
+// ===========================================
+
+trait Iterator:
+    type Item                    // Associated type declaration
+    fn next self -> Item?
+    fn size_hint self -> int => 0   // Default impl
+
+trait Container:
+    type Element
+    type Index = int             // Associated type with default
+    fn get self, idx: Index -> Element?
+
+// Implementation with associated types
+record Range:
+    start_val: int
+    end_val: int
+    current_val: int
+
+impl Iterator for Range:
+    type Item = int
+    fn next self -> int?:
+        if self.current_val >= self.end_val:
+            return nil
+        result = self.current_val
+        self.current_val += 1
+        return result
+
+// ===========================================
+// 2. Inline Trait Bounds
+// ===========================================
+
+// Shorthand inline bounds
+fn process[T: Clone] x: T -> T:
+    return x
+
+// Multiple bounds with +
+fn combine[A: Clone + Debug, B: Clone] a: A, b: B -> int:
+    return 0
+
+// ===========================================
+// 3. Multi-Assign Tests
+// ===========================================
+
+fn test_multi_assign:
+    // Basic multi-assign (already working)
+    a = b = c = 0
+    println("a=", a, " b=", b, " c=", c)
+    
+    // Single mutable variable
+    mut x = 10
+    mut y = 10
+    mut z = 10
+    println("x=", x, " y=", y, " z=", z)
+    
+    // Modify to verify mutability
+    x = 20
+    y = 30
+    z = 40
+    println("After modify: x=", x, " y=", y, " z=", z)
+    
+    // Multi-constant
+    PI :: TAU_HALF :: 3.14159
+    println("PI=", PI, " TAU_HALF=", TAU_HALF)
+
+// ===========================================
+// 4. Test Associated Types Usage
+// ===========================================
+
+fn test_associated_types:
+    r = Range { start_val: 0, end_val: 5, current_val: 0 }
+    println("Testing Iterator with associated type Item = int")
+    
+    // The type system should know r.next() returns int?
+    while true:
+        val = r.next()
+        if val == nil:
+            break
+        println("Value: ", val)
+
+// ===========================================
+// Main
+// ===========================================
+
+fn main:
+    println("=== Testing New Syntax Features ===")
+    println("")
+    
+    println("--- Multi-Assign Test ---")
+    test_multi_assign()
+    println("")
+    
+    println("--- Associated Types Test ---")
+    test_associated_types()
+    println("")
+    
+    println("=== All Tests Complete ===")

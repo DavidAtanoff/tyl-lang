@@ -1,0 +1,9 @@
+// Test Lua-style then/end blocks
+
+fn main:
+    x = 10
+    if x > 5 then
+        println("x is greater than 5")
+    end
+
+main()

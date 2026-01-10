@@ -1,0 +1,15 @@
+// Test swap macro - this is known to be limited
+
+macro swap a b:
+    temp = a
+    a = b
+    b = temp
+
+fn main:
+    x = 10
+    y = 20
+    println("Before: x=", x, " y=", y)
+    swap(x, y)
+    println("After: x=", x, " y=", y)
+
+main()

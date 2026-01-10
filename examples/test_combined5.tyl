@@ -1,0 +1,11 @@
+// Test combined features - test3 only
+fn test3:
+    println("test3")
+    items = [1, 2, 3]
+    if (n := len(items)) > 0:
+        println("len=", n)
+
+fn main:
+    test3()
+
+main()

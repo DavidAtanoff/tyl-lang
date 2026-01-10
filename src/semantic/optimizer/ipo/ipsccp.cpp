@@ -2,7 +2,6 @@
 // Propagates constants across function boundaries
 #include "ipsccp.h"
 #include <algorithm>
-#include <iostream>
 
 namespace tyl {
 
@@ -234,6 +233,16 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
             updateValue(funcName, varDecl->name, value);
         }
     }
+    else if (auto* multiVarDecl = dynamic_cast<MultiVarDecl*>(stmt)) {
+        // Multi-variable declaration: a = b = c = 0 or X :: Y :: Z :: 100
+        if (multiVarDecl->initializer) {
+            LatticeValue value = evaluateExpression(multiVarDecl->initializer.get(), funcName);
+            // All variables get the same value
+            for (const auto& name : multiVarDecl->names) {
+                updateValue(funcName, name, value);
+            }
+        }
+    }
     else if (auto* assign = dynamic_cast<AssignStmt*>(stmt)) {
         if (auto* ident = dynamic_cast<Identifier*>(assign->target.get())) {
             LatticeValue value = evaluateExpression(assign->value.get(), funcName);
@@ -267,6 +276,8 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
                     for (auto& s : thenBlock->statements) {
                         analyzeStatement(s.get(), funcName);
                     }
+                } else if (ifStmt->thenBranch) {
+                    analyzeStatement(ifStmt->thenBranch.get(), funcName);
                 }
             } else {
                 // Analyze elif branches
@@ -277,6 +288,8 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
                             for (auto& s : elifBlock->statements) {
                                 analyzeStatement(s.get(), funcName);
                             }
+                        } else if (elif.second) {
+                            analyzeStatement(elif.second.get(), funcName);
                         }
                         return;
                     }
@@ -286,6 +299,8 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
                     for (auto& s : elseBlock->statements) {
                         analyzeStatement(s.get(), funcName);
                     }
+                } else if (ifStmt->elseBranch) {
+                    analyzeStatement(ifStmt->elseBranch.get(), funcName);
                 }
             }
         } else {
@@ -294,18 +309,24 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
                 for (auto& s : thenBlock->statements) {
                     analyzeStatement(s.get(), funcName);
                 }
+            } else if (ifStmt->thenBranch) {
+                analyzeStatement(ifStmt->thenBranch.get(), funcName);
             }
             for (auto& elif : ifStmt->elifBranches) {
                 if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
                     for (auto& s : elifBlock->statements) {
                         analyzeStatement(s.get(), funcName);
                     }
+                } else if (elif.second) {
+                    analyzeStatement(elif.second.get(), funcName);
                 }
             }
             if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
                 for (auto& s : elseBlock->statements) {
                     analyzeStatement(s.get(), funcName);
                 }
+            } else if (ifStmt->elseBranch) {
+                analyzeStatement(ifStmt->elseBranch.get(), funcName);
             }
         }
     }
@@ -332,6 +353,30 @@ void IPSCCPPass::analyzeStatement(Statement* stmt, const std::string& funcName) 
             // Second pass: analyze the loop body
             for (auto& s : body->statements) {
                 analyzeStatement(s.get(), funcName);
+            }
+        }
+    }
+    else if (auto* matchStmt = dynamic_cast<MatchStmt*>(stmt)) {
+        // Analyze all match cases - we can't know which one will be taken at compile time
+        // unless the match value is constant
+        for (auto& case_ : matchStmt->cases) {
+            if (case_.body) {
+                if (auto* caseBlock = dynamic_cast<Block*>(case_.body.get())) {
+                    for (auto& s : caseBlock->statements) {
+                        analyzeStatement(s.get(), funcName);
+                    }
+                } else {
+                    analyzeStatement(case_.body.get(), funcName);
+                }
+            }
+        }
+        if (matchStmt->defaultCase) {
+            if (auto* defaultBlock = dynamic_cast<Block*>(matchStmt->defaultCase.get())) {
+                for (auto& s : defaultBlock->statements) {
+                    analyzeStatement(s.get(), funcName);
+                }
+            } else {
+                analyzeStatement(matchStmt->defaultCase.get(), funcName);
             }
         }
     }
@@ -395,6 +440,12 @@ LatticeValue IPSCCPPass::evaluateExpression(Expression* expr, const std::string&
             }
         }
         return LatticeValue::top();
+    }
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression: (n := value) - evaluate the value and update the variable
+        LatticeValue value = evaluateExpression(walrus->value.get(), funcName);
+        updateValue(funcName, walrus->varName, value);
+        return value;  // Walrus returns the assigned value
     }
     
     return LatticeValue::top();
@@ -546,6 +597,11 @@ void IPSCCPPass::transformStatement(StmtPtr& stmt, const std::string& funcName) 
             }
         }
     }
+    else if (auto* multiVarDecl = dynamic_cast<MultiVarDecl*>(stmt.get())) {
+        // Multi-variable declaration: a = b = c = 0 or X :: Y :: Z :: 100
+        // Don't transform the initializer - it's shared by all variables
+        // The codegen handles this correctly
+    }
     else if (auto* assign = dynamic_cast<AssignStmt*>(stmt.get())) {
         if (assign->value) {
             auto transformed = transformExpression(assign->value.get(), funcName);
@@ -575,16 +631,30 @@ void IPSCCPPass::transformStatement(StmtPtr& stmt, const std::string& funcName) 
             // For now, just transform the branches
         }
         
-        if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
-            transformStatements(thenBlock->statements, funcName);
+        // Process then branch - handle both Block and non-Block cases
+        if (ifStmt->thenBranch) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                transformStatements(thenBlock->statements, funcName);
+            } else {
+                transformStatement(ifStmt->thenBranch, funcName);
+            }
         }
+        
         for (auto& elif : ifStmt->elifBranches) {
             if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
                 transformStatements(elifBlock->statements, funcName);
+            } else if (elif.second) {
+                transformStatement(elif.second, funcName);
             }
         }
-        if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
-            transformStatements(elseBlock->statements, funcName);
+        
+        // Process else branch - handle both Block and non-Block cases
+        if (ifStmt->elseBranch) {
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                transformStatements(elseBlock->statements, funcName);
+            } else {
+                transformStatement(ifStmt->elseBranch, funcName);
+            }
         }
     }
     else if (auto* whileLoop = dynamic_cast<WhileStmt*>(stmt.get())) {
@@ -595,6 +665,25 @@ void IPSCCPPass::transformStatement(StmtPtr& stmt, const std::string& funcName) 
     else if (auto* forLoop = dynamic_cast<ForStmt*>(stmt.get())) {
         if (auto* body = dynamic_cast<Block*>(forLoop->body.get())) {
             transformStatements(body->statements, funcName);
+        }
+    }
+    else if (auto* matchStmt = dynamic_cast<MatchStmt*>(stmt.get())) {
+        // Transform all match cases
+        for (auto& case_ : matchStmt->cases) {
+            if (case_.body) {
+                if (auto* caseBlock = dynamic_cast<Block*>(case_.body.get())) {
+                    transformStatements(caseBlock->statements, funcName);
+                } else {
+                    transformStatement(case_.body, funcName);
+                }
+            }
+        }
+        if (matchStmt->defaultCase) {
+            if (auto* defaultBlock = dynamic_cast<Block*>(matchStmt->defaultCase.get())) {
+                transformStatements(defaultBlock->statements, funcName);
+            } else {
+                transformStatement(matchStmt->defaultCase, funcName);
+            }
         }
     }
     else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt.get())) {

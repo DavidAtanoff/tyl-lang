@@ -290,10 +290,30 @@ void NativeCodeGen::visit(Program& node) {
                     mangledName = impl->typeName + "_" + method->name;
                 }
                 info.methodLabels[method->name] = mangledName;
+                info.methodReturnTypes[method->name] = method->returnType;
                 // Register the label for later
                 asm_.labels[mangledName] = 0;
+                
+                // Track string-returning methods
+                if (method->returnType == "str" || method->returnType == "string" ||
+                    method->returnType == "*str" || method->returnType == "*u8") {
+                    stringReturningFunctions_.insert(mangledName);
+                }
             }
             impls_[implKey] = info;
+            
+            // Also register with just the type name for method lookup
+            if (!impl->traitName.empty()) {
+                std::string typeOnlyKey = ":" + impl->typeName;
+                auto& typeInfo = impls_[typeOnlyKey];
+                typeInfo.typeName = impl->typeName;
+                for (const auto& [methodName, label] : info.methodLabels) {
+                    typeInfo.methodLabels[methodName] = label;
+                }
+                for (const auto& [methodName, retType] : info.methodReturnTypes) {
+                    typeInfo.methodReturnTypes[methodName] = retType;
+                }
+            }
         } else if (dynamic_cast<RecordDecl*>(stmt.get())) {
             // Process record declarations to register type information
             stmt->accept(*this);
@@ -341,16 +361,27 @@ void NativeCodeGen::visit(Program& node) {
         }
     }
     
+    // Infer parameter types from call sites (for functions without explicit type annotations)
+    inferParamTypesFromCallSites(node, functions);
+    
     // Register all function labels and track all function names for UFCS
     for (auto* fn : functions) {
         asm_.labels[fn->name] = 0;
         allFunctionNames_.insert(fn->name);
+        functionDecls_[fn->name] = fn;  // Store declaration for default parameter lookup
+        
+        // Track functions that return strings
+        if (fn->returnType == "str" || fn->returnType == "string" || 
+            fn->returnType == "*str" || fn->returnType == "*u8") {
+            stringReturningFunctions_.insert(fn->name);
+        }
     }
     
     // Register specialized function labels
     for (auto& fn : specializedFunctions_) {
         asm_.labels[fn->name] = 0;
         allFunctionNames_.insert(fn->name);
+        functionDecls_[fn->name] = fn.get();  // Store declaration for default parameter lookup
     }
     
     // Also register labels from monomorphizer directly
@@ -466,7 +497,12 @@ void NativeCodeGen::visit(Program& node) {
                 }
                 std::string originalName = method->name;
                 method->name = mangledName;
+                
+                // Set current impl type so self parameter gets correct record type
+                currentImplTypeName_ = impl->typeName;
                 method->accept(*this);
+                currentImplTypeName_.clear();
+                
                 method->name = originalName;
             }
         }
@@ -480,6 +516,194 @@ void NativeCodeGen::visit(Program& node) {
     // Emit GC collection routine if GC is enabled
     if (useGC_) {
         emitGCCollectRoutine();
+    }
+}
+
+// Type inference from call sites - infer parameter types from how functions are called
+void NativeCodeGen::inferParamTypesFromCallSites(Program& program, const std::vector<FnDecl*>& functions) {
+    // Build a set of function names for quick lookup
+    std::set<std::string> functionNames;
+    for (auto* fn : functions) {
+        functionNames.insert(fn->name);
+    }
+    
+    // Scan all statements for call expressions
+    for (auto& stmt : program.statements) {
+        inferParamTypesFromStmt(stmt.get(), functionNames);
+    }
+    
+    // Infer return types from function bodies
+    // If a function returns a parameter that we've inferred is a string, the function returns a string
+    for (auto* fn : functions) {
+        if (fn->returnType.empty() || fn->returnType == "auto") {
+            auto fnIt = inferredParamTypes_.find(fn->name);
+            if (fnIt != inferredParamTypes_.end()) {
+                // Check if the function returns one of its string parameters
+                if (auto* block = dynamic_cast<Block*>(fn->body.get())) {
+                    for (auto& stmt : block->statements) {
+                        if (auto* retStmt = dynamic_cast<ReturnStmt*>(stmt.get())) {
+                            if (auto* retId = dynamic_cast<Identifier*>(retStmt->value.get())) {
+                                // Check if this identifier is a string parameter
+                                for (size_t i = 0; i < fn->params.size(); i++) {
+                                    if (fn->params[i].first == retId->name) {
+                                        auto paramIt = fnIt->second.find(i);
+                                        if (paramIt != fnIt->second.end() && paramIt->second == "str") {
+                                            // This function returns a string
+                                            stringReturningFunctions_.insert(fn->name);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Now apply inferred types to constStrVars for string parameters
+    for (auto* fn : functions) {
+        auto fnIt = inferredParamTypes_.find(fn->name);
+        if (fnIt != inferredParamTypes_.end()) {
+            for (size_t i = 0; i < fn->params.size(); i++) {
+                // Only infer if parameter has no explicit type
+                if (fn->params[i].second.empty() || fn->params[i].second == "auto") {
+                    auto paramIt = fnIt->second.find(i);
+                    if (paramIt != fnIt->second.end() && paramIt->second == "str") {
+                        // Mark this parameter as a string in constStrVars
+                        // This will be used during function compilation
+                        // We store it with a special prefix to indicate it's an inferred param type
+                        std::string key = fn->name + ":" + fn->params[i].first;
+                        inferredParamTypes_[fn->name][i] = "str";
+                    }
+                }
+            }
+        }
+    }
+}
+
+void NativeCodeGen::inferParamTypesFromStmt(Statement* stmt, const std::set<std::string>& functionNames) {
+    if (!stmt) return;
+    
+    if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+        inferParamTypesFromExpr(exprStmt->expr.get(), functionNames);
+    }
+    else if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+        inferParamTypesFromExpr(varDecl->initializer.get(), functionNames);
+    }
+    else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
+        inferParamTypesFromExpr(assignStmt->value.get(), functionNames);
+    }
+    else if (auto* block = dynamic_cast<Block*>(stmt)) {
+        for (auto& s : block->statements) {
+            inferParamTypesFromStmt(s.get(), functionNames);
+        }
+    }
+    else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+        inferParamTypesFromExpr(ifStmt->condition.get(), functionNames);
+        inferParamTypesFromStmt(ifStmt->thenBranch.get(), functionNames);
+        for (auto& [cond, branch] : ifStmt->elifBranches) {
+            inferParamTypesFromExpr(cond.get(), functionNames);
+            inferParamTypesFromStmt(branch.get(), functionNames);
+        }
+        inferParamTypesFromStmt(ifStmt->elseBranch.get(), functionNames);
+    }
+    else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt)) {
+        inferParamTypesFromExpr(whileStmt->condition.get(), functionNames);
+        inferParamTypesFromStmt(whileStmt->body.get(), functionNames);
+    }
+    else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt)) {
+        inferParamTypesFromExpr(forStmt->iterable.get(), functionNames);
+        inferParamTypesFromStmt(forStmt->body.get(), functionNames);
+    }
+    else if (auto* returnStmt = dynamic_cast<ReturnStmt*>(stmt)) {
+        inferParamTypesFromExpr(returnStmt->value.get(), functionNames);
+    }
+    else if (auto* fnDecl = dynamic_cast<FnDecl*>(stmt)) {
+        inferParamTypesFromStmt(fnDecl->body.get(), functionNames);
+    }
+    else if (auto* matchStmt = dynamic_cast<MatchStmt*>(stmt)) {
+        inferParamTypesFromExpr(matchStmt->value.get(), functionNames);
+        for (auto& case_ : matchStmt->cases) {
+            inferParamTypesFromExpr(case_.pattern.get(), functionNames);
+            if (case_.guard) inferParamTypesFromExpr(case_.guard.get(), functionNames);
+            inferParamTypesFromStmt(case_.body.get(), functionNames);
+        }
+        inferParamTypesFromStmt(matchStmt->defaultCase.get(), functionNames);
+    }
+}
+
+void NativeCodeGen::inferParamTypesFromExpr(Expression* expr, const std::set<std::string>& functionNames) {
+    if (!expr) return;
+    
+    if (auto* call = dynamic_cast<CallExpr*>(expr)) {
+        // Check if this is a call to a user-defined function
+        if (auto* ident = dynamic_cast<Identifier*>(call->callee.get())) {
+            if (functionNames.count(ident->name)) {
+                // Analyze arguments to infer parameter types
+                for (size_t i = 0; i < call->args.size(); i++) {
+                    Expression* arg = call->args[i].get();
+                    
+                    // Check if argument is a string literal
+                    if (dynamic_cast<StringLiteral*>(arg)) {
+                        inferredParamTypes_[ident->name][i] = "str";
+                    }
+                    // Check if argument is an interpolated string
+                    else if (dynamic_cast<InterpolatedString*>(arg)) {
+                        inferredParamTypes_[ident->name][i] = "str";
+                    }
+                    // Check if argument is a known string variable
+                    else if (auto* argIdent = dynamic_cast<Identifier*>(arg)) {
+                        if (constStrVars.count(argIdent->name)) {
+                            inferredParamTypes_[ident->name][i] = "str";
+                        }
+                    }
+                    // Check if argument is a DSL block (which produces strings)
+                    else if (dynamic_cast<DSLBlock*>(arg)) {
+                        inferredParamTypes_[ident->name][i] = "str";
+                    }
+                }
+            }
+        }
+        
+        // Recurse into callee and arguments
+        inferParamTypesFromExpr(call->callee.get(), functionNames);
+        for (auto& arg : call->args) {
+            inferParamTypesFromExpr(arg.get(), functionNames);
+        }
+    }
+    else if (auto* assign = dynamic_cast<AssignExpr*>(expr)) {
+        // Handle assignment expressions like: result = echo("Hello")
+        inferParamTypesFromExpr(assign->target.get(), functionNames);
+        inferParamTypesFromExpr(assign->value.get(), functionNames);
+    }
+    else if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+        inferParamTypesFromExpr(binary->left.get(), functionNames);
+        inferParamTypesFromExpr(binary->right.get(), functionNames);
+    }
+    else if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+        inferParamTypesFromExpr(unary->operand.get(), functionNames);
+    }
+    else if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {
+        inferParamTypesFromExpr(ternary->condition.get(), functionNames);
+        inferParamTypesFromExpr(ternary->thenExpr.get(), functionNames);
+        inferParamTypesFromExpr(ternary->elseExpr.get(), functionNames);
+    }
+    else if (auto* index = dynamic_cast<IndexExpr*>(expr)) {
+        inferParamTypesFromExpr(index->object.get(), functionNames);
+        inferParamTypesFromExpr(index->index.get(), functionNames);
+    }
+    else if (auto* member = dynamic_cast<MemberExpr*>(expr)) {
+        inferParamTypesFromExpr(member->object.get(), functionNames);
+    }
+    else if (auto* list = dynamic_cast<ListExpr*>(expr)) {
+        for (auto& elem : list->elements) {
+            inferParamTypesFromExpr(elem.get(), functionNames);
+        }
+    }
+    else if (auto* lambda = dynamic_cast<LambdaExpr*>(expr)) {
+        inferParamTypesFromExpr(lambda->body.get(), functionNames);
     }
 }
 

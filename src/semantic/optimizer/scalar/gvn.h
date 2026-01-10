@@ -70,6 +70,20 @@ private:
     
     // Invalidate a variable's value number
     void invalidateVar(const std::string& name);
+    
+    // Invalidate expressions that use a variable
+    void invalidateExpressionsUsing(const std::string& var);
+    
+    // Collect all variables modified in a statement
+    void collectModifiedVars(Statement* stmt, std::set<std::string>& modified);
+    
+    // CSE (Common Subexpression Elimination)
+    void performCSE(std::vector<StmtPtr>& statements);
+    void performCSEOnStatement(StmtPtr& stmt);
+    void performCSEOnBlock(std::vector<StmtPtr>& statements);
+    std::string getExprSignature(Expression* expr);
+    bool isCSECandidate(Expression* expr);
+    bool exprUsesModifiedVars(Expression* expr, const std::set<std::string>& modified, size_t sinceIdx);
 };
 
 // Copy Propagation Pass

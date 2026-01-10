@@ -192,11 +192,107 @@ void NativeCodeGen::visit(BinaryExpr& node) {
         return;
     }
     
-    // Default: use push/pop
-    node.right->accept(*this);
-    asm_.push_rax();
-    node.left->accept(*this);
-    asm_.pop_rcx();
+    // OPTIMIZATION: Check operand complexity to avoid push/pop
+    // Simple operands: identifiers, literals, or expressions that don't clobber RCX
+    bool leftIsSimple = dynamic_cast<Identifier*>(node.left.get()) != nullptr ||
+                        dynamic_cast<IntegerLiteral*>(node.left.get()) != nullptr ||
+                        dynamic_cast<FloatLiteral*>(node.left.get()) != nullptr ||
+                        dynamic_cast<BoolLiteral*>(node.left.get()) != nullptr;
+    
+    bool rightIsSimple = dynamic_cast<Identifier*>(node.right.get()) != nullptr ||
+                         dynamic_cast<IntegerLiteral*>(node.right.get()) != nullptr ||
+                         dynamic_cast<FloatLiteral*>(node.right.get()) != nullptr ||
+                         dynamic_cast<BoolLiteral*>(node.right.get()) != nullptr;
+    
+    // Check if operands are in registers - we can do direct register ops
+    VarRegister leftReg = VarRegister::NONE;
+    VarRegister rightReg = VarRegister::NONE;
+    
+    if (auto* leftId = dynamic_cast<Identifier*>(node.left.get())) {
+        auto it = varRegisters_.find(leftId->name);
+        if (it != varRegisters_.end()) leftReg = it->second;
+    }
+    if (auto* rightId = dynamic_cast<Identifier*>(node.right.get())) {
+        auto it = varRegisters_.find(rightId->name);
+        if (it != varRegisters_.end()) rightReg = it->second;
+    }
+    
+    // OPTIMIZATION: Both operands in registers - direct register ops (check this FIRST)
+    if (leftReg != VarRegister::NONE && rightReg != VarRegister::NONE) {
+        // Load left into RAX
+        switch (leftReg) {
+            case VarRegister::RBX: asm_.mov_rax_rbx(); break;
+            case VarRegister::R12: asm_.mov_rax_r12(); break;
+            case VarRegister::R13: asm_.mov_rax_r13(); break;
+            case VarRegister::R14: asm_.mov_rax_r14(); break;
+            case VarRegister::R15: asm_.mov_rax_r15(); break;
+            default: break;
+        }
+        // Load right into RCX
+        switch (rightReg) {
+            case VarRegister::RBX: asm_.mov_rcx_rbx(); break;
+            case VarRegister::R12: asm_.mov_rcx_r12(); break;
+            case VarRegister::R13: asm_.mov_rcx_r13(); break;
+            case VarRegister::R14: asm_.mov_rcx_r14(); break;
+            case VarRegister::R15: asm_.mov_rcx_r15(); break;
+            default: break;
+        }
+        // Now RAX = left, RCX = right
+    }
+    // OPTIMIZATION: If left is in a register and right is simple (but not in register)
+    else if (leftReg != VarRegister::NONE && rightIsSimple) {
+        // Evaluate right into RAX first
+        node.right->accept(*this);
+        // Move RAX to RCX (right operand)
+        asm_.mov_rcx_rax();
+        // Load left from its register into RAX
+        switch (leftReg) {
+            case VarRegister::RBX: asm_.mov_rax_rbx(); break;
+            case VarRegister::R12: asm_.mov_rax_r12(); break;
+            case VarRegister::R13: asm_.mov_rax_r13(); break;
+            case VarRegister::R14: asm_.mov_rax_r14(); break;
+            case VarRegister::R15: asm_.mov_rax_r15(); break;
+            default: break;
+        }
+        // Now RAX = left, RCX = right
+    }
+    // OPTIMIZATION: If right is in a register and left is simple (but not in register)
+    else if (rightReg != VarRegister::NONE && leftIsSimple) {
+        // Evaluate left into RAX first
+        node.left->accept(*this);
+        // Load right from its register into RCX
+        switch (rightReg) {
+            case VarRegister::RBX: asm_.mov_rcx_rbx(); break;
+            case VarRegister::R12: asm_.mov_rcx_r12(); break;
+            case VarRegister::R13: asm_.mov_rcx_r13(); break;
+            case VarRegister::R14: asm_.mov_rcx_r14(); break;
+            case VarRegister::R15: asm_.mov_rcx_r15(); break;
+            default: break;
+        }
+        // Now RAX = left, RCX = right
+    }
+    // Left is simple: evaluate right first into RCX, then left into RAX
+    else if (leftIsSimple) {
+        node.right->accept(*this);
+        asm_.mov_rcx_rax();
+        node.left->accept(*this);
+        // RAX = left, RCX = right - ready for operation
+    }
+    // Right is simple: evaluate left first, save to RCX, then right into RAX, swap
+    else if (rightIsSimple) {
+        node.left->accept(*this);
+        asm_.mov_rcx_rax();
+        node.right->accept(*this);
+        asm_.xchg_rax_rcx();
+        // RAX = left, RCX = right
+    }
+    // Both complex - must use push/pop
+    else {
+        node.right->accept(*this);
+        asm_.push_rax();
+        node.left->accept(*this);
+        asm_.pop_rcx();
+    }
     
     switch (node.op) {
         case TokenType::PLUS: asm_.add_rax_rcx(); break;

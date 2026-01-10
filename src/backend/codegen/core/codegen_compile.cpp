@@ -304,6 +304,10 @@ bool NativeCodeGen::compile(Program& program, const std::string& outputFile) {
     // Visit the program to generate code
     program.accept(*this);
     
+    // Emit shared runtime routines (itoa, ftoa, etc.) at end of code section
+    // This must be done BEFORE label resolution
+    emitRuntimeRoutines();
+    
     // Finalize vtables with actual function addresses
     finalizeVtables();
     

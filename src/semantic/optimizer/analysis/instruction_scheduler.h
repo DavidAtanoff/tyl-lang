@@ -17,6 +17,18 @@ struct InstructionLatency {
     int throughput;     // Cycles between issue of same instruction
 };
 
+// Decoded instruction for machine code scheduling
+struct DecodedInstruction {
+    size_t offset;              // Offset in code buffer
+    int length;                 // Instruction length in bytes
+    int latency;                // Execution latency
+    int throughput;             // Throughput
+    std::set<int> regsRead;     // Registers read (0-15 for x64)
+    std::set<int> regsWritten;  // Registers written
+    bool readsMemory = false;   // Does this read memory?
+    bool writesMemory = false;  // Does this write memory?
+};
+
 // Dependency types between instructions
 enum class DependencyType {
     RAW,    // Read After Write (true dependency)
@@ -94,8 +106,15 @@ private:
     // Decode instruction length
     int decodeInstructionLength(const std::vector<uint8_t>& code, size_t offset);
     
+    // Decode register usage for an instruction
+    void decodeRegisterUsage(const std::vector<uint8_t>& code, size_t offset, 
+                             DecodedInstruction& instr);
+    
     // Check if instruction can be reordered
     bool canReorder(const std::vector<uint8_t>& code, size_t i1, size_t i2);
+    
+    // Check for data dependency between two instructions
+    bool hasDataDependency(const DecodedInstruction& a, const DecodedInstruction& b);
 };
 
 } // namespace tyl

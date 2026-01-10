@@ -80,10 +80,44 @@ StmtPtr Parser::traitDeclaration() {
     skipNewlines();
     
     while (!check(TokenType::DEDENT) && !isAtEnd()) {
-        if (match(TokenType::FN)) {
+        // Parse associated type declarations: type Item or type Index = int
+        if (match(TokenType::TYPE)) {
+            auto typeName = consume(TokenType::IDENTIFIER, "Expected associated type name").lexeme;
+            AssociatedTypeDecl assocType(typeName);
+            
+            // Check for trait bounds: type Item: Add + Clone
+            if (match(TokenType::COLON)) {
+                // Check if this is a bound or a default type
+                if (check(TokenType::IDENTIFIER)) {
+                    size_t savedPos = current;
+                    auto firstIdent = advance().lexeme;
+                    
+                    // If followed by + or newline, it's a bound
+                    if (check(TokenType::PLUS) || check(TokenType::NEWLINE) || check(TokenType::ASSIGN)) {
+                        assocType.bounds.push_back(firstIdent);
+                        while (match(TokenType::PLUS)) {
+                            assocType.bounds.push_back(consume(TokenType::IDENTIFIER, "Expected trait bound").lexeme);
+                        }
+                    } else {
+                        // It's a default type, restore
+                        current = savedPos;
+                        assocType.defaultType = parseType();
+                    }
+                }
+            }
+            
+            // Check for default type: type Index = int
+            if (match(TokenType::ASSIGN)) {
+                assocType.defaultType = parseType();
+            }
+            
+            trait->associatedTypes.push_back(std::move(assocType));
+        }
+        else if (match(TokenType::FN)) {
             auto fn = fnDeclaration(false);  // Trait methods don't require a body
             trait->methods.push_back(std::unique_ptr<FnDecl>(static_cast<FnDecl*>(fn.release())));
         }
+        match(TokenType::NEWLINE);
         skipNewlines();
     }
     
@@ -123,10 +157,18 @@ StmtPtr Parser::implDeclaration() {
     skipNewlines();
     
     while (!check(TokenType::DEDENT) && !isAtEnd()) {
-        if (match(TokenType::FN)) {
+        // Parse associated type bindings: type Item = int
+        if (match(TokenType::TYPE)) {
+            auto typeName = consume(TokenType::IDENTIFIER, "Expected associated type name").lexeme;
+            consume(TokenType::ASSIGN, "Expected '=' after associated type name");
+            auto boundType = parseType();
+            impl->associatedTypes.emplace_back(typeName, boundType);
+        }
+        else if (match(TokenType::FN)) {
             auto fn = fnDeclaration();
             impl->methods.push_back(std::unique_ptr<FnDecl>(static_cast<FnDecl*>(fn.release())));
         }
+        match(TokenType::NEWLINE);
         skipNewlines();
     }
     

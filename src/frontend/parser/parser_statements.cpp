@@ -7,7 +7,13 @@
 namespace tyl {
 
 StmtPtr Parser::statement() {
-    if (match(TokenType::IF)) return ifStatement();
+    if (match(TokenType::IF)) {
+        // Check for 'if let' pattern
+        if (check(TokenType::LET)) {
+            return ifLetStatement();
+        }
+        return ifStatement();
+    }
     if (match(TokenType::UNLESS)) return unlessStatement();
     if (match(TokenType::WHILE)) return whileStatement("");
     if (match(TokenType::FOR)) return forStatement("");
@@ -116,6 +122,53 @@ StmtPtr Parser::statement() {
 
 StmtPtr Parser::expressionStatement() {
     auto loc = peek().location;
+    
+    // Check for chained mutable multi-assign: mut x = mut y = mut z = 0
+    if (check(TokenType::MUT)) {
+        size_t savedPos = current;
+        std::vector<std::string> names;
+        
+        // Try to parse: mut x = mut y = mut z = value
+        while (match(TokenType::MUT)) {
+            if (!check(TokenType::IDENTIFIER)) {
+                // Not a valid pattern, restore
+                current = savedPos;
+                break;
+            }
+            std::string varName = advance().lexeme;
+            names.push_back(varName);
+            
+            if (!match(TokenType::ASSIGN)) {
+                // Not a valid pattern, restore
+                current = savedPos;
+                names.clear();
+                break;
+            }
+            
+            // Check if next is another 'mut' (chain continues) or value
+            if (!check(TokenType::MUT)) {
+                // This is the value expression
+                auto init = expression();
+                match(TokenType::NEWLINE);
+                
+                if (names.size() == 1) {
+                    auto decl = std::make_unique<VarDecl>(names[0], "", std::move(init), loc);
+                    decl->isMutable = true;
+                    return decl;
+                } else {
+                    auto decl = std::make_unique<MultiVarDecl>(std::move(names), std::move(init), loc);
+                    decl->isMutable = true;
+                    return decl;
+                }
+            }
+        }
+        
+        // If we get here with names, something went wrong - restore
+        if (!names.empty()) {
+            current = savedPos;
+        }
+    }
+    
     auto expr = expression();
     
     if (auto* id = dynamic_cast<Identifier*>(expr.get())) {
@@ -125,13 +178,38 @@ StmtPtr Parser::expressionStatement() {
         };
         
         // Compile-time constant: NAME :: value
+        // Also handles multi-constant: A :: B :: C :: value
         if (match(TokenType::DOUBLE_COLON)) {
+            std::vector<std::string> names;
+            names.push_back(id->name);
+            
+            // Check for chained constants: A :: B :: C :: value
+            while (check(TokenType::IDENTIFIER)) {
+                size_t savedPos = current;
+                std::string nextName = advance().lexeme;
+                if (match(TokenType::DOUBLE_COLON)) {
+                    names.push_back(nextName);
+                } else {
+                    // Not a chain, restore and parse as value
+                    current = savedPos;
+                    break;
+                }
+            }
+            
             auto init = expression();
             match(TokenType::NEWLINE);
-            auto decl = std::make_unique<VarDecl>(id->name, "", std::move(init), loc);
-            decl->isMutable = false;
-            decl->isConst = true;
-            return decl;
+            
+            if (names.size() == 1) {
+                auto decl = std::make_unique<VarDecl>(names[0], "", std::move(init), loc);
+                decl->isMutable = false;
+                decl->isConst = true;
+                return decl;
+            } else {
+                auto decl = std::make_unique<MultiVarDecl>(std::move(names), std::move(init), loc);
+                decl->isMutable = false;
+                decl->isConst = true;
+                return decl;
+            }
         }
         
         // Built-in function call without parentheses
@@ -141,6 +219,46 @@ StmtPtr Parser::expressionStatement() {
             call->args.push_back(expression());
             match(TokenType::NEWLINE);
             return std::make_unique<ExprStmt>(std::move(call), loc);
+        }
+        
+        // Check for multi-assignment: a = b = c = value
+        // This needs to be checked BEFORE the regular assignment handling
+        if (check(TokenType::ASSIGN)) {
+            size_t savedPos = current;
+            std::vector<std::string> names;
+            names.push_back(id->name);
+            
+            // Try to parse chain: a = b = c = value
+            while (match(TokenType::ASSIGN)) {
+                if (check(TokenType::IDENTIFIER)) {
+                    size_t peekPos = current;
+                    std::string nextName = advance().lexeme;
+                    if (check(TokenType::ASSIGN)) {
+                        // This is part of the chain
+                        names.push_back(nextName);
+                        continue;
+                    } else {
+                        // This identifier is the start of the value expression
+                        current = peekPos;
+                        break;
+                    }
+                } else {
+                    // Not an identifier, this is the value expression
+                    break;
+                }
+            }
+            
+            if (names.size() > 1) {
+                // Multi-assignment
+                auto init = expression();
+                match(TokenType::NEWLINE);
+                auto decl = std::make_unique<MultiVarDecl>(std::move(names), std::move(init), loc);
+                decl->isMutable = true;
+                return decl;
+            }
+            
+            // Not multi-assign, restore and continue to regular handling
+            current = savedPos;
         }
         
         // name value  OR  name: type = value  OR  name := value
@@ -166,6 +284,7 @@ StmtPtr Parser::expressionStatement() {
                     return std::make_unique<VarDecl>(name, typeName, std::move(init), loc);
                 }
             } else {
+                // Simple variable declaration: name value
                 auto init = expression();
                 match(TokenType::NEWLINE);
                 return std::make_unique<VarDecl>(name, "", std::move(init), loc);
@@ -232,16 +351,121 @@ StmtPtr Parser::braceBlock() {
     return blk;
 }
 
+StmtPtr Parser::endBlock() {
+    // Lua-style block terminated by 'end'
+    // Already consumed 'then' or 'do'
+    auto blk = std::make_unique<Block>(previous().location);
+    
+    skipNewlines();
+    // Skip any INDENT tokens that the lexer might have generated
+    while (match(TokenType::INDENT)) {
+        skipNewlines();
+    }
+    
+    while (!check(TokenType::END) && !check(TokenType::ELSE) && !check(TokenType::ELIF) && !isAtEnd()) {
+        // Skip DEDENT tokens inside end blocks
+        while (match(TokenType::DEDENT)) {
+            skipNewlines();
+        }
+        if (check(TokenType::END) || check(TokenType::ELSE) || check(TokenType::ELIF)) break;
+        
+        blk->statements.push_back(declaration());
+        skipNewlines();
+        // Allow optional semicolons between statements
+        match(TokenType::SEMICOLON);
+        skipNewlines();
+        
+        // Skip any trailing DEDENT tokens
+        while (match(TokenType::DEDENT)) {
+            skipNewlines();
+        }
+    }
+    
+    // Skip any remaining DEDENT tokens
+    while (match(TokenType::DEDENT)) {
+        skipNewlines();
+    }
+    
+    return blk;
+}
+
+StmtPtr Parser::ifLetStatement() {
+    // if let var = expr: body
+    // if let var = expr and condition: body
+    auto loc = previous().location;
+    
+    consume(TokenType::LET, "Expected 'let' after 'if'");
+    auto varName = consume(TokenType::IDENTIFIER, "Expected variable name after 'if let'").lexeme;
+    consume(TokenType::ASSIGN, "Expected '=' after variable name in 'if let'");
+    auto value = expression();
+    
+    // Optional guard: if let x = expr and x > 0:
+    ExprPtr guard = nullptr;
+    if (match(TokenType::AND)) {
+        guard = expression();
+    }
+    
+    StmtPtr thenBranch;
+    if (match(TokenType::LBRACE)) {
+        thenBranch = braceBlock();
+    } else if (match(TokenType::THEN)) {
+        thenBranch = endBlock();
+        consume(TokenType::END, "Expected 'end' after 'if let' block");
+        match(TokenType::NEWLINE);
+    } else {
+        consume(TokenType::COLON, "Expected ':', '{', or 'then' after 'if let' condition");
+        if (match(TokenType::NEWLINE)) {
+            thenBranch = block();
+        } else {
+            auto blk = std::make_unique<Block>(loc);
+            blk->statements.push_back(statement());
+            thenBranch = std::move(blk);
+        }
+    }
+    
+    auto stmt = std::make_unique<IfLetStmt>(varName, std::move(value), std::move(thenBranch), loc);
+    stmt->guard = std::move(guard);
+    
+    // Handle else branch
+    skipNewlines();
+    if (match(TokenType::ELSE)) {
+        if (match(TokenType::LBRACE)) {
+            stmt->elseBranch = braceBlock();
+        } else if (check(TokenType::END)) {
+            // else followed by end - empty else
+            auto blk = std::make_unique<Block>(loc);
+            stmt->elseBranch = std::move(blk);
+        } else {
+            consume(TokenType::COLON, "Expected ':' or '{' after else");
+            if (match(TokenType::NEWLINE)) {
+                stmt->elseBranch = block();
+            } else {
+                auto blk = std::make_unique<Block>(loc);
+                blk->statements.push_back(statement());
+                stmt->elseBranch = std::move(blk);
+            }
+        }
+    }
+    
+    return stmt;
+}
+
 StmtPtr Parser::ifStatement() {
     auto loc = previous().location;
     auto condition = expression();
     
     StmtPtr thenBranch;
+    bool usesEndStyle = false;
+    
     if (match(TokenType::LBRACE)) {
         // Brace style: if condition { ... }
         thenBranch = braceBlock();
+    } else if (match(TokenType::THEN)) {
+        // Lua style: if condition then ... end
+        usesEndStyle = true;
+        thenBranch = endBlock();
     } else {
-        consume(TokenType::COLON, "Expected ':' or '{' after if condition");
+        consume(TokenType::COLON, "Expected ':', '{', or 'then' after if condition");
         if (match(TokenType::NEWLINE)) {
             // Multi-line: if condition:\n    body
             thenBranch = block();
@@ -261,8 +485,11 @@ StmtPtr Parser::ifStatement() {
         StmtPtr elifBody;
         if (match(TokenType::LBRACE)) {
             elifBody = braceBlock();
+        } else if (match(TokenType::THEN)) {
+            usesEndStyle = true;
+            elifBody = endBlock();
         } else {
-            consume(TokenType::COLON, "Expected ':' or '{' after elif condition");
+            consume(TokenType::COLON, "Expected ':', '{', or 'then' after elif condition");
             if (match(TokenType::NEWLINE)) {
                 elifBody = block();
             } else {
@@ -278,6 +505,9 @@ StmtPtr Parser::ifStatement() {
     if (match(TokenType::ELSE)) {
         if (match(TokenType::LBRACE)) {
             stmt->elseBranch = braceBlock();
+        } else if (usesEndStyle) {
+            // In Lua style, else is followed directly by statements until end
+            stmt->elseBranch = endBlock();
         } else {
             consume(TokenType::COLON, "Expected ':' or '{' after else");
             if (match(TokenType::NEWLINE)) {
@@ -290,6 +520,17 @@ StmtPtr Parser::ifStatement() {
         }
     }
     
+    // Consume 'end' for Lua-style blocks
+    if (usesEndStyle) {
+        skipNewlines();
+        // Skip any remaining DEDENT tokens
+        while (match(TokenType::DEDENT)) {
+            skipNewlines();
+        }
+        consume(TokenType::END, "Expected 'end' to close if statement");
+        match(TokenType::NEWLINE);
+    }
+    
     return stmt;
 }
 
@@ -298,10 +539,22 @@ StmtPtr Parser::whileStatement(const std::string& label) {
     auto condition = expression();
     
     StmtPtr body;
+    bool usesEndStyle = false;
+    
     if (match(TokenType::LBRACE)) {
         body = braceBlock();
+    } else if (match(TokenType::DO)) {
+        // Lua style: while condition do ... end
+        usesEndStyle = true;
+        body = endBlock();
+        // Skip any remaining DEDENT tokens
+        while (match(TokenType::DEDENT)) {
+            skipNewlines();
+        }
+        consume(TokenType::END, "Expected 'end' to close while loop");
+        match(TokenType::NEWLINE);
     } else {
-        consume(TokenType::COLON, "Expected ':' or '{' after while condition");
+        consume(TokenType::COLON, "Expected ':', '{', or 'do' after while condition");
         if (match(TokenType::NEWLINE)) {
             body = block();
         } else {
@@ -323,10 +576,22 @@ StmtPtr Parser::forStatement(const std::string& label) {
     auto iterable = expression();
     
     StmtPtr body;
+    bool usesEndStyle = false;
+    
     if (match(TokenType::LBRACE)) {
         body = braceBlock();
+    } else if (match(TokenType::DO)) {
+        // Lua style: for i in range do ... end
+        usesEndStyle = true;
+        body = endBlock();
+        // Skip any remaining DEDENT tokens
+        while (match(TokenType::DEDENT)) {
+            skipNewlines();
+        }
+        consume(TokenType::END, "Expected 'end' to close for loop");
+        match(TokenType::NEWLINE);
     } else {
-        consume(TokenType::COLON, "Expected ':' or '{' after for iterable");
+        consume(TokenType::COLON, "Expected ':', '{', or 'do' after for iterable");
         if (match(TokenType::NEWLINE)) {
             body = block();
         } else {
@@ -352,8 +617,24 @@ StmtPtr Parser::matchStatement() {
     skipNewlines();
     
     while (!check(TokenType::DEDENT) && !isAtEnd()) {
-        // Parse pattern - could be a variable binding like 'x' or a literal
-        auto pattern = primary();  // Use primary() to avoid parsing 'if' as part of expression
+        // Parse pattern - could be a variable binding, literal, range, or wildcard
+        ExprPtr pattern;
+        auto patternLoc = peek().location;
+        
+        // Handle wildcard _ specially - convert to Identifier for match patterns
+        if (check(TokenType::UNDERSCORE)) {
+            advance();
+            pattern = std::make_unique<Identifier>("_", patternLoc);
+        } else {
+            pattern = primary();
+        }
+        
+        // Check for range pattern: 90..100
+        if (check(TokenType::DOTDOT)) {
+            advance();  // consume ..
+            auto endExpr = primary();
+            pattern = std::make_unique<RangeExpr>(std::move(pattern), std::move(endExpr), nullptr, patternLoc);
+        }
         
         // Check for guard: pattern if condition
         ExprPtr guard = nullptr;

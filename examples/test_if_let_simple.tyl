@@ -1,0 +1,10 @@
+// Simplest if-let test
+
+fn main:
+    // Test if-let with literal
+    if let x = 42:
+        println("x = ", x)
+    
+    println("done")
+
+main()

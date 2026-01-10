@@ -153,6 +153,10 @@ void MethodsOfExpr::accept(ASTVisitor& v) { v.visit(*this); }
 void HasFieldExpr::accept(ASTVisitor& v) { v.visit(*this); }
 void HasMethodExpr::accept(ASTVisitor& v) { v.visit(*this); }
 void FieldTypeExpr::accept(ASTVisitor& v) { v.visit(*this); }
+// New Syntax Enhancements
+void IfLetStmt::accept(ASTVisitor& v) { v.visit(*this); }
+void MultiVarDecl::accept(ASTVisitor& v) { v.visit(*this); }
+void WalrusExpr::accept(ASTVisitor& v) { v.visit(*this); }
 void Program::accept(ASTVisitor& v) { v.visit(*this); }
 
 } // namespace tyl

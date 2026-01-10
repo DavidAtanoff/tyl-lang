@@ -1,0 +1,33 @@
+// Test uninferable types
+
+// No return statement - should default to void or any
+fn greet name: str:
+    println("Hello, ", name)
+
+// Mixed return types - what happens?
+fn mixed_return x:
+    if x > 0:
+        return "positive"
+    elif x < 0:
+        return "negative"
+    else:
+        return "zero"
+
+// Function that just does computation (no return)
+fn compute a, b:
+    let result = a + b
+    println("Result: ", result)
+
+fn main:
+    greet("World")
+    
+    let r1 = mixed_return(5)
+    println("mixed_return(5) = ", r1)
+    
+    let r2 = mixed_return(-3)
+    println("mixed_return(-3) = ", r2)
+    
+    let r3 = mixed_return(0)
+    println("mixed_return(0) = ", r3)
+    
+    compute(10, 20)

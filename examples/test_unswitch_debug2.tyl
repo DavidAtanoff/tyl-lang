@@ -1,0 +1,21 @@
+// Debug test - no function call, just inline code
+fn main() -> int {
+    flag := 1
+    mut x := 0
+    
+    // This should be unswitched to:
+    // if flag > 0:
+    //     for i in range(3): x = x + 1
+    // else:
+    //     for i in range(3): x = x + 2
+    for i in range(3) {
+        if flag > 0 {
+            x = x + 1
+        } else {
+            x = x + 2
+        }
+    }
+    
+    print("Result: {x}")
+    return 0
+}

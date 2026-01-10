@@ -622,6 +622,7 @@ void NativeCodeGen::visit(VarDecl& node) {
             varTypes_[node.name] = "str";
         } else if (dynamic_cast<BoolLiteral*>(node.initializer.get())) {
             varTypes_[node.name] = "bool";
+            boolVars_.insert(node.name);  // Track as boolean variable
         } else if (varRecordTypes_.count(node.name)) {
             varTypes_[node.name] = varRecordTypes_[node.name];
         } else if (listVars.count(node.name)) {

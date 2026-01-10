@@ -95,6 +95,15 @@ void DeadStoreEliminationPass::processBlock(std::vector<StmtPtr>& statements) {
             // Skip declarations - they define the variable
             if (store.isDeclaration) continue;
             
+            // OPTIMIZATION: Check for consecutive stores (no statements between them)
+            // These are definitely dead stores
+            if (nextStore.index == store.index + 1) {
+                // Consecutive stores - the first one is dead
+                store.isDead = true;
+                transformations_++;
+                continue;
+            }
+            
             // Check if variable is read between this store and the next
             if (!isReadBetween(statements, varName, store.index, nextStore.index)) {
                 // Check if variable escapes (passed to function, etc.)
@@ -189,6 +198,10 @@ void DeadStoreEliminationPass::collectReads(Expression* expr, std::set<std::stri
         collectReads(ternary->condition.get(), reads);
         collectReads(ternary->thenExpr.get(), reads);
         collectReads(ternary->elseExpr.get(), reads);
+    }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression: (n := value) - the value is read
+        collectReads(walrus->value.get(), reads);
     }
 }
 

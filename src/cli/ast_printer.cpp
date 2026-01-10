@@ -948,4 +948,35 @@ void ASTPrinter::visit(FieldTypeExpr& n) {
     }
 }
 
+// New Syntax Enhancements
+void ASTPrinter::visit(IfLetStmt& n) {
+    print("IfLetStmt: " + n.varName);
+    indent++;
+    print("Value:"); indent++; n.value->accept(*this); indent--;
+    if (n.guard) {
+        print("Guard:"); indent++; n.guard->accept(*this); indent--;
+    }
+    print("Then:"); indent++; n.thenBranch->accept(*this); indent--;
+    if (n.elseBranch) {
+        print("Else:"); indent++; n.elseBranch->accept(*this); indent--;
+    }
+    indent--;
+}
+
+void ASTPrinter::visit(MultiVarDecl& n) {
+    std::string mod = n.isConst ? "const " : (n.isMutable ? "var " : "let ");
+    std::string names;
+    for (size_t i = 0; i < n.names.size(); i++) {
+        if (i > 0) names += " = ";
+        names += n.names[i];
+    }
+    print("MultiVarDecl: " + mod + names);
+    if (n.initializer) { indent++; n.initializer->accept(*this); indent--; }
+}
+
+void ASTPrinter::visit(WalrusExpr& n) {
+    print("WalrusExpr: " + n.varName + " :=");
+    indent++; n.value->accept(*this); indent--;
+}
+
 } // namespace tyl

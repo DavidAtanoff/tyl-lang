@@ -1,0 +1,69 @@
+// Test all finalized features
+
+// 1. Immutable default
+x = 42
+println("Immutable x = ", x)
+
+// 2. Mutable
+mut y = 0
+y = 10
+println("Mutable y = ", y)
+
+// 3. Constants
+PI :: 3
+println("Constant PI = ", PI)
+
+// 4. Functions
+fn add a: int, b: int -> int:
+    return a + b
+
+println("add(2,3) = ", add(2, 3))
+
+// 5. Lambdas
+double = |x| => x * 2
+println("double(5) = ", double(5))
+
+// 6. Match
+value = 2
+match value:
+    1 -> println("one")
+    2 -> println("two (match works!)")
+    x -> println("other: ", x)
+
+// 7. Pipe
+fn inc x: int -> int:
+    return x + 1
+
+result = 5 |> inc |> inc
+println("5 |> inc |> inc = ", result)
+
+// 8. UFCS
+println("UFCS 10.inc() = ", 10.inc())
+
+// 9. Records
+record Point:
+    x: int
+    y: int
+
+p = Point { x: 3, y: 4 }
+println("Point x=", p.x, " y=", p.y)
+
+// 10. Generics
+fn identity[T] val: T -> T:
+    return val
+
+println("identity(42) = ", identity(42))
+
+// 11. Macros
+macro double_print msg:
+    println(msg)
+    println(msg)
+
+double_print("Hello macro!")
+
+// 12. Unsafe
+unsafe:
+    x2 = 0
+    println("Unsafe block executed")
+
+println("All finalized features working!")

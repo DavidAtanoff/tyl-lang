@@ -158,7 +158,36 @@ bool NativeCodeGen::isStringReturningExpr(Expression* expr) {
     if (dynamic_cast<FieldTypeExpr*>(expr)) return true;  // field_type returns string
     
     if (auto* call = dynamic_cast<CallExpr*>(expr)) {
+        // Check for method calls (obj.method())
+        if (auto* member = dynamic_cast<MemberExpr*>(call->callee.get())) {
+            // Get the object's type
+            std::string objTypeName;
+            if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+                auto varTypeIt = varRecordTypes_.find(objId->name);
+                if (varTypeIt != varRecordTypes_.end()) {
+                    objTypeName = varTypeIt->second;
+                }
+            }
+            
+            // Look for impl method matching the object's type
+            for (const auto& [implKey, info] : impls_) {
+                if (!objTypeName.empty() && info.typeName != objTypeName) {
+                    continue;
+                }
+                
+                auto returnTypeIt = info.methodReturnTypes.find(member->member);
+                if (returnTypeIt != info.methodReturnTypes.end()) {
+                    const std::string& retType = returnTypeIt->second;
+                    if (retType == "str" || retType == "string" ||
+                        retType == "*str" || retType == "*u8") {
+                        return true;
+                    }
+                }
+            }
+        }
+        
         if (auto* id = dynamic_cast<Identifier*>(call->callee.get())) {
+            // Check built-in string-returning functions
             if (id->name == "platform" || id->name == "arch" ||
                 id->name == "upper" || id->name == "lower" ||
                 id->name == "trim" || id->name == "substring" ||
@@ -173,6 +202,11 @@ bool NativeCodeGen::isStringReturningExpr(Expression* expr) {
                 // Extended system builtins that return strings
                 id->name == "env" || id->name == "home_dir" ||
                 id->name == "temp_dir") {
+                return true;
+            }
+            
+            // Check user-defined string-returning functions
+            if (stringReturningFunctions_.count(id->name)) {
                 return true;
             }
             

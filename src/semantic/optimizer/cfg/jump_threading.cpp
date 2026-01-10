@@ -219,7 +219,17 @@ bool JumpThreadingPass::processStatement(StmtPtr& stmt, std::vector<StmtPtr>& in
 }
 
 bool JumpThreadingPass::canDetermineCondition(Expression* cond, bool& result) {
-    return evaluateCondition(cond, result);
+    // First try direct evaluation
+    if (evaluateCondition(cond, result)) {
+        return true;
+    }
+    
+    // Then try range-based analysis
+    if (canDetermineFromRange(cond, result)) {
+        return true;
+    }
+    
+    return false;
 }
 
 bool JumpThreadingPass::evaluateCondition(Expression* cond, bool& result) {
@@ -372,8 +382,9 @@ void JumpThreadingPass::recordImpliedValues(Expression* cond, bool condValue) {
         }
     }
     
-    // Equality comparison: if (x == 5) implies x = 5 in then branch
+    // Comparison operators - record both exact values and ranges
     if (auto* binary = dynamic_cast<BinaryExpr*>(cond)) {
+        // Equality comparison: if (x == 5) implies x = 5 in then branch
         if (binary->op == TokenType::EQ && condValue) {
             // x == const
             if (auto* leftId = dynamic_cast<Identifier*>(binary->left.get())) {
@@ -383,6 +394,9 @@ void JumpThreadingPass::recordImpliedValues(Expression* cond, bool condValue) {
                     kv.isConstant = true;
                     kv.type = KnownValue::Type::Integer;
                     kv.intValue = rightInt->value;
+                    kv.hasRange = true;
+                    kv.minValue = rightInt->value;
+                    kv.maxValue = rightInt->value;
                     recordKnownValue(leftId->name, kv);
                 }
             }
@@ -394,10 +408,19 @@ void JumpThreadingPass::recordImpliedValues(Expression* cond, bool condValue) {
                     kv.isConstant = true;
                     kv.type = KnownValue::Type::Integer;
                     kv.intValue = leftInt->value;
+                    kv.hasRange = true;
+                    kv.minValue = leftInt->value;
+                    kv.maxValue = leftInt->value;
                     recordKnownValue(rightId->name, kv);
                 }
             }
         }
+        
+        // Inequality: if (x != 5) is true, we know x is not 5
+        // This is harder to use but can help with range analysis
+        
+        // Range-based implications
+        recordRangeFromComparison(cond, condValue);
         
         // Logical AND: if (a && b) is true, both a and b are true
         if (binary->op == TokenType::AND && condValue) {
@@ -409,6 +432,261 @@ void JumpThreadingPass::recordImpliedValues(Expression* cond, bool condValue) {
         if (binary->op == TokenType::OR && !condValue) {
             recordImpliedValues(binary->left.get(), false);
             recordImpliedValues(binary->right.get(), false);
+        }
+    }
+}
+
+void JumpThreadingPass::recordRangeFromComparison(Expression* cond, bool condValue) {
+    auto* binary = dynamic_cast<BinaryExpr*>(cond);
+    if (!binary) return;
+    
+    std::string var;
+    int64_t constVal;
+    bool varOnLeft = false;
+    
+    // Extract variable and constant
+    if (auto* leftId = dynamic_cast<Identifier*>(binary->left.get())) {
+        if (auto* rightInt = dynamic_cast<IntegerLiteral*>(binary->right.get())) {
+            var = leftId->name;
+            constVal = rightInt->value;
+            varOnLeft = true;
+        }
+    }
+    if (var.empty()) {
+        if (auto* rightId = dynamic_cast<Identifier*>(binary->right.get())) {
+            if (auto* leftInt = dynamic_cast<IntegerLiteral*>(binary->left.get())) {
+                var = rightId->name;
+                constVal = leftInt->value;
+                varOnLeft = false;
+            }
+        }
+    }
+    
+    if (var.empty()) return;
+    
+    // Get or create range info
+    KnownValue kv;
+    auto it = knownValues_.find(var);
+    if (it != knownValues_.end()) {
+        kv = it->second;
+    } else {
+        kv.varName = var;
+        kv.type = KnownValue::Type::Integer;
+        kv.hasRange = true;
+        kv.minValue = INT64_MIN;
+        kv.maxValue = INT64_MAX;
+    }
+    
+    // Update range based on comparison
+    TokenType op = binary->op;
+    if (!varOnLeft) {
+        // Flip the comparison
+        switch (op) {
+            case TokenType::LT: op = TokenType::GT; break;
+            case TokenType::LE: op = TokenType::GE; break;
+            case TokenType::GT: op = TokenType::LT; break;
+            case TokenType::GE: op = TokenType::LE; break;
+            default: break;
+        }
+    }
+    
+    if (condValue) {
+        // Condition is true
+        switch (op) {
+            case TokenType::LT:  // x < c  =>  x <= c-1
+                kv.maxValue = std::min(kv.maxValue, constVal - 1);
+                break;
+            case TokenType::LE:  // x <= c
+                kv.maxValue = std::min(kv.maxValue, constVal);
+                break;
+            case TokenType::GT:  // x > c  =>  x >= c+1
+                kv.minValue = std::max(kv.minValue, constVal + 1);
+                break;
+            case TokenType::GE:  // x >= c
+                kv.minValue = std::max(kv.minValue, constVal);
+                break;
+            default:
+                break;
+        }
+    } else {
+        // Condition is false - negate the comparison
+        switch (op) {
+            case TokenType::LT:  // !(x < c)  =>  x >= c
+                kv.minValue = std::max(kv.minValue, constVal);
+                break;
+            case TokenType::LE:  // !(x <= c)  =>  x > c  =>  x >= c+1
+                kv.minValue = std::max(kv.minValue, constVal + 1);
+                break;
+            case TokenType::GT:  // !(x > c)  =>  x <= c
+                kv.maxValue = std::min(kv.maxValue, constVal);
+                break;
+            case TokenType::GE:  // !(x >= c)  =>  x < c  =>  x <= c-1
+                kv.maxValue = std::min(kv.maxValue, constVal - 1);
+                break;
+            default:
+                break;
+        }
+    }
+    
+    kv.hasRange = true;
+    recordKnownValue(var, kv);
+    ++stats_.rangeBasedOptimizations;
+}
+
+bool JumpThreadingPass::canDetermineFromRange(Expression* cond, bool& result) {
+    auto* binary = dynamic_cast<BinaryExpr*>(cond);
+    if (!binary) return false;
+    
+    std::string var;
+    int64_t constVal;
+    bool varOnLeft = false;
+    
+    // Extract variable and constant
+    if (auto* leftId = dynamic_cast<Identifier*>(binary->left.get())) {
+        if (auto* rightInt = dynamic_cast<IntegerLiteral*>(binary->right.get())) {
+            var = leftId->name;
+            constVal = rightInt->value;
+            varOnLeft = true;
+        }
+    }
+    if (var.empty()) {
+        if (auto* rightId = dynamic_cast<Identifier*>(binary->right.get())) {
+            if (auto* leftInt = dynamic_cast<IntegerLiteral*>(binary->left.get())) {
+                var = rightId->name;
+                constVal = leftInt->value;
+                varOnLeft = false;
+            }
+        }
+    }
+    
+    if (var.empty()) return false;
+    
+    // Get range info
+    KnownValue kv;
+    if (!getKnownValue(var, kv) || !kv.hasRange) return false;
+    
+    TokenType op = binary->op;
+    if (!varOnLeft) {
+        switch (op) {
+            case TokenType::LT: op = TokenType::GT; break;
+            case TokenType::LE: op = TokenType::GE; break;
+            case TokenType::GT: op = TokenType::LT; break;
+            case TokenType::GE: op = TokenType::LE; break;
+            default: break;
+        }
+    }
+    
+    // Check if range implies the comparison result
+    switch (op) {
+        case TokenType::LT:  // x < c
+            if (kv.maxValue < constVal) { result = true; return true; }
+            if (kv.minValue >= constVal) { result = false; return true; }
+            break;
+        case TokenType::LE:  // x <= c
+            if (kv.maxValue <= constVal) { result = true; return true; }
+            if (kv.minValue > constVal) { result = false; return true; }
+            break;
+        case TokenType::GT:  // x > c
+            if (kv.minValue > constVal) { result = true; return true; }
+            if (kv.maxValue <= constVal) { result = false; return true; }
+            break;
+        case TokenType::GE:  // x >= c
+            if (kv.minValue >= constVal) { result = true; return true; }
+            if (kv.maxValue < constVal) { result = false; return true; }
+            break;
+        default:
+            break;
+    }
+    
+    return false;
+}
+
+bool JumpThreadingPass::areConditionsCorrelated(Expression* a, Expression* b, bool& impliedValue) {
+    // Check if condition a being true/false implies something about condition b
+    
+    auto* binA = dynamic_cast<BinaryExpr*>(a);
+    auto* binB = dynamic_cast<BinaryExpr*>(b);
+    
+    if (!binA || !binB) return false;
+    
+    // Extract variables and constants from both conditions
+    std::string varA, varB;
+    int64_t constA = 0, constB = 0;
+    
+    if (auto* leftId = dynamic_cast<Identifier*>(binA->left.get())) {
+        if (auto* rightInt = dynamic_cast<IntegerLiteral*>(binA->right.get())) {
+            varA = leftId->name;
+            constA = rightInt->value;
+        }
+    }
+    
+    if (auto* leftId = dynamic_cast<Identifier*>(binB->left.get())) {
+        if (auto* rightInt = dynamic_cast<IntegerLiteral*>(binB->right.get())) {
+            varB = leftId->name;
+            constB = rightInt->value;
+        }
+    }
+    
+    // Must be same variable
+    if (varA.empty() || varA != varB) return false;
+    
+    // Check for implications
+    // x < 5 implies x < 10
+    if (binA->op == TokenType::LT && binB->op == TokenType::LT) {
+        if (constA < constB) {
+            impliedValue = true;  // If x < 5, then x < 10
+            ++stats_.correlatedConditionsFound;
+            return true;
+        }
+    }
+    
+    // x > 10 implies x > 5
+    if (binA->op == TokenType::GT && binB->op == TokenType::GT) {
+        if (constA > constB) {
+            impliedValue = true;
+            ++stats_.correlatedConditionsFound;
+            return true;
+        }
+    }
+    
+    // x < 5 implies !(x > 10)
+    if (binA->op == TokenType::LT && binB->op == TokenType::GT) {
+        if (constA <= constB) {
+            impliedValue = false;
+            ++stats_.correlatedConditionsFound;
+            return true;
+        }
+    }
+    
+    // x > 10 implies !(x < 5)
+    if (binA->op == TokenType::GT && binB->op == TokenType::LT) {
+        if (constA >= constB) {
+            impliedValue = false;
+            ++stats_.correlatedConditionsFound;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+void JumpThreadingPass::mergeRanges(const std::map<std::string, KnownValue>& other) {
+    // At join points, we need to widen ranges
+    for (auto& [var, kv] : knownValues_) {
+        auto it = other.find(var);
+        if (it != other.end() && it->second.hasRange && kv.hasRange) {
+            // Widen the range to include both possibilities
+            kv.minValue = std::min(kv.minValue, it->second.minValue);
+            kv.maxValue = std::max(kv.maxValue, it->second.maxValue);
+            
+            // If ranges don't overlap, we can't determine a constant
+            if (kv.minValue != kv.maxValue) {
+                kv.isConstant = false;
+            }
+        } else {
+            // One path doesn't have range info - invalidate
+            kv.hasRange = false;
+            kv.isConstant = false;
         }
     }
 }
@@ -548,6 +826,12 @@ ExprPtr JumpThreadingPass::cloneExpression(Expression* expr) {
             cloneExpression(index->object.get()),
             cloneExpression(index->index.get()),
             index->location);
+    }
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return std::make_unique<WalrusExpr>(
+            walrus->varName,
+            cloneExpression(walrus->value.get()),
+            walrus->location);
     }
     
     return nullptr;

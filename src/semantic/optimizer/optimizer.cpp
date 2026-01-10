@@ -28,6 +28,8 @@
 #include "loop/loop_deletion.h"
 #include "loop/loop_idiom.h"
 #include "loop/loop_simplify.h"
+#include "loop/loop_unswitch.h"
+#include "loop/loop_peeling.h"
 
 // IPO (Inter-Procedural Optimization)
 #include "ipo/ipsccp.h"
@@ -355,6 +357,28 @@ void Optimizer::optimize(Program& ast) {
             if (verbose_ && loopIdiom->transformations() > 0) {
                 std::cout << "[Optimizer] LoopIdiomRecognition: " 
                           << loopIdiom->transformations() << " transformation(s)\n";
+            }
+        }
+        
+        // Loop Unswitching - move invariant conditionals out of loops
+        if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+            auto loopUnswitch = std::make_unique<LoopUnswitchPass>();
+            loopUnswitch->run(ast);
+            totalTransformations_ += loopUnswitch->transformations();
+            if (verbose_ && loopUnswitch->transformations() > 0) {
+                std::cout << "[Optimizer] LoopUnswitch: " 
+                          << loopUnswitch->transformations() << " transformation(s)\n";
+            }
+        }
+        
+        // Loop Peeling - peel first/last iterations for optimization
+        if (optLevel_ >= OptLevel::O3 || optLevel_ == OptLevel::Ofast) {
+            auto loopPeel = std::make_unique<LoopPeelingPass>();
+            loopPeel->run(ast);
+            totalTransformations_ += loopPeel->transformations();
+            if (verbose_ && loopPeel->transformations() > 0) {
+                std::cout << "[Optimizer] LoopPeeling: " 
+                          << loopPeel->transformations() << " transformation(s)\n";
             }
         }
     }

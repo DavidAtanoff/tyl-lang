@@ -1,0 +1,29 @@
+// Test syntax macros with explicit return types
+
+// Define a simple DSL transformer
+syntax html => render_html(content)
+
+// Define the render function with explicit return type
+fn render_html content -> str:
+    println("Rendering HTML: ", content)
+    return content
+
+// Use the DSL
+result = html:
+    <div>Hello World</div>
+
+println("Result: ", result)
+
+// Another DSL example
+syntax sql => db_query(content)
+
+fn db_query query -> int:
+    println("Executing SQL: ", query)
+    return 42
+
+count = sql:
+    SELECT COUNT(*) FROM users
+
+println("Count: ", count)
+
+println("Syntax macro test complete!")

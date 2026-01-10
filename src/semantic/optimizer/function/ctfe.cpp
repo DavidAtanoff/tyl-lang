@@ -46,7 +46,9 @@ bool CTFEPass::checkPurityExpr(Expression* expr) {
         if (auto* callee = dynamic_cast<Identifier*>(call->callee.get())) {
             // Built-in pure functions
             if (callee->name == "str" || callee->name == "len" ||
-                callee->name == "upper" || callee->name == "contains") {
+                callee->name == "upper" || callee->name == "contains" ||
+                callee->name == "range" || callee->name == "abs" ||
+                callee->name == "min" || callee->name == "max") {
                 // Check args are pure
                 for (auto& arg : call->args) {
                     if (!checkPurityExpr(arg.get())) return false;
@@ -249,7 +251,19 @@ void CTFEPass::transformProgram(Program& ast) {
 }
 
 void CTFEPass::processBlock(std::vector<StmtPtr>& statements) {
-    for (auto& stmt : statements) {
+    for (size_t i = 0; i < statements.size(); ++i) {
+        auto& stmt = statements[i];
+        
+        // Try to optimize loops that accumulate constant function calls
+        if (aggressiveMode_) {
+            if (auto* forLoop = dynamic_cast<ForStmt*>(stmt.get())) {
+                if (tryOptimizeLoopWithConstantCall(statements, i, forLoop)) {
+                    // Loop was optimized, continue to next statement
+                    continue;
+                }
+            }
+        }
+        
         processStatement(stmt);
     }
 }
@@ -375,6 +389,21 @@ std::optional<CTFEValue> CTFEPass::evaluateCall(CallExpr* call) {
         auto val = evaluateExpression(arg.get(), emptyEnv, 0);
         if (!val) return std::nullopt;  // Non-constant argument
         args.push_back(*val);
+    }
+    
+    // OPTIMIZATION: For zero-argument pure functions, always try to evaluate
+    // These are essentially compile-time constants
+    if (args.empty() && it->second.isPure) {
+        // Increase iteration limit for complex zero-arg functions
+        size_t savedMaxIter = maxIterations_;
+        maxIterations_ = std::max(maxIterations_, size_t(100000));
+        
+        currentIterations_ = 0;
+        loopControl_ = LoopControl::None;
+        auto result = evaluateFunction(it->second.decl, args, 0);
+        
+        maxIterations_ = savedMaxIter;
+        return result;
     }
     
     // Execute the function
@@ -859,6 +888,184 @@ ExprPtr CTFEPass::createLiteral(const CTFEValue& value, const SourceLocation& lo
         return std::make_unique<StringLiteral>(std::get<std::string>(value), loc);
     }
     return nullptr;
+}
+
+// ============================================
+// Enhanced Loop Optimization for O3
+// ============================================
+
+// Try to optimize a loop that accumulates results from constant function calls
+// Pattern: for i in range(n): accum += pure_func(const_args)
+// Becomes: accum = pure_func(const_args) * n
+bool CTFEPass::tryOptimizeLoopWithConstantCall(std::vector<StmtPtr>& stmts, size_t index, ForStmt* loop) {
+    if (!loop || !loop->body) return false;
+    
+    // Get loop bounds
+    int64_t start = 0, end = 0, step = 1;
+    bool boundsKnown = false;
+    
+    if (auto* call = dynamic_cast<CallExpr*>(loop->iterable.get())) {
+        if (auto* callee = dynamic_cast<Identifier*>(call->callee.get())) {
+            if (callee->name == "range") {
+                if (call->args.size() == 1) {
+                    if (auto* endLit = dynamic_cast<IntegerLiteral*>(call->args[0].get())) {
+                        start = 0;
+                        end = endLit->value;
+                        boundsKnown = true;
+                    }
+                } else if (call->args.size() >= 2) {
+                    auto* startLit = dynamic_cast<IntegerLiteral*>(call->args[0].get());
+                    auto* endLit = dynamic_cast<IntegerLiteral*>(call->args[1].get());
+                    if (startLit && endLit) {
+                        start = startLit->value;
+                        end = endLit->value;
+                        boundsKnown = true;
+                        if (call->args.size() >= 3) {
+                            if (auto* stepLit = dynamic_cast<IntegerLiteral*>(call->args[2].get())) {
+                                step = stepLit->value;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (!boundsKnown || step == 0) return false;
+    
+    int64_t tripCount = (end - start) / step;
+    if (tripCount <= 0) return false;
+    
+    // Check if loop body is: accum += pure_func(const_args)
+    auto* body = dynamic_cast<Block*>(loop->body.get());
+    if (!body || body->statements.size() != 1) return false;
+    
+    auto* exprStmt = dynamic_cast<ExprStmt*>(body->statements[0].get());
+    if (!exprStmt) return false;
+    
+    auto* assign = dynamic_cast<AssignExpr*>(exprStmt->expr.get());
+    if (!assign || assign->op != TokenType::PLUS_ASSIGN) return false;
+    
+    auto* target = dynamic_cast<Identifier*>(assign->target.get());
+    if (!target) return false;
+    
+    // Check if the value is a call to a pure function with constant args
+    auto* call = dynamic_cast<CallExpr*>(assign->value.get());
+    if (!call) return false;
+    
+    auto* callee = dynamic_cast<Identifier*>(call->callee.get());
+    if (!callee) return false;
+    
+    // Check if function is CTFE-able
+    auto it = functions_.find(callee->name);
+    if (it == functions_.end() || !it->second.canCTFE) return false;
+    
+    // Check if all arguments are constants (don't depend on loop variable)
+    std::vector<CTFEValue> args;
+    std::map<std::string, CTFEValue> emptyEnv;
+    
+    for (auto& arg : call->args) {
+        // Check if arg depends on loop variable
+        bool dependsOnIV = false;
+        std::function<bool(Expression*)> checkIV = [&](Expression* e) -> bool {
+            if (!e) return false;
+            if (auto* id = dynamic_cast<Identifier*>(e)) {
+                if (id->name == loop->var) return true;
+            }
+            if (auto* bin = dynamic_cast<BinaryExpr*>(e)) {
+                return checkIV(bin->left.get()) || checkIV(bin->right.get());
+            }
+            if (auto* un = dynamic_cast<UnaryExpr*>(e)) {
+                return checkIV(un->operand.get());
+            }
+            return false;
+        };
+        
+        if (checkIV(arg.get())) {
+            dependsOnIV = true;
+            break;
+        }
+        
+        auto val = evaluateExpression(arg.get(), emptyEnv, 0);
+        if (!val) return false;
+        args.push_back(*val);
+    }
+    
+    // Evaluate the function once
+    currentIterations_ = 0;
+    loopControl_ = LoopControl::None;
+    auto funcResult = evaluateFunction(it->second.decl, args, 0);
+    if (!funcResult) return false;
+    
+    // Must be an integer result for multiplication
+    if (!std::holds_alternative<int64_t>(*funcResult)) return false;
+    
+    int64_t singleCallResult = std::get<int64_t>(*funcResult);
+    int64_t totalResult = singleCallResult * tripCount;
+    
+    // Find the accumulator initialization
+    int64_t initValue = 0;
+    for (size_t i = index; i > 0; --i) {
+        auto* stmt = stmts[i - 1].get();
+        if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+            if (varDecl->name == target->name && varDecl->initializer) {
+                if (auto* lit = dynamic_cast<IntegerLiteral*>(varDecl->initializer.get())) {
+                    initValue = lit->value;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Replace the loop with: accum = initValue + totalResult
+    SourceLocation loc = loop->location;
+    auto newAssign = std::make_unique<AssignExpr>(
+        std::make_unique<Identifier>(target->name, loc),
+        TokenType::ASSIGN,
+        std::make_unique<IntegerLiteral>(initValue + totalResult, loc),
+        loc);
+    
+    stmts[index] = std::make_unique<ExprStmt>(std::move(newAssign), loc);
+    transformations_++;
+    
+    return true;
+}
+
+bool CTFEPass::isLoopAccumulatingConstantCall(ForStmt* loop, std::string& accumVar,
+                                               std::string& funcName, std::vector<int64_t>& args) {
+    if (!loop || !loop->body) return false;
+    
+    auto* body = dynamic_cast<Block*>(loop->body.get());
+    if (!body || body->statements.size() != 1) return false;
+    
+    auto* exprStmt = dynamic_cast<ExprStmt*>(body->statements[0].get());
+    if (!exprStmt) return false;
+    
+    auto* assign = dynamic_cast<AssignExpr*>(exprStmt->expr.get());
+    if (!assign || assign->op != TokenType::PLUS_ASSIGN) return false;
+    
+    auto* target = dynamic_cast<Identifier*>(assign->target.get());
+    if (!target) return false;
+    
+    auto* call = dynamic_cast<CallExpr*>(assign->value.get());
+    if (!call) return false;
+    
+    auto* callee = dynamic_cast<Identifier*>(call->callee.get());
+    if (!callee) return false;
+    
+    accumVar = target->name;
+    funcName = callee->name;
+    
+    // Extract constant arguments
+    for (auto& arg : call->args) {
+        if (auto* lit = dynamic_cast<IntegerLiteral*>(arg.get())) {
+            args.push_back(lit->value);
+        } else {
+            return false;  // Non-constant argument
+        }
+    }
+    
+    return true;
 }
 
 } // namespace tyl

@@ -1562,5 +1562,131 @@ void NativeCodeGen::visit(FieldTypeExpr& node) {
     lastExprWasFloat_ = false;
 }
 
+// New Syntax Enhancements
+
+void NativeCodeGen::visit(IfLetStmt& node) {
+    // if let x = expr: body
+    // Transforms to: evaluate expr, check if non-nil, bind to x, execute body
+    
+    std::string elseLabel = newLabel("if_let_else");
+    std::string endLabel = newLabel("if_let_end");
+    
+    // Evaluate the value expression
+    node.value->accept(*this);
+    
+    // Check if the value is nil (0)
+    asm_.test_rax_rax();
+    asm_.jz_rel32(node.elseBranch ? elseLabel : endLabel);
+    
+    // Bind the variable to the value
+    allocLocal(node.varName);
+    int32_t offset = locals[node.varName];
+    asm_.mov_mem_rbp_rax(offset);
+    
+    // Check guard condition if present
+    if (node.guard) {
+        node.guard->accept(*this);
+        asm_.test_rax_rax();
+        asm_.jz_rel32(node.elseBranch ? elseLabel : endLabel);
+    }
+    
+    // Execute the then branch
+    node.thenBranch->accept(*this);
+    
+    if (node.elseBranch) {
+        asm_.jmp_rel32(endLabel);
+        asm_.label(elseLabel);
+        node.elseBranch->accept(*this);
+    }
+    
+    asm_.label(endLabel);
+}
+
+void NativeCodeGen::visit(MultiVarDecl& node) {
+    // a = b = c = 0
+    // All variables get the same value
+    
+    // Evaluate the initializer once
+    int64_t constVal = 0;
+    bool isConst = false;
+    double floatVal = 0.0;
+    bool isFloat = false;
+    
+    if (node.initializer) {
+        if (tryEvalConstant(node.initializer.get(), constVal)) {
+            isConst = true;
+        } else if (tryEvalConstantFloat(node.initializer.get(), floatVal)) {
+            isFloat = true;
+            node.initializer->accept(*this);
+        } else {
+            node.initializer->accept(*this);
+        }
+    }
+    
+    // Assign to all variables
+    for (const auto& name : node.names) {
+        if (node.isConst) {
+            // Constant declaration
+            if (isConst) {
+                constVars[name] = constVal;
+            } else if (isFloat) {
+                constFloatVars[name] = floatVal;
+            } else {
+                // Runtime constant - allocate and store
+                allocLocal(name);
+                int32_t offset = locals[name];
+                asm_.mov_mem_rbp_rax(offset);
+            }
+        } else {
+            // Variable declaration
+            allocLocal(name);
+            int32_t offset = locals[name];
+            
+            if (isConst) {
+                // Store constant value
+                asm_.mov_rax_imm64(constVal);
+                asm_.mov_mem_rbp_rax(offset);
+            } else if (isFloat) {
+                floatVars.insert(name);
+                asm_.movsd_mem_rbp_xmm0(offset);
+            } else {
+                // Store runtime value (already in RAX)
+                asm_.mov_mem_rbp_rax(offset);
+            }
+        }
+    }
+}
+
+void NativeCodeGen::visit(WalrusExpr& node) {
+    // (n := expr) - assign and return value
+    
+    // Evaluate the value expression
+    node.value->accept(*this);
+    
+    // Force walrus variables to stack - remove from register allocation
+    // This is necessary because walrus creates variables dynamically and
+    // the register allocator doesn't know about them at analysis time
+    varRegisters_.erase(node.varName);
+    
+    // Check if variable exists
+    auto it = locals.find(node.varName);
+    if (it == locals.end()) {
+        // Create new variable
+        allocLocal(node.varName);
+    }
+    
+    // Store the value
+    int32_t offset = locals[node.varName];
+    
+    if (lastExprWasFloat_) {
+        floatVars.insert(node.varName);
+        asm_.movsd_mem_rbp_xmm0(offset);
+        // Value is still in xmm0 for use in surrounding expression
+    } else {
+        asm_.mov_mem_rbp_rax(offset);
+        // Value is still in RAX for use in surrounding expression
+    }
+}
+
 
 } // namespace tyl

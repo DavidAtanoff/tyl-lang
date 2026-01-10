@@ -1,0 +1,9 @@
+// Test walrus operator in main (no inlining)
+
+fn main:
+    items = [1, 2, 3, 4, 5]
+    println("items created")
+    if (n := len(items)) > 0:
+        println("Length: ", n)
+
+main()

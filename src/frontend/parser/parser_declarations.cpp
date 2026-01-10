@@ -302,7 +302,7 @@ StmtPtr Parser::varDeclaration() {
         return decl;
     }
     
-    // Regular variable declaration
+    // Regular variable declaration - check for chained multi-assign: mut x = mut y = mut z = value
     auto name = consume(TokenType::IDENTIFIER, "Expected variable name").lexeme;
     
     std::string typeName;
@@ -312,6 +312,36 @@ StmtPtr Parser::varDeclaration() {
     
     ExprPtr init = nullptr;
     if (match(TokenType::ASSIGN)) {
+        // Check for chained mutable multi-assign: mut x = mut y = mut z = value
+        if (declType == TokenType::MUT && check(TokenType::MUT)) {
+            std::vector<std::string> names;
+            names.push_back(name);
+            
+            // Parse chain: mut y = mut z = value
+            while (match(TokenType::MUT)) {
+                auto nextName = consume(TokenType::IDENTIFIER, "Expected variable name").lexeme;
+                names.push_back(nextName);
+                
+                if (!match(TokenType::ASSIGN)) {
+                    // Error: expected = after variable name
+                    break;
+                }
+                
+                // Check if next is another 'mut' (chain continues) or value
+                if (!check(TokenType::MUT)) {
+                    // This is the value expression
+                    break;
+                }
+            }
+            
+            init = expression();
+            match(TokenType::NEWLINE);
+            
+            auto decl = std::make_unique<MultiVarDecl>(std::move(names), std::move(init), loc);
+            decl->isMutable = true;
+            return decl;
+        }
+        
         init = expression();
     }
     
@@ -372,7 +402,7 @@ StmtPtr Parser::fnDeclaration(bool requireBody) {
         consume(TokenType::RBRACKET, "Expected ']' after type parameters");
     }
     
-    fn->params = parseParams();
+    fn->params = parseParamsWithDefaults(fn->paramDefaults);
     
     if (match(TokenType::ARROW)) {
         fn->returnType = parseType();

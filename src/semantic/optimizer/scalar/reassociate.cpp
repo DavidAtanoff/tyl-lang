@@ -167,6 +167,9 @@ ExprPtr ReassociatePass::processExpression(ExprPtr& expr) {
     else if (auto* assign = dynamic_cast<AssignExpr*>(expr.get())) {
         assign->value = processExpression(assign->value);
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr.get())) {
+        walrus->value = processExpression(walrus->value);
+    }
     
     return std::move(expr);
 }
@@ -375,6 +378,13 @@ ExprPtr ReassociatePass::cloneExpr(Expression* expr) {
             cloneExpr(ternary->thenExpr.get()),
             cloneExpr(ternary->elseExpr.get()),
             ternary->location
+        );
+    }
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return std::make_unique<WalrusExpr>(
+            walrus->varName,
+            cloneExpr(walrus->value.get()),
+            walrus->location
         );
     }
     

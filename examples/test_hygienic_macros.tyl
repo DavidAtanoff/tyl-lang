@@ -1,0 +1,40 @@
+// Test hygienic macros - variables in macros should not clash with user variables
+
+// Define a macro that uses a local variable 'temp'
+macro swap a b:
+    temp = a
+    a = b
+    b = temp
+
+// User code with their own 'temp' variable
+fn main:
+    temp = 100  // User's temp variable
+    mut x = 1
+    mut y = 2
+    
+    println("Before swap:")
+    println("x = ", x)
+    println("y = ", y)
+    println("temp = ", temp)
+    
+    // Use the swap macro - should NOT affect user's temp
+    swap(x, y)
+    
+    println("\nAfter swap:")
+    println("x = ", x)
+    println("y = ", y)
+    println("temp = ", temp)  // Should still be 100!
+    
+    // Verify the swap worked
+    if x == 2 and y == 1:
+        println("\nSwap worked correctly!")
+    else:
+        println("\nSwap FAILED!")
+    
+    // Verify user's temp wasn't affected
+    if temp == 100:
+        println("Hygienic macros working - user's temp preserved!")
+    else:
+        println("HYGIENE FAILED - user's temp was overwritten!")
+
+main()

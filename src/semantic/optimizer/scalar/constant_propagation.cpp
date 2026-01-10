@@ -2,6 +2,7 @@
 // Tracks variable values and eliminates redundant comparisons
 #include "constant_propagation.h"
 #include <algorithm>
+#include <iostream>
 
 namespace tyl {
 
@@ -91,6 +92,9 @@ void ConstantPropagationPass::eliminateDeadStores(std::vector<StmtPtr>& statemen
             markReads(ternary->condition.get());
             markReads(ternary->thenExpr.get());
             markReads(ternary->elseExpr.get());
+        } else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+            // Walrus expression: (n := value) - mark the value as read
+            markReads(walrus->value.get());
         }
     };
     
@@ -399,8 +403,8 @@ void ConstantPropagationPass::optimizeAccumulators(std::vector<StmtPtr>& stateme
 
 void ConstantPropagationPass::processBlock(std::vector<StmtPtr>& statements) {
     // First pass: collect all variable assignments
-    for (auto& stmt : statements) {
-        processStatement(stmt);
+    for (size_t i = 0; i < statements.size(); ++i) {
+        processStatement(statements[i]);
     }
     
     // Remove statements marked for deletion (nullptr)
@@ -543,6 +547,7 @@ bool ConstantPropagationPass::processStatement(StmtPtr& stmt) {
         invalidateModifiedVars(forStmt->body.get());
         
         processStatement(forStmt->body);
+        
         return false;
     }
     
@@ -578,6 +583,35 @@ bool ConstantPropagationPass::processStatement(StmtPtr& stmt) {
         auto savedValues = knownValues_;
         knownValues_.clear();
         processStatement(fnDecl->body);
+        knownValues_ = savedValues;
+        return false;
+    }
+    
+    // Handle if-let statements
+    if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt.get())) {
+        // Propagate the value expression
+        auto propagated = propagateExpression(ifLetStmt->value);
+        if (propagated) {
+            ifLetStmt->value = std::move(propagated);
+        }
+        
+        // Propagate guard if present
+        if (ifLetStmt->guard) {
+            auto guardProp = propagateExpression(ifLetStmt->guard);
+            if (guardProp) {
+                ifLetStmt->guard = std::move(guardProp);
+            }
+        }
+        
+        // Process branches (save and restore known values)
+        auto savedValues = knownValues_;
+        processStatement(ifLetStmt->thenBranch);
+        
+        if (ifLetStmt->elseBranch) {
+            knownValues_ = savedValues;
+            processStatement(ifLetStmt->elseBranch);
+        }
+        
         knownValues_ = savedValues;
         return false;
     }

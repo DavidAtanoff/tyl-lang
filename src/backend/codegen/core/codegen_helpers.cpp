@@ -127,6 +127,11 @@ int32_t NativeCodeGen::calculateExprStackSize(Expression* expr) {
         maxStack = std::max(maxStack, calculateExprStackSize(ternary->thenExpr.get()));
         maxStack = std::max(maxStack, calculateExprStackSize(ternary->elseExpr.get()));
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression allocates a local variable (8 bytes)
+        maxStack = std::max(maxStack, (int32_t)8);
+        maxStack = std::max(maxStack, calculateExprStackSize(walrus->value.get()));
+    }
     
     return maxStack;
 }

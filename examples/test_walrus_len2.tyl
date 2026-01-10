@@ -1,0 +1,7 @@
+// Test walrus with len
+fn main:
+    items = [1, 2, 3]
+    if (n := len(items)) > 0:
+        println("len=", n)
+
+main()

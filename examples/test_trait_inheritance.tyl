@@ -1,0 +1,66 @@
+// Test trait inheritance and more complex patterns
+
+// Base trait
+trait Animal:
+    fn speak self -> str:
+        return "..."
+    
+    fn name self -> str:
+        return "unknown"
+
+// Derived trait (inherits from Animal)
+trait Pet: Animal:
+    fn play self:
+        println(self.name(), " is playing!")
+
+// Record types
+record Dog:
+    dog_name: str
+
+record Cat:
+    cat_name: str
+
+// Implement Animal for Dog
+impl Animal for Dog:
+    fn speak self -> str:
+        return "Woof!"
+    
+    fn name self -> str:
+        return self.dog_name
+
+// Implement Pet for Dog
+impl Pet for Dog:
+    fn play self:
+        println(self.dog_name, " is fetching!")
+
+// Implement Animal for Cat
+impl Animal for Cat:
+    fn speak self -> str:
+        return "Meow!"
+    
+    fn name self -> str:
+        return self.cat_name
+
+// Implement Pet for Cat
+impl Pet for Cat:
+    fn play self:
+        println(self.cat_name, " is chasing a laser!")
+
+// Generic function
+fn make_speak[T: Animal] animal: T:
+    sound = animal.speak()
+    println(animal.name(), " says: ", sound)
+
+fn main:
+    dog = Dog { dog_name: "Buddy" }
+    cat = Cat { cat_name: "Whiskers" }
+    
+    println("=== Animal sounds ===")
+    make_speak(dog)
+    make_speak(cat)
+    
+    println("\n=== Pet play ===")
+    dog.play()
+    cat.play()
+
+main()

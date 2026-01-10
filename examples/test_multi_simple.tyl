@@ -1,0 +1,10 @@
+// Simple test for multi-assignment
+
+fn main:
+    // Test multi-assignment
+    a = b = c = 42
+    println("a=", a)
+    println("b=", b)
+    println("c=", c)
+
+main()

@@ -1,0 +1,14 @@
+// Debug walrus operator
+
+fn test_walrus:
+    items = [1, 2, 3, 4, 5]
+    println("items created")
+    n = len(items)
+    println("len=", n)
+    if n > 0:
+        println("Length: ", n)
+
+fn main:
+    test_walrus()
+
+main()

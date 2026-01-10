@@ -416,8 +416,110 @@ void NativeCodeGen::visit(FnDecl& node) {
         }
     }
     
-    // Increased base stack for builtin internal locals
-    int32_t baseStack = 0x200;
+    // Calculate stack size based on actual needs
+    // Count local variables and temporaries needed
+    int32_t localVarCount = 0;
+    int32_t maxCallArgs = 0;
+    
+    // Helper to scan expressions for WalrusExpr and CallExpr
+    std::function<void(Expression*)> scanExpr = [&](Expression* expr) {
+        if (!expr) return;
+        
+        // WalrusExpr creates a new local variable
+        if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+            localVarCount++;
+            scanExpr(walrus->value.get());
+        }
+        else if (auto* call = dynamic_cast<CallExpr*>(expr)) {
+            maxCallArgs = std::max(maxCallArgs, (int32_t)call->args.size());
+            scanExpr(call->callee.get());
+            for (auto& arg : call->args) {
+                scanExpr(arg.get());
+            }
+        }
+        else if (auto* binary = dynamic_cast<BinaryExpr*>(expr)) {
+            scanExpr(binary->left.get());
+            scanExpr(binary->right.get());
+        }
+        else if (auto* unary = dynamic_cast<UnaryExpr*>(expr)) {
+            scanExpr(unary->operand.get());
+        }
+        else if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {
+            scanExpr(ternary->condition.get());
+            scanExpr(ternary->thenExpr.get());
+            scanExpr(ternary->elseExpr.get());
+        }
+        else if (auto* index = dynamic_cast<IndexExpr*>(expr)) {
+            scanExpr(index->object.get());
+            scanExpr(index->index.get());
+        }
+        else if (auto* member = dynamic_cast<MemberExpr*>(expr)) {
+            scanExpr(member->object.get());
+        }
+        else if (auto* assign = dynamic_cast<AssignExpr*>(expr)) {
+            scanExpr(assign->target.get());
+            scanExpr(assign->value.get());
+        }
+        else if (auto* array = dynamic_cast<ListExpr*>(expr)) {
+            for (auto& elem : array->elements) {
+                scanExpr(elem.get());
+            }
+        }
+    };
+    
+    // Scan function body to count locals and max call arguments
+    std::function<void(Statement*)> countLocals = [&](Statement* stmt) {
+        if (!stmt) return;
+        
+        if (auto* block = dynamic_cast<Block*>(stmt)) {
+            for (auto& s : block->statements) {
+                countLocals(s.get());
+            }
+        }
+        else if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+            localVarCount++;
+            scanExpr(varDecl->initializer.get());
+        }
+        else if (auto* multiVarDecl = dynamic_cast<MultiVarDecl*>(stmt)) {
+            localVarCount += (int32_t)multiVarDecl->names.size();
+            scanExpr(multiVarDecl->initializer.get());
+        }
+        else if (auto* forStmt = dynamic_cast<ForStmt*>(stmt)) {
+            localVarCount += 3;  // loop var, $end, possibly $step
+            scanExpr(forStmt->iterable.get());
+            countLocals(forStmt->body.get());
+        }
+        else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt)) {
+            scanExpr(whileStmt->condition.get());
+            countLocals(whileStmt->body.get());
+        }
+        else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+            scanExpr(ifStmt->condition.get());
+            countLocals(ifStmt->thenBranch.get());
+            for (auto& elif : ifStmt->elifBranches) {
+                scanExpr(elif.first.get());
+                countLocals(elif.second.get());
+            }
+            countLocals(ifStmt->elseBranch.get());
+        }
+        else if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt)) {
+            scanExpr(exprStmt->expr.get());
+        }
+        else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
+            scanExpr(assignStmt->value.get());
+        }
+        else if (auto* returnStmt = dynamic_cast<ReturnStmt*>(stmt)) {
+            scanExpr(returnStmt->value.get());
+        }
+    };
+    
+    countLocals(node.body.get());
+    
+    // Base stack: locals + parameters + some temporaries
+    // Each local needs 8 bytes, plus shadow space for calls (0x20)
+    int32_t baseStack = (localVarCount + (int32_t)node.params.size() + 8) * 8;  // 8 extra slots for temporaries
+    baseStack = std::max(baseStack, (int32_t)0x40);  // Minimum 64 bytes
+    
     int32_t callStack = calculateFunctionStackSize(node.body.get());
     
     if (isLeafFunction_) {
@@ -460,13 +562,28 @@ void NativeCodeGen::visit(FnDecl& node) {
         return;
     }
     
-    if (isLeafFunction_ && varRegisters_.size() == node.params.size() && node.params.size() <= 4) {
+    // Only use simplified leaf function prologue if there are no local variables
+    // (including those created by walrus expressions)
+    if (isLeafFunction_ && varRegisters_.size() == node.params.size() && node.params.size() <= 4 && localVarCount == 0) {
         emitSaveCalleeSavedRegs();
         
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
             // Only mark string parameters in constStrVars
             const std::string& paramType = node.params[i].second;
-            if (paramType == "str" || paramType == "string" || paramType == "String") {
+            bool isStringParam = (paramType == "str" || paramType == "string" || paramType == "String");
+            
+            // Also check inferred parameter types from call sites
+            if (!isStringParam) {
+                auto fnIt = inferredParamTypes_.find(node.name);
+                if (fnIt != inferredParamTypes_.end()) {
+                    auto paramIt = fnIt->second.find(i);
+                    if (paramIt != fnIt->second.end() && paramIt->second == "str") {
+                        isStringParam = true;
+                    }
+                }
+            }
+            
+            if (isStringParam) {
                 constStrVars[node.params[i].first] = "";  // Empty means runtime string
             }
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
@@ -488,6 +605,12 @@ void NativeCodeGen::visit(FnDecl& node) {
             }
             if (recordTypes_.find(paramTypeName) != recordTypes_.end()) {
                 varRecordTypes_[node.params[i].first] = paramTypeName;
+            }
+            // Track self parameter's record type from impl block context
+            if (node.params[i].first == "self" && !currentImplTypeName_.empty()) {
+                if (recordTypes_.find(currentImplTypeName_) != recordTypes_.end()) {
+                    varRecordTypes_["self"] = currentImplTypeName_;
+                }
             }
             // Track borrow parameters for auto-dereference on return
             if (!paramType.empty() && paramType[0] == '&') {
@@ -517,7 +640,20 @@ void NativeCodeGen::visit(FnDecl& node) {
         for (size_t i = 0; i < node.params.size() && i < 4; i++) {
             // Only mark string parameters in constStrVars
             const std::string& paramType = node.params[i].second;
-            if (paramType == "str" || paramType == "string" || paramType == "String") {
+            bool isStringParam = (paramType == "str" || paramType == "string" || paramType == "String");
+            
+            // Also check inferred parameter types from call sites
+            if (!isStringParam) {
+                auto fnIt = inferredParamTypes_.find(node.name);
+                if (fnIt != inferredParamTypes_.end()) {
+                    auto paramIt = fnIt->second.find(i);
+                    if (paramIt != fnIt->second.end() && paramIt->second == "str") {
+                        isStringParam = true;
+                    }
+                }
+            }
+            
+            if (isStringParam) {
                 constStrVars[node.params[i].first] = "";  // Empty means runtime string
             }
             emitMoveParamToVar((int)i, node.params[i].first, node.params[i].second);
@@ -540,6 +676,12 @@ void NativeCodeGen::visit(FnDecl& node) {
             if (recordTypes_.find(paramTypeName) != recordTypes_.end()) {
                 varRecordTypes_[node.params[i].first] = paramTypeName;
             }
+            // Track self parameter's record type from impl block context
+            if (node.params[i].first == "self" && !currentImplTypeName_.empty()) {
+                if (recordTypes_.find(currentImplTypeName_) != recordTypes_.end()) {
+                    varRecordTypes_["self"] = currentImplTypeName_;
+                }
+            }
             // Track borrow parameters for auto-dereference on return
             if (!paramType.empty() && paramType[0] == '&') {
                 // Extract base type: "&int" -> "int", "&mut int" -> "int"
@@ -561,7 +703,9 @@ void NativeCodeGen::visit(FnDecl& node) {
     if (!endsWithTerminator(node.body.get())) {
         asm_.xor_rax_rax();
         
-        if (isLeafFunction_ && varRegisters_.size() == node.params.size() && node.params.size() <= 4) {
+        // Use stackAllocated_ to determine epilogue style
+        // This matches the prologue decision
+        if (!stackAllocated_) {
             emitRestoreCalleeSavedRegs();
         } else {
             asm_.add_rsp_imm32(functionStackSize_);

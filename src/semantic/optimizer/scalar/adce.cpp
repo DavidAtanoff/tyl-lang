@@ -241,6 +241,10 @@ void ADCEPass::computeDefUseExpr(Expression* expr, std::set<std::string>& uses) 
         computeDefUseExpr(range->end.get(), uses);
         if (range->step) computeDefUseExpr(range->step.get(), uses);
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression: (n := value) - the value is used
+        computeDefUseExpr(walrus->value.get(), uses);
+    }
     else if (auto* interp = dynamic_cast<InterpolatedString*>(expr)) {
         for (auto& part : interp->parts) {
             if (std::holds_alternative<ExprPtr>(part)) {
@@ -396,6 +400,10 @@ bool ADCEPass::containsFunctionCall(Expression* expr) {
         }
     }
     
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return containsFunctionCall(walrus->value.get());
+    }
+    
     return false;
 }
 
@@ -432,6 +440,10 @@ bool ADCEPass::exprHasSideEffects(Expression* expr) {
     
     if (auto* assignExpr = dynamic_cast<AssignExpr*>(expr)) {
         return true;  // Assignments have side effects
+    }
+    
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return true;  // Walrus creates a variable - has side effects
     }
     
     if (auto* ternary = dynamic_cast<TernaryExpr*>(expr)) {

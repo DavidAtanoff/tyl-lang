@@ -196,6 +196,15 @@ StmtPtr MacroExpander::cloneStmt(Statement* stmt, const std::unordered_map<std::
     }
     
     if (auto* varDecl = dynamic_cast<VarDecl*>(stmt)) {
+        // Check if this variable name is a macro parameter - if so, convert to assignment
+        auto paramIt = params.find(varDecl->name);
+        if (paramIt != params.end() && varDecl->initializer) {
+            // This is an assignment to a macro parameter, convert to AssignStmt
+            return std::make_unique<AssignStmt>(
+                cloneExpr(paramIt->second, {}), TokenType::ASSIGN,
+                cloneExpr(varDecl->initializer.get(), params), varDecl->location);
+        }
+        
         auto newDecl = std::make_unique<VarDecl>(
             varDecl->name, varDecl->typeName,
             varDecl->initializer ? cloneExpr(varDecl->initializer.get(), params) : nullptr,

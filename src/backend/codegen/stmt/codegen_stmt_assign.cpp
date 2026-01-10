@@ -59,6 +59,23 @@ void NativeCodeGen::visit(DestructuringDecl& node) {
         }
     }
     
+    // Fallback: destructure from a variable (e.g., let (a, b, c) = nums)
+    // Check if the initializer is an identifier pointing to a constant list
+    if (auto* ident = dynamic_cast<Identifier*>(node.initializer.get())) {
+        auto constListIt = constListVars.find(ident->name);
+        if (constListIt != constListVars.end()) {
+            // Destructure from constant list - values are known at compile time
+            for (size_t i = 0; i < node.names.size() && i < constListIt->second.size(); i++) {
+                asm_.mov_rax_imm64(constListIt->second[i]);
+                allocLocal(node.names[i]);
+                asm_.mov_mem_rbp_rax(locals[node.names[i]]);
+                constVars[node.names[i]] = constListIt->second[i];
+            }
+            return;
+        }
+    }
+    
+    // For lists, the data starts at offset 16 (after length and capacity)
     node.initializer->accept(*this);
     
     allocLocal("$destruct_base");
@@ -67,10 +84,10 @@ void NativeCodeGen::visit(DestructuringDecl& node) {
     for (size_t i = 0; i < node.names.size(); i++) {
         asm_.mov_rax_mem_rbp(locals["$destruct_base"]);
         
-        if (i > 0) {
-            asm_.mov_rcx_imm64(i * 8);
-            asm_.add_rax_rcx();
-        }
+        // Skip list header (16 bytes) and add element offset
+        int64_t offset = 16 + i * 8;
+        asm_.mov_rcx_imm64(offset);
+        asm_.add_rax_rcx();
         
         asm_.mov_rax_mem_rax();
         

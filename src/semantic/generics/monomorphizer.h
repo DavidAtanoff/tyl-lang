@@ -256,6 +256,10 @@ public:
     void visit(HasFieldExpr& node) override;
     void visit(HasMethodExpr& node) override;
     void visit(FieldTypeExpr& node) override;
+    // New Syntax Enhancements
+    void visit(IfLetStmt& node) override;
+    void visit(MultiVarDecl& node) override;
+    void visit(WalrusExpr& node) override;
     void visit(Program& node) override;
     
 private:

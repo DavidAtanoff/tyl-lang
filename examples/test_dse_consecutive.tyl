@@ -1,0 +1,14 @@
+// Test consecutive dead store elimination
+fn test_consecutive_stores() -> int {
+    mut x := 0
+    x = 100    // Dead - immediately overwritten
+    x = 200    // Dead - immediately overwritten  
+    x = 300    // This one is used
+    return x
+}
+
+fn main() -> int {
+    result := test_consecutive_stores()
+    print("Result: {result}")
+    return result - 300  // Should return 0
+}

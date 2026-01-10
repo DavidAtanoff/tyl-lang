@@ -222,10 +222,22 @@ void NativeCodeGen::visit(ImplBlock& node) {
         
         std::string originalName = method->name;
         method->name = mangledName;
+        
+        // Set current impl type so self parameter gets correct record type
+        currentImplTypeName_ = node.typeName;
         method->accept(*this);
+        currentImplTypeName_.clear();
+        
         method->name = originalName;
         
         info.methodLabels[originalName] = mangledName;
+        info.methodReturnTypes[originalName] = method->returnType;
+        
+        // Track string-returning methods
+        if (method->returnType == "str" || method->returnType == "string" ||
+            method->returnType == "*str" || method->returnType == "*u8") {
+            stringReturningFunctions_.insert(mangledName);
+        }
     }
     
     impls_[implKey] = info;

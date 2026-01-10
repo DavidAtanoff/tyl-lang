@@ -119,22 +119,34 @@ void DeadArgElimPass::collectCallSitesInStmt(Statement* stmt) {
     }
     else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
         collectCallSitesInExpr(ifStmt->condition.get());
-        if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
-            for (auto& s : thenBlock->statements) {
-                collectCallSitesInStmt(s.get());
+        if (ifStmt->thenBranch) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                for (auto& s : thenBlock->statements) {
+                    collectCallSitesInStmt(s.get());
+                }
+            } else {
+                collectCallSitesInStmt(ifStmt->thenBranch.get());
             }
         }
         for (auto& elif : ifStmt->elifBranches) {
             collectCallSitesInExpr(elif.first.get());
-            if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
-                for (auto& s : elifBlock->statements) {
-                    collectCallSitesInStmt(s.get());
+            if (elif.second) {
+                if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
+                    for (auto& s : elifBlock->statements) {
+                        collectCallSitesInStmt(s.get());
+                    }
+                } else {
+                    collectCallSitesInStmt(elif.second.get());
                 }
             }
         }
-        if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
-            for (auto& s : elseBlock->statements) {
-                collectCallSitesInStmt(s.get());
+        if (ifStmt->elseBranch) {
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                for (auto& s : elseBlock->statements) {
+                    collectCallSitesInStmt(s.get());
+                }
+            } else {
+                collectCallSitesInStmt(ifStmt->elseBranch.get());
             }
         }
     }
@@ -235,21 +247,33 @@ void DeadArgElimPass::collectCallbacksInStmt(Statement* stmt) {
         }
     }
     else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
-        if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
-            for (auto& s : thenBlock->statements) {
-                collectCallbacksInStmt(s.get());
+        if (ifStmt->thenBranch) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                for (auto& s : thenBlock->statements) {
+                    collectCallbacksInStmt(s.get());
+                }
+            } else {
+                collectCallbacksInStmt(ifStmt->thenBranch.get());
             }
         }
         for (auto& elif : ifStmt->elifBranches) {
-            if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
-                for (auto& s : elifBlock->statements) {
-                    collectCallbacksInStmt(s.get());
+            if (elif.second) {
+                if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
+                    for (auto& s : elifBlock->statements) {
+                        collectCallbacksInStmt(s.get());
+                    }
+                } else {
+                    collectCallbacksInStmt(elif.second.get());
                 }
             }
         }
-        if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
-            for (auto& s : elseBlock->statements) {
-                collectCallbacksInStmt(s.get());
+        if (ifStmt->elseBranch) {
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                for (auto& s : elseBlock->statements) {
+                    collectCallbacksInStmt(s.get());
+                }
+            } else {
+                collectCallbacksInStmt(ifStmt->elseBranch.get());
             }
         }
     }
@@ -343,22 +367,34 @@ bool DeadArgElimPass::isArgUsedInStmt(Statement* stmt, const std::string& argNam
     }
     else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
         if (isArgUsedInExpr(ifStmt->condition.get(), argName)) return true;
-        if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
-            for (auto& s : thenBlock->statements) {
-                if (isArgUsedInStmt(s.get(), argName)) return true;
+        if (ifStmt->thenBranch) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifStmt->thenBranch.get())) {
+                for (auto& s : thenBlock->statements) {
+                    if (isArgUsedInStmt(s.get(), argName)) return true;
+                }
+            } else {
+                if (isArgUsedInStmt(ifStmt->thenBranch.get(), argName)) return true;
             }
         }
         for (auto& elif : ifStmt->elifBranches) {
             if (isArgUsedInExpr(elif.first.get(), argName)) return true;
-            if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
-                for (auto& s : elifBlock->statements) {
-                    if (isArgUsedInStmt(s.get(), argName)) return true;
+            if (elif.second) {
+                if (auto* elifBlock = dynamic_cast<Block*>(elif.second.get())) {
+                    for (auto& s : elifBlock->statements) {
+                        if (isArgUsedInStmt(s.get(), argName)) return true;
+                    }
+                } else {
+                    if (isArgUsedInStmt(elif.second.get(), argName)) return true;
                 }
             }
         }
-        if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
-            for (auto& s : elseBlock->statements) {
-                if (isArgUsedInStmt(s.get(), argName)) return true;
+        if (ifStmt->elseBranch) {
+            if (auto* elseBlock = dynamic_cast<Block*>(ifStmt->elseBranch.get())) {
+                for (auto& s : elseBlock->statements) {
+                    if (isArgUsedInStmt(s.get(), argName)) return true;
+                }
+            } else {
+                if (isArgUsedInStmt(ifStmt->elseBranch.get(), argName)) return true;
             }
         }
     }
@@ -381,6 +417,33 @@ bool DeadArgElimPass::isArgUsedInStmt(Statement* stmt, const std::string& argNam
     else if (auto* block = dynamic_cast<Block*>(stmt)) {
         for (auto& s : block->statements) {
             if (isArgUsedInStmt(s.get(), argName)) return true;
+        }
+    }
+    else if (auto* matchStmt = dynamic_cast<MatchStmt*>(stmt)) {
+        // Check if argument is used in match value
+        if (isArgUsedInExpr(matchStmt->value.get(), argName)) return true;
+        // Check all cases
+        for (auto& case_ : matchStmt->cases) {
+            if (case_.pattern && isArgUsedInExpr(case_.pattern.get(), argName)) return true;
+            if (case_.guard && isArgUsedInExpr(case_.guard.get(), argName)) return true;
+            if (case_.body) {
+                if (auto* caseBlock = dynamic_cast<Block*>(case_.body.get())) {
+                    for (auto& s : caseBlock->statements) {
+                        if (isArgUsedInStmt(s.get(), argName)) return true;
+                    }
+                } else {
+                    if (isArgUsedInStmt(case_.body.get(), argName)) return true;
+                }
+            }
+        }
+        if (matchStmt->defaultCase) {
+            if (auto* defaultBlock = dynamic_cast<Block*>(matchStmt->defaultCase.get())) {
+                for (auto& s : defaultBlock->statements) {
+                    if (isArgUsedInStmt(s.get(), argName)) return true;
+                }
+            } else {
+                if (isArgUsedInStmt(matchStmt->defaultCase.get(), argName)) return true;
+            }
         }
     }
     

@@ -80,6 +80,7 @@ private:
     StmtPtr statement();
     StmtPtr expressionStatement();
     StmtPtr ifStatement();
+    StmtPtr ifLetStatement();  // if let pattern = expr: body
     StmtPtr whileStatement(const std::string& label = "");
     StmtPtr forStatement(const std::string& label = "");
     StmtPtr matchStatement();
@@ -90,6 +91,7 @@ private:
     StmtPtr lockStatement();
     StmtPtr block();
     StmtPtr braceBlock();  // Brace-delimited block { ... }
+    StmtPtr endBlock();    // Lua-style block terminated by 'end'
     // New syntax redesign statements
     StmtPtr unlessStatement();
     StmtPtr loopStatement(const std::string& label = "");
@@ -141,6 +143,7 @@ private:
     // Type and helper parsing (parser_types.cpp)
     std::string parseType();
     std::vector<std::pair<std::string, std::string>> parseParams();
+    std::vector<std::pair<std::string, std::string>> parseParamsWithDefaults(std::vector<ExprPtr>& defaults);
     void parseCallArgs(CallExpr* call);
     ExprPtr parseDSLBlock(const std::string& dslName, SourceLocation loc);
     std::string captureRawBlock();

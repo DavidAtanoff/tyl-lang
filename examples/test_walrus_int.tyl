@@ -1,0 +1,8 @@
+// Debug walrus with simple int
+fn main:
+    x = 42
+    println("x=", x)
+    y := x
+    println("y=", y)
+
+main()

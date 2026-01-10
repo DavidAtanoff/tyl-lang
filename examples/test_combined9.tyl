@@ -1,0 +1,11 @@
+// Test walrus in if with simple value
+fn test3:
+    println("test3")
+    x = 5
+    if (n := x) > 0:
+        println("n=", n)
+
+fn main:
+    test3()
+
+main()

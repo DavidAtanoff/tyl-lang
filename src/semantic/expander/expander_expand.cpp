@@ -209,14 +209,41 @@ ExprPtr MacroExpander::expandMacroCall(const std::string& name, const std::vecto
         paramMap[macro->params[i]] = args[i].get();
     }
     
+    // Hygienic macro expansion: collect local variables and rename them
+    std::unordered_map<std::string, std::string> renames;
+    std::unordered_set<std::string> injected;
+    
+    if (macro->isHygienic && macro->body) {
+        // Collect all local variables declared in the macro body
+        std::unordered_set<std::string> localVars;
+        for (auto& stmt : *macro->body) {
+            collectLocalVars(stmt.get(), localVars);
+        }
+        
+        // Create hygienic renames for local variables (not parameters)
+        for (const auto& var : localVars) {
+            if (paramMap.find(var) == paramMap.end()) {
+                renames[var] = renameHygienic(var);
+            }
+        }
+    }
+    
     if (macro->body && !macro->body->empty()) {
         Statement* lastStmt = macro->body->back().get();
         
         if (auto* exprStmt = dynamic_cast<ExprStmt*>(lastStmt)) {
+            if (macro->isHygienic && !renames.empty()) {
+                return cloneExprHygienic(exprStmt->expr.get(), paramMap, renames, injected);
+            }
             return cloneExpr(exprStmt->expr.get(), paramMap);
         }
         if (auto* retStmt = dynamic_cast<ReturnStmt*>(lastStmt)) {
-            if (retStmt->value) return cloneExpr(retStmt->value.get(), paramMap);
+            if (retStmt->value) {
+                if (macro->isHygienic && !renames.empty()) {
+                    return cloneExprHygienic(retStmt->value.get(), paramMap, renames, injected);
+                }
+                return cloneExpr(retStmt->value.get(), paramMap);
+            }
         }
         if (auto* ifStmt = dynamic_cast<IfStmt*>(lastStmt)) {
             return convertIfToTernary(ifStmt, paramMap, loc);
@@ -253,6 +280,42 @@ std::vector<StmtPtr> MacroExpander::expandStatementMacro(const std::string& name
     
     for (size_t i = 0; i < argCount; i++) {
         paramMap[macro->params[i]] = args[i].get();
+    }
+    
+    // Hygienic macro expansion: collect local variables and rename them
+    std::unordered_map<std::string, std::string> renames;
+    std::unordered_set<std::string> injected;
+    
+    if (macro->isHygienic && macro->body) {
+        // Collect all local variables declared in the macro body
+        std::unordered_set<std::string> localVars;
+        for (auto& stmt : *macro->body) {
+            collectLocalVars(stmt.get(), localVars);
+        }
+        
+        // Create hygienic renames for local variables (not parameters)
+        for (const auto& var : localVars) {
+            if (paramMap.find(var) == paramMap.end()) {
+                renames[var] = renameHygienic(var);
+            }
+        }
+    }
+    
+    // Use hygienic cloning if we have renames
+    if (macro->isHygienic && !renames.empty()) {
+        std::vector<StmtPtr> result;
+        for (auto& stmt : *macro->body) {
+            if (auto* exprStmt = dynamic_cast<ExprStmt*>(stmt.get())) {
+                if (auto* ident = dynamic_cast<Identifier*>(exprStmt->expr.get())) {
+                    if (blockArg && (ident->name == "body" || ident->name == "block" || ident->name == "content")) {
+                        result.push_back(cloneStmtHygienic(blockArg.get(), paramMap, renames, injected));
+                        continue;
+                    }
+                }
+            }
+            result.push_back(cloneStmtHygienic(stmt.get(), paramMap, renames, injected));
+        }
+        return result;
     }
     
     return cloneStmts(*macro->body, paramMap, blockArg.get());

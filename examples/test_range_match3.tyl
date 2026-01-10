@@ -1,0 +1,18 @@
+// Test: Range patterns with inline return - debug
+
+fn get_grade score: int -> str:
+    println("In get_grade, score = ", score)
+    match score:
+        90..100:
+            println("Matched 90..100")
+            return "A"
+        80..89:
+            println("Matched 80..89")
+            return "B"
+        _:
+            println("Matched default")
+            return "F"
+
+fn main:
+    let g = get_grade(95)
+    println("Grade: ", g)

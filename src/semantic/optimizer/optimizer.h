@@ -42,6 +42,10 @@ class JumpThreadingPass;
 class LoopRotationPass;
 class IndVarSimplifyPass;
 
+// New loop optimization passes (January 2026 - Phase 4)
+class LoopUnswitchPass;
+class LoopPeelingPass;
+
 // New optimization passes (January 2026 - Phase 2)
 class LoopDeletionPass;
 class LoopIdiomRecognitionPass;

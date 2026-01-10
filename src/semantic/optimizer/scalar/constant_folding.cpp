@@ -124,6 +124,25 @@ void ConstantFoldingPass::processStatement(StmtPtr& stmt) {
     else if (auto* moduleDecl = dynamic_cast<ModuleDecl*>(stmt.get())) {
         processBlock(moduleDecl->body);
     }
+    else if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt.get())) {
+        // Fold value expression
+        if (ifLetStmt->value) {
+            auto folded = foldExpression(ifLetStmt->value);
+            if (folded) {
+                ifLetStmt->value = std::move(folded);
+            }
+        }
+        // Fold guard if present
+        if (ifLetStmt->guard) {
+            auto folded = foldExpression(ifLetStmt->guard);
+            if (folded) {
+                ifLetStmt->guard = std::move(folded);
+            }
+        }
+        // Process branches
+        processStatement(ifLetStmt->thenBranch);
+        processStatement(ifLetStmt->elseBranch);
+    }
 }
 
 ExprPtr ConstantFoldingPass::foldExpression(ExprPtr& expr) {

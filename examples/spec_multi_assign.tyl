@@ -1,0 +1,155 @@
+// Flex Syntax Specification - Multi-Variable Assignment
+// This file tests the proposed multi-assignment syntax
+
+// ===========================================
+// 1. Basic Multi-Assignment
+// ===========================================
+
+fn test_basic:
+    println("=== Basic Multi-Assignment ===")
+    
+    // Assign same value to multiple variables
+    a = b = c = 42
+    
+    println("a = ", a)  // 42
+    println("b = ", b)  // 42
+    println("c = ", c)  // 42
+
+// ===========================================
+// 2. Multi-Assignment with Mutable
+// ===========================================
+
+fn test_mutable:
+    println("=== Mutable Multi-Assignment ===")
+    
+    // All mutable, same initial value
+    mut x = mut y = mut z = 0
+    
+    // Modify independently
+    x += 1
+    y += 2
+    z += 3
+    
+    println("x = ", x)  // 1
+    println("y = ", y)  // 2
+    println("z = ", z)  // 3
+
+// ===========================================
+// 3. Multi-Assignment Constants
+// ===========================================
+
+// Same constant value for multiple names
+WIDTH :: HEIGHT :: 100
+RED :: GREEN :: BLUE :: 0
+
+fn test_constants:
+    println("=== Constant Multi-Assignment ===")
+    println("WIDTH = ", WIDTH)    // 100
+    println("HEIGHT = ", HEIGHT)  // 100
+    println("RED = ", RED)        // 0
+
+// ===========================================
+// 4. Expression Evaluation
+// ===========================================
+
+fn get_value -> int:
+    println("  (get_value called)")
+    return 42
+
+fn test_evaluation:
+    println("=== Expression Evaluation ===")
+    
+    // Expression evaluated ONCE, result assigned to all
+    a = b = c = get_value()
+    // Should print "(get_value called)" only ONCE
+    
+    println("a = ", a)
+    println("b = ", b)
+    println("c = ", c)
+
+// ===========================================
+// 5. Chained Assignment in Expressions
+// ===========================================
+
+fn test_chained:
+    println("=== Chained Assignment ===")
+    
+    mut a = 0
+    mut b = 0
+    mut c = 0
+    
+    // Assignment returns the value (like C)
+    result = (a = b = c = 10)
+    
+    println("result = ", result)  // 10
+    println("a = ", a)            // 10
+    println("b = ", b)            // 10
+    println("c = ", c)            // 10
+
+// ===========================================
+// 6. Mixed with Type Annotations
+// ===========================================
+
+fn test_typed:
+    println("=== Typed Multi-Assignment ===")
+    
+    // Type annotation applies to all
+    a: int = b: int = c: int = 0
+    
+    // Or just annotate first (others inferred)
+    x: float = y = z = 3.14
+    
+    println("a = ", a)
+    println("x = ", x)
+
+// ===========================================
+// 7. Comparison with Destructuring
+// ===========================================
+
+fn test_comparison:
+    println("=== Multi-Assign vs Destructuring ===")
+    
+    // Multi-assign: ALL get SAME value
+    a = b = c = 1
+    println("Multi: a=", a, " b=", b, " c=", c)  // 1, 1, 1
+    
+    // Destructuring: DIFFERENT values from tuple
+    (x, y, z) = (1, 2, 3)
+    println("Destruct: x=", x, " y=", y, " z=", z)  // 1, 2, 3
+
+// ===========================================
+// 8. Practical Use Cases
+// ===========================================
+
+fn test_practical:
+    println("=== Practical Examples ===")
+    
+    // Initialize counters
+    mut read_count = mut write_count = mut error_count = 0
+    
+    // Initialize coordinates
+    mut x = mut y = mut z = 0.0
+    
+    // Initialize flags
+    mut done = mut cancelled = mut paused = false
+    
+    // Reset multiple values
+    x = y = z = 0.0
+    
+    println("Counters initialized to 0")
+    println("Coordinates: ", x, ", ", y, ", ", z)
+
+// ===========================================
+// Main
+// ===========================================
+
+fn main:
+    test_basic()
+    test_mutable()
+    test_constants()
+    test_evaluation()
+    test_chained()
+    test_typed()
+    test_comparison()
+    test_practical()
+    println("=== All Multi-Assignment Tests Complete ===")

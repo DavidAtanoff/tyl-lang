@@ -6,17 +6,46 @@
 namespace tyl {
 
 void NativeCodeGen::emitStandardFunctionCall(CallExpr& node, const std::string& callTarget) {
-    for (int i = (int)node.args.size() - 1; i >= 0; i--) {
-        node.args[i]->accept(*this);
+    // Check if we need to fill in default parameters
+    size_t providedArgs = node.args.size();
+    size_t totalArgs = providedArgs;
+    
+    // Look up function declaration for default parameters
+    auto fnIt = functionDecls_.find(callTarget);
+    if (fnIt != functionDecls_.end()) {
+        FnDecl* fn = fnIt->second;
+        size_t requiredParams = fn->params.size();
+        
+        // If fewer args provided than params, check for defaults
+        if (providedArgs < requiredParams && !fn->paramDefaults.empty()) {
+            totalArgs = requiredParams;
+        }
+    }
+    
+    // Push arguments in reverse order (including defaults)
+    for (int i = (int)totalArgs - 1; i >= 0; i--) {
+        if (i < (int)providedArgs) {
+            // Use provided argument
+            node.args[i]->accept(*this);
+        } else if (fnIt != functionDecls_.end()) {
+            // Use default value
+            FnDecl* fn = fnIt->second;
+            if (i < (int)fn->paramDefaults.size() && fn->paramDefaults[i]) {
+                fn->paramDefaults[i]->accept(*this);
+            } else {
+                // No default - push 0 (shouldn't happen if type checker is correct)
+                asm_.xor_rax_rax();
+            }
+        }
         asm_.push_rax();
     }
     
-    if (node.args.size() >= 1) asm_.pop_rcx();
-    if (node.args.size() >= 2) asm_.pop_rdx();
-    if (node.args.size() >= 3) {
+    if (totalArgs >= 1) asm_.pop_rcx();
+    if (totalArgs >= 2) asm_.pop_rdx();
+    if (totalArgs >= 3) {
         asm_.code.push_back(0x41); asm_.code.push_back(0x58); // pop r8
     }
-    if (node.args.size() >= 4) {
+    if (totalArgs >= 4) {
         asm_.code.push_back(0x41); asm_.code.push_back(0x59); // pop r9
     }
     

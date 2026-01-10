@@ -1,0 +1,185 @@
+// Flex Syntax Specification - Associated Types & Complex Traits
+// This file tests the proposed trait system extensions
+
+// ===========================================
+// 1. Basic Associated Type
+// ===========================================
+
+trait Iterator:
+    type Item                      // Associated type (no default)
+    fn next self -> Item?
+    fn has_next self -> bool
+
+record RangeIter:
+    current: int
+    end: int
+
+impl Iterator for RangeIter:
+    type Item = int                // Specify the associated type
+    
+    fn next self -> int?:
+        if self.current >= self.end:
+            return nil
+        result = self.current
+        self.current += 1
+        return result
+    
+    fn has_next self -> bool:
+        return self.current < self.end
+
+// ===========================================
+// 2. Associated Type with Default
+// ===========================================
+
+trait Container:
+    type Element
+    type Index = int               // Default to int
+    
+    fn get self, idx: Index -> Element?
+    fn len self -> int
+
+record StringList:
+    items: [str]
+
+impl Container for StringList:
+    type Element = str
+    // Index uses default (int)
+    
+    fn get self, idx: int -> str?:
+        if idx < 0 or idx >= len(self.items):
+            return nil
+        return self.items[idx]
+    
+    fn len self -> int:
+        return len(self.items)
+
+// ===========================================
+// 3. Using Associated Types in Bounds
+// ===========================================
+
+// Function that works with any Iterator
+fn collect_all[I] iter: I -> [I.Item] where I: Iterator:
+    mut result = []
+    while iter.has_next():
+        match iter.next():
+            item => result = push(result, item)
+            nil => break
+    return result
+
+// Constrain the associated type itself
+fn sum_numbers[I] iter: I -> int where I: Iterator, I.Item == int:
+    mut total = 0
+    while iter.has_next():
+        match iter.next():
+            n => total += n
+            nil => break
+    return total
+
+// ===========================================
+// 4. Multiple Associated Types
+// ===========================================
+
+trait Map:
+    type Key
+    type Value
+    
+    fn get self, k: Key -> Value?
+    fn set self, k: Key, v: Value
+    fn contains self, k: Key -> bool
+
+record IntStringMap:
+    keys: [int]
+    values: [str]
+
+impl Map for IntStringMap:
+    type Key = int
+    type Value = str
+    
+    fn get self, k: int -> str?:
+        for i in 0..len(self.keys):
+            if self.keys[i] == k:
+                return self.values[i]
+        return nil
+    
+    fn set self, k: int, v: str:
+        // Simplified - just append
+        self.keys = push(self.keys, k)
+        self.values = push(self.values, v)
+    
+    fn contains self, k: int -> bool:
+        for key in self.keys:
+            if key == k:
+                return true
+        return false
+
+// ===========================================
+// 5. Inline Trait Bounds (Shorthand)
+// ===========================================
+
+// Verbose form
+fn process_verbose[T] x: T where T: Iterator:
+    println("Processing...")
+
+// Shorthand form (proposed)
+fn process_short[T: Iterator] x: T:
+    println("Processing...")
+
+// Multiple bounds shorthand
+fn combine[A: Clone + Debug, B: Serialize] a: A, b: B:
+    println("Combining...")
+
+// ===========================================
+// 6. Self Type in Traits
+// ===========================================
+
+trait Clonable:
+    fn clone self -> Self          // Returns same type as implementor
+
+record Point:
+    x: int
+    y: int
+
+impl Clonable for Point:
+    fn clone self -> Point:
+        return Point { x: self.x, y: self.y }
+
+// ===========================================
+// 7. Generic Traits
+// ===========================================
+
+trait Convertible[T]:
+    fn convert self -> T
+
+impl Convertible[str] for int:
+    fn convert self -> str:
+        return str(self)
+
+impl Convertible[float] for int:
+    fn convert self -> float:
+        return float(self)
+
+// ===========================================
+// Main
+// ===========================================
+
+fn main:
+    println("=== Associated Types Tests ===")
+    
+    // Test Iterator
+    iter = RangeIter { current: 0, end: 5 }
+    println("Range iteration:")
+    while iter.has_next():
+        match iter.next():
+            n => println("  ", n)
+            nil => break
+    
+    // Test Container
+    list = StringList { items: ["a", "b", "c"] }
+    println("Container get(1): ", list.get(1) ?? "nil")
+    
+    // Test Clone
+    p1 = Point { x: 10, y: 20 }
+    p2 = p1.clone()
+    println("Cloned point: ", p2.x, ", ", p2.y)
+    
+    println("=== All Tests Complete ===")

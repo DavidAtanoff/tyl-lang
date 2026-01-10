@@ -1,0 +1,13 @@
+// Test then/end with O2
+
+fn test2:
+    println("test2")
+    x = 10
+    if x > 5 then
+        println("x > 5")
+    end
+
+fn main:
+    test2()
+
+main()

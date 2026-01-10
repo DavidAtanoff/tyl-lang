@@ -163,7 +163,7 @@ enum class CallingConvention {
     Win64       // Windows x64 ABI
 };
 
-struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> lifetimeParams; std::vector<std::pair<std::string, std::string>> params; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; bool isExport = false; bool isHidden = false; bool isWeak = false; bool isComptime = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
+struct FnDecl : Statement { std::string name; std::vector<std::string> typeParams; std::vector<std::string> lifetimeParams; std::vector<std::pair<std::string, std::string>> params; std::vector<ExprPtr> paramDefaults; std::string returnType; StmtPtr body; bool isPublic = false; bool isExtern = false; bool isAsync = false; bool isHot = false; bool isCold = false; bool isVariadic = false; bool isNaked = false; bool isExport = false; bool isHidden = false; bool isWeak = false; bool isComptime = false; CallingConvention callingConv = CallingConvention::Default; FnDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } void accept(ASTVisitor& visitor) override; bool hasVariadicParams() const { for (const auto& p : params) { if (p.second == "...") return true; } return false; } };
 // Bitfield specification for a record field
 struct BitfieldSpec {
     int bitWidth = 0;          // Number of bits (0 = not a bitfield)
@@ -225,11 +225,22 @@ struct HKTTypeParam {
     HKTTypeParam(std::string n, size_t ar = 1) : name(std::move(n)), arity(ar) {}
 };
 
+// Associated type declaration in traits
+// type Item                    // No default
+// type Index = int             // With default
+struct AssociatedTypeDecl {
+    std::string name;           // Type name (e.g., "Item", "Index")
+    std::string defaultType;    // Default type (empty if none)
+    std::vector<std::string> bounds;  // Trait bounds (e.g., "Add" for type Item: Add)
+    AssociatedTypeDecl(std::string n, std::string def = "") : name(std::move(n)), defaultType(std::move(def)) {}
+};
+
 struct TraitDecl : Statement { 
     std::string name; 
     std::vector<std::string> typeParams;           // Regular type parameters (T, U, etc.)
     std::vector<HKTTypeParam> hktTypeParams;       // Higher-kinded type parameters (F[_], M[_], etc.)
     std::vector<std::string> superTraits; 
+    std::vector<AssociatedTypeDecl> associatedTypes;  // Associated type declarations
     std::vector<std::unique_ptr<FnDecl>> methods; 
     TraitDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; } 
     void accept(ASTVisitor& visitor) override; 
@@ -255,7 +266,14 @@ struct ConceptDecl : Statement {
     ConceptDecl(std::string n, SourceLocation loc) : name(std::move(n)) { location = loc; }
     void accept(ASTVisitor& visitor) override;
 };
-struct ImplBlock : Statement { std::string traitName; std::string typeName; std::vector<std::string> typeParams; std::vector<std::unique_ptr<FnDecl>> methods; ImplBlock(std::string trait, std::string type, SourceLocation loc) : traitName(std::move(trait)), typeName(std::move(type)) { location = loc; } void accept(ASTVisitor& visitor) override; };
+// Associated type binding in impl blocks: type Item = int
+struct AssociatedTypeBinding {
+    std::string name;           // Type name (e.g., "Item")
+    std::string boundType;      // Concrete type (e.g., "int")
+    AssociatedTypeBinding(std::string n, std::string t) : name(std::move(n)), boundType(std::move(t)) {}
+};
+
+struct ImplBlock : Statement { std::string traitName; std::string typeName; std::vector<std::string> typeParams; std::vector<AssociatedTypeBinding> associatedTypes; std::vector<std::unique_ptr<FnDecl>> methods; ImplBlock(std::string trait, std::string type, SourceLocation loc) : traitName(std::move(trait)), typeName(std::move(type)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct UnsafeBlock : Statement { StmtPtr body; UnsafeBlock(StmtPtr b, SourceLocation loc) : body(std::move(b)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ImportStmt : Statement { std::string path; std::string alias; std::vector<std::string> items; ImportStmt(std::string p, SourceLocation loc) : path(std::move(p)) { location = loc; } void accept(ASTVisitor& visitor) override; };
 struct ExternDecl : Statement { std::string abi; std::string library; std::vector<std::unique_ptr<FnDecl>> functions; ExternDecl(std::string a, std::string lib, SourceLocation loc) : abi(std::move(a)), library(std::move(lib)) { location = loc; } void accept(ASTVisitor& visitor) override; };
@@ -419,6 +437,43 @@ struct FieldTypeExpr : Expression {
     void accept(ASTVisitor& visitor) override;
 };
 
+// New Syntax Enhancements
+
+// If-let statement: if let pattern = expr: body
+// Combines pattern matching with conditional execution
+struct IfLetStmt : Statement {
+    std::string varName;                                 // Variable to bind
+    ExprPtr value;                                       // Expression to match
+    ExprPtr guard;                                       // Optional guard condition (and condition)
+    StmtPtr thenBranch;                                  // Body if match succeeds
+    StmtPtr elseBranch;                                  // Optional else branch
+    IfLetStmt(std::string var, ExprPtr val, StmtPtr then, SourceLocation loc)
+        : varName(std::move(var)), value(std::move(val)), thenBranch(std::move(then)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
+// Multi-variable declaration: a = b = c = 0
+// All variables get the same value
+struct MultiVarDecl : Statement {
+    std::vector<std::string> names;                      // Variable names
+    ExprPtr initializer;                                 // Shared initial value
+    bool isMutable = true;                               // mut a = mut b = 0
+    bool isConst = false;                                // A :: B :: 100
+    MultiVarDecl(std::vector<std::string> n, ExprPtr init, SourceLocation loc)
+        : names(std::move(n)), initializer(std::move(init)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
+// Walrus expression: (n := len(items)) > 0
+// Assignment that returns the assigned value
+struct WalrusExpr : Expression {
+    std::string varName;                                 // Variable to assign
+    ExprPtr value;                                       // Value to assign
+    WalrusExpr(std::string var, ExprPtr val, SourceLocation loc)
+        : varName(std::move(var)), value(std::move(val)) { location = loc; }
+    void accept(ASTVisitor& visitor) override;
+};
+
 struct Program : ASTNode { std::vector<StmtPtr> statements; Program(SourceLocation loc) { location = loc; } void accept(ASTVisitor& visitor) override; };
 
 struct ASTVisitor {
@@ -546,6 +601,10 @@ struct ASTVisitor {
     virtual void visit(HasFieldExpr& node) = 0;
     virtual void visit(HasMethodExpr& node) = 0;
     virtual void visit(FieldTypeExpr& node) = 0;
+    // New Syntax Enhancements
+    virtual void visit(IfLetStmt& node) = 0;
+    virtual void visit(MultiVarDecl& node) = 0;
+    virtual void visit(WalrusExpr& node) = 0;
     virtual void visit(Program& node) = 0;
 };
 

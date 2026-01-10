@@ -65,6 +65,11 @@ enum class TokenType {
     RESUME,         // resume keyword for continuing from handlers
     CONCEPT,        // concept keyword for type classes/constraints
     WHERE,          // where keyword for constraint clauses
+    // New syntax enhancements
+    END,            // end keyword for Lua-style block termination
+    THEN,           // then keyword for if-then-end style
+    DO,             // do keyword for while-do-end style
+    WALRUS,         // := walrus operator for assignment expressions
     PLUS, MINUS, STAR, SLASH, PERCENT,
     EQ, NE, LT, GT, LE, GE,
     ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, STAR_ASSIGN, SLASH_ASSIGN, PERCENT_ASSIGN,
@@ -155,6 +160,11 @@ inline std::string tokenTypeToString(TokenType type) {
         case TokenType::RESUME: return "RESUME";
         case TokenType::CONCEPT: return "CONCEPT";
         case TokenType::WHERE: return "WHERE";
+        // New syntax enhancements
+        case TokenType::END: return "END";
+        case TokenType::THEN: return "THEN";
+        case TokenType::DO: return "DO";
+        case TokenType::WALRUS: return "WALRUS";
         case TokenType::PERCENT_ASSIGN: return "PERCENT_ASSIGN";
         case TokenType::PLUS: return "PLUS"; case TokenType::MINUS: return "MINUS"; case TokenType::STAR: return "STAR";
         case TokenType::SLASH: return "SLASH"; case TokenType::PERCENT: return "PERCENT";

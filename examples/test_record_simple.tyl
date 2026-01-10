@@ -1,0 +1,10 @@
+// Simple record test
+
+record Dog:
+    name: str
+
+fn main:
+    dog = Dog { name: "Buddy" }
+    println("Dog name: ", dog.name)
+
+main()

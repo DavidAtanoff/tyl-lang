@@ -1,0 +1,10 @@
+// Test walrus in if without comparison
+fn test3:
+    println("test3")
+    if (n := 5):
+        println("n=", n)
+
+fn main:
+    test3()
+
+main()

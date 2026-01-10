@@ -1,0 +1,19 @@
+// Test combined features
+
+fn test1:
+    println("test1")
+    a = b = c = 42
+    println("a=", a)
+
+fn test2:
+    println("test2")
+    x = 10
+    if x > 5 then
+        println("x > 5")
+    end
+
+fn main:
+    test1()
+    test2()
+
+main()

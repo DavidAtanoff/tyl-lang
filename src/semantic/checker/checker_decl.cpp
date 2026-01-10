@@ -142,7 +142,16 @@ void TypeChecker::visit(FnDecl& node) {
     std::vector<ParamOwnershipInfo> paramOwnership;
     for (auto& p : node.params) {
         TypePtr paramType = parseTypeAnnotation(p.second);
-        if (paramType->kind == TypeKind::UNKNOWN) paramType = reg.anyType();
+        // Default untyped parameters to int (most common case for beginners)
+        if (paramType->kind == TypeKind::UNKNOWN || paramType->kind == TypeKind::ANY) {
+            if (p.second.empty()) {
+                paramType = reg.intType();
+                // Update the AST node for codegen
+                const_cast<std::string&>(p.second) = "int";
+            } else {
+                paramType = reg.anyType();
+            }
+        }
         fnType->params.push_back(std::make_pair(p.first, paramType));
         
         // Determine parameter passing mode from type annotation
@@ -191,9 +200,86 @@ void TypeChecker::visit(FnDecl& node) {
         symbols_.define(paramSym);
     }
     expectedReturn_ = fnType->returnType;
+    
+    // Clear inferred return types before visiting body
+    inferredReturnTypes_.clear();
+    
     if (node.body) {
         node.body->accept(*this);
     }
+    
+    // =========================================================================
+    // Return Type Inference
+    // =========================================================================
+    // If no return type was specified (empty or "any"), infer from return statements
+    bool needsInference = node.returnType.empty() || 
+                          fnType->returnType->kind == TypeKind::ANY ||
+                          fnType->returnType->kind == TypeKind::UNKNOWN;
+    
+    // Check if any return statement returns a string (for codegen tracking)
+    bool hasStringReturn = false;
+    bool hasIntReturn = false;
+    bool hasFloatReturn = false;
+    bool hasBoolReturn = false;
+    
+    for (const auto& retType : inferredReturnTypes_) {
+        if (retType->kind == TypeKind::STRING) hasStringReturn = true;
+        else if (retType->kind == TypeKind::INT) hasIntReturn = true;
+        else if (retType->kind == TypeKind::FLOAT) hasFloatReturn = true;
+        else if (retType->kind == TypeKind::BOOL) hasBoolReturn = true;
+    }
+    
+    // Track functions that return strings (even if mixed with other types)
+    if (hasStringReturn) {
+        functionsWithStringReturns_.insert(node.name);
+    }
+    
+    // Warn about mixed return types
+    int typeCount = (hasStringReturn ? 1 : 0) + (hasIntReturn ? 1 : 0) + 
+                    (hasFloatReturn ? 1 : 0) + (hasBoolReturn ? 1 : 0);
+    if (typeCount > 1 && needsInference) {
+        warning("function '" + node.name + "' has mixed return types; consider adding explicit type annotation", node.location);
+    }
+    
+    if (needsInference && !inferredReturnTypes_.empty()) {
+        // Find the common type among all return statements
+        TypePtr inferredType = inferredReturnTypes_[0];
+        for (size_t i = 1; i < inferredReturnTypes_.size(); i++) {
+            inferredType = commonType(inferredType, inferredReturnTypes_[i]);
+        }
+        
+        // Update the function type and AST node with the inferred type
+        if (inferredType && inferredType->kind != TypeKind::UNKNOWN && inferredType->kind != TypeKind::ANY) {
+            fnType->returnType = inferredType;
+            
+            // Update the AST node's return type string for codegen
+            if (inferredType->kind == TypeKind::STRING) {
+                node.returnType = "str";
+            } else if (inferredType->kind == TypeKind::INT) {
+                node.returnType = "int";
+            } else if (inferredType->kind == TypeKind::FLOAT) {
+                node.returnType = "float";
+            } else if (inferredType->kind == TypeKind::BOOL) {
+                node.returnType = "bool";
+            } else if (inferredType->kind == TypeKind::VOID) {
+                node.returnType = "void";
+            } else if (inferredType->kind == TypeKind::LIST) {
+                node.returnType = "list";
+            } else {
+                node.returnType = inferredType->toString();
+            }
+            
+            // Update the symbol table entry
+            Symbol* fnSymPtr = symbols_.lookup(node.name);
+            if (fnSymPtr) {
+                auto updatedFnType = std::dynamic_pointer_cast<FunctionType>(fnSymPtr->type);
+                if (updatedFnType) {
+                    updatedFnType->returnType = inferredType;
+                }
+            }
+        }
+    }
+    
     checkUnusedVariables(symbols_.currentScope());  // Check for unused variables/params
     
     // Exit function for ownership tracking

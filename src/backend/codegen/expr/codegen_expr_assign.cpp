@@ -26,6 +26,22 @@ void NativeCodeGen::visit(AssignExpr& node) {
         }
     }
     
+    // Track record types for new variables
+    if (auto* id = dynamic_cast<Identifier*>(node.target.get())) {
+        if (auto* recExpr = dynamic_cast<RecordExpr*>(node.value.get())) {
+            if (!recExpr->typeName.empty()) {
+                varRecordTypes_[id->name] = recExpr->typeName;
+            }
+        }
+        // Also track when assigning from another record variable
+        else if (auto* srcId = dynamic_cast<Identifier*>(node.value.get())) {
+            auto typeIt = varRecordTypes_.find(srcId->name);
+            if (typeIt != varRecordTypes_.end()) {
+                varRecordTypes_[id->name] = typeIt->second;
+            }
+        }
+    }
+    
     // Handle list reassignment - must be handled BEFORE evaluating the value
     // because list variables need to be forced to stack
     if (auto* id = dynamic_cast<Identifier*>(node.target.get())) {

@@ -1,0 +1,6 @@
+// Minimal walrus test
+fn main:
+    y := 42
+    println("y=", y)
+
+main()

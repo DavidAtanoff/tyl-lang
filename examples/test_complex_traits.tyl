@@ -1,0 +1,69 @@
+// Test complex traits - multiple traits, trait bounds, impl blocks
+
+// Basic trait
+trait Printable:
+    fn print self:
+        println("default print")
+
+// Another trait
+trait Comparable:
+    fn compare self, other -> int:
+        return 0
+
+// A record
+record Point:
+    x: int
+    y: int
+
+// Implement Printable for Point
+impl Printable for Point:
+    fn print self:
+        println("Point(", self.x, ", ", self.y, ")")
+
+// Implement Comparable for Point
+impl Comparable for Point:
+    fn compare self, other -> int:
+        dist1 = self.x * self.x + self.y * self.y
+        dist2 = other.x * other.x + other.y * other.y
+        if dist1 < dist2:
+            return -1
+        elif dist1 > dist2:
+            return 1
+        return 0
+
+// Generic function with trait bound
+fn print_item[T: Printable] item: T:
+    item.print()
+
+// Generic function with multiple trait bounds  
+fn compare_and_print[T: Printable + Comparable] a: T, b: T:
+    result = a.compare(b)
+    println("Comparing:")
+    a.print()
+    b.print()
+    if result < 0:
+        println("First is smaller")
+    elif result > 0:
+        println("First is larger")
+    else:
+        println("They are equal")
+
+fn main:
+    p1 = Point { x: 3, y: 4 }
+    p2 = Point { x: 1, y: 1 }
+    
+    println("=== Basic trait test ===")
+    p1.print()
+    p2.print()
+    
+    println("\n=== Comparison test ===")
+    result = p1.compare(p2)
+    println("p1.compare(p2) = ", result)
+    
+    println("\n=== Generic function with trait bound ===")
+    print_item(p1)
+    
+    println("\n=== Generic function with multiple bounds ===")
+    compare_and_print(p1, p2)
+
+main()

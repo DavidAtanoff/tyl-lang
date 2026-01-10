@@ -1,0 +1,11 @@
+// Test walrus operator in inlined function
+
+fn test_walrus:
+    items = [1, 2, 3, 4, 5]
+    if (n := len(items)) > 0:
+        println("Length: ", n)
+
+fn main:
+    test_walrus()
+
+main()

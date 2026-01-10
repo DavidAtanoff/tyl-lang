@@ -1,6 +1,7 @@
 // Tyl Compiler - Induction Variable Simplification Pass
 // Canonicalizes induction variables and computes trip counts
 // Enables better loop unrolling decisions and strength reduction
+// Enhanced with loop closed-form recognition for O3 optimization
 #ifndef TYL_INDVAR_SIMPLIFY_H
 #define TYL_INDVAR_SIMPLIFY_H
 
@@ -39,6 +40,29 @@ struct LoopBounds {
     bool tripCountKnown = false;
 };
 
+// Closed-form loop pattern types
+enum class ClosedFormPattern {
+    None,
+    TriangularSum,      // sum = 0; for i in 0..n: sum += i  => n*(n-1)/2
+    ArithmeticSum,      // sum = 0; for i in 0..n: sum += c  => n*c
+    GeometricSum,       // sum = 1; for i in 0..n: sum *= c  => c^n
+    SquareSum,          // sum = 0; for i in 0..n: sum += i*i => n*(n-1)*(2n-1)/6
+    LinearAccum,        // sum = 0; for i in 0..n: sum += a*i+b => closed form
+    CountingLoop,       // count = 0; for i in 0..n: count++ => n
+    ConstantAssign      // x = c; for i in 0..n: x = c => c (dead loop)
+};
+
+// Information about a closed-form reducible loop
+struct ClosedFormInfo {
+    ClosedFormPattern pattern = ClosedFormPattern::None;
+    std::string accumVar;       // The accumulator variable
+    std::string ivName;         // Induction variable name
+    int64_t coefficient = 1;    // Coefficient for linear patterns
+    int64_t constant = 0;       // Constant term
+    int64_t initialValue = 0;   // Initial value of accumulator
+    bool canReduce = false;     // Can this loop be reduced to closed form?
+};
+
 // Statistics for IndVar Simplification
 struct IndVarSimplifyStats {
     int inductionVarsSimplified = 0;
@@ -46,6 +70,7 @@ struct IndVarSimplifyStats {
     int derivedIVsEliminated = 0;
     int exitConditionsSimplified = 0;
     int loopExitsOptimized = 0;
+    int closedFormReductions = 0;  // Loops replaced with closed-form expressions
 };
 
 // Induction Variable Simplification Pass
@@ -117,6 +142,12 @@ private:
     bool replaceExitValue(std::vector<StmtPtr>& stmts, size_t loopIndex,
                           const std::string& iv, const LoopBounds& bounds);
     
+    // Helper to replace IV uses in a statement
+    bool replaceIVUsesInStatement(Statement* stmt, const std::string& iv, int64_t value);
+    
+    // Helper to replace IV uses in an expression
+    bool replaceIVUsesInExpr(ExprPtr& expr, const std::string& iv, int64_t value);
+    
     // Widen narrow induction variables to eliminate sign/zero extends
     bool widenInductionVariable(ForStmt* loop, InductionVariable& iv);
     
@@ -130,6 +161,34 @@ private:
     // Evaluate a constant expression
     bool evaluateConstant(Expression* expr, int64_t& value);
     
+    // === Closed-Form Loop Recognition ===
+    
+    // Analyze a loop for closed-form reduction patterns
+    ClosedFormInfo analyzeClosedForm(ForStmt* loop, const LoopBounds& bounds);
+    
+    // Check if loop body is a simple accumulation pattern
+    bool isSimpleAccumulation(Statement* body, const std::string& iv,
+                              std::string& accumVar, TokenType& op,
+                              int64_t& coefficient, int64_t& constant);
+    
+    // Try to reduce a loop to closed-form expression
+    bool reduceToClosedForm(std::vector<StmtPtr>& stmts, size_t loopIndex,
+                            ForStmt* loop, const ClosedFormInfo& info,
+                            const LoopBounds& bounds);
+    
+    // Compute closed-form value for triangular sum: sum(0..n-1) = n*(n-1)/2
+    int64_t computeTriangularSum(int64_t n);
+    
+    // Compute closed-form value for arithmetic sum: n * constant
+    int64_t computeArithmeticSum(int64_t n, int64_t constant);
+    
+    // Compute closed-form for linear accumulation: sum(a*i + b) for i in 0..n
+    int64_t computeLinearAccum(int64_t n, int64_t a, int64_t b, int64_t initial);
+    
+    // Find accumulator initialization before loop
+    bool findAccumulatorInit(std::vector<StmtPtr>& stmts, size_t loopIndex,
+                             const std::string& accumVar, int64_t& initValue);
+    
     // === Utility Functions ===
     
     // Clone an expression
@@ -140,6 +199,9 @@ private:
     
     // Create a comparison expression
     ExprPtr makeComparison(ExprPtr left, TokenType op, ExprPtr right, SourceLocation loc);
+    
+    // Create a binary expression
+    ExprPtr makeBinaryExpr(ExprPtr left, TokenType op, ExprPtr right, SourceLocation loc);
 };
 
 } // namespace tyl

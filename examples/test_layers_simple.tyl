@@ -1,0 +1,15 @@
+// Test macro layers - simple version
+
+layer debug:
+    macro log msg:
+        println("[DEBUG] ", msg)
+    
+    macro trace fn_name:
+        println("ENTER: ", fn_name)
+
+use layer "debug"
+
+log("Starting application")
+trace("main")
+
+println("Layer test complete!")

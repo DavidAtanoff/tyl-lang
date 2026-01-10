@@ -1,0 +1,17 @@
+// Test: Default parameter values
+
+fn greet name: str = "World":
+    println("Hello, ", name, "!")
+
+fn add a: int, b: int = 10:
+    return a + b
+
+fn main:
+    greet()           // Should print "Hello, World!"
+    greet("Alice")    // Should print "Hello, Alice!"
+    
+    let x = add(5)    // Should be 15 (5 + 10)
+    let y = add(5, 3) // Should be 8 (5 + 3)
+    
+    println("x = ", x)
+    println("y = ", y)

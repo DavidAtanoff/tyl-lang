@@ -509,6 +509,11 @@ ExprPtr InliningPass::processExpression(ExprPtr& expr) {
         auto newElse = processExpression(ternary->elseExpr);
         if (newElse) ternary->elseExpr = std::move(newElse);
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr.get())) {
+        // Process the value expression inside walrus
+        auto newValue = processExpression(walrus->value);
+        if (newValue) walrus->value = std::move(newValue);
+    }
     
     return nullptr;
 }
@@ -521,8 +526,14 @@ ExprPtr InliningPass::inlineCallAsExpr(CallExpr* call, FnDecl* fn) {
     
     // Build argument map: parameter name -> argument expression
     std::map<std::string, Expression*> argMap;
-    for (size_t i = 0; i < fn->params.size() && i < call->args.size(); ++i) {
-        argMap[fn->params[i].first] = call->args[i].get();
+    for (size_t i = 0; i < fn->params.size(); ++i) {
+        if (i < call->args.size()) {
+            // Use provided argument
+            argMap[fn->params[i].first] = call->args[i].get();
+        } else if (i < fn->paramDefaults.size() && fn->paramDefaults[i]) {
+            // Use default value
+            argMap[fn->params[i].first] = fn->paramDefaults[i].get();
+        }
     }
     
     // Clone the return expression with argument substitution
@@ -535,8 +546,14 @@ StmtPtr InliningPass::inlineCall(CallExpr* call, FnDecl* fn) {
     
     // Build argument map: parameter name -> argument expression
     std::map<std::string, Expression*> argMap;
-    for (size_t i = 0; i < fn->params.size() && i < call->args.size(); ++i) {
-        argMap[fn->params[i].first] = call->args[i].get();
+    for (size_t i = 0; i < fn->params.size(); ++i) {
+        if (i < call->args.size()) {
+            // Use provided argument
+            argMap[fn->params[i].first] = call->args[i].get();
+        } else if (i < fn->paramDefaults.size() && fn->paramDefaults[i]) {
+            // Use default value
+            argMap[fn->params[i].first] = fn->paramDefaults[i].get();
+        }
     }
     
     // Clone the function body with argument substitution
@@ -736,6 +753,16 @@ ExprPtr InliningPass::cloneExpression(Expression* expr, const std::map<std::stri
             assign->location
         );
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        // Walrus expression: (n := value) - rename the variable to avoid conflicts
+        std::string uniqueName = generateUniqueName(walrus->varName);
+        renameMap[walrus->varName] = uniqueName;
+        return std::make_unique<WalrusExpr>(
+            uniqueName,
+            cloneExpression(walrus->value.get(), argMap, renameMap),
+            walrus->location
+        );
+    }
     else if (auto* propagate = dynamic_cast<PropagateExpr*>(expr)) {
         return std::make_unique<PropagateExpr>(
             cloneExpression(propagate->operand.get(), argMap, renameMap),
@@ -782,6 +809,24 @@ StmtPtr InliningPass::cloneStatement(Statement* stmt, const std::map<std::string
         newDecl->isConst = varDecl->isConst;
         return newDecl;
     }
+    else if (auto* multiVarDecl = dynamic_cast<MultiVarDecl*>(stmt)) {
+        // Multi-variable declaration: a = b = c = 0 or X :: Y :: Z :: 100
+        // Generate unique names for all variables
+        std::vector<std::string> uniqueNames;
+        for (const auto& name : multiVarDecl->names) {
+            std::string uniqueName = generateUniqueName(name);
+            renameMap[name] = uniqueName;
+            uniqueNames.push_back(uniqueName);
+        }
+        auto newDecl = std::make_unique<MultiVarDecl>(
+            uniqueNames,
+            cloneExpression(multiVarDecl->initializer.get(), argMap, renameMap),
+            multiVarDecl->location
+        );
+        newDecl->isMutable = multiVarDecl->isMutable;
+        newDecl->isConst = multiVarDecl->isConst;
+        return newDecl;
+    }
     else if (auto* assignStmt = dynamic_cast<AssignStmt*>(stmt)) {
         return std::make_unique<AssignStmt>(
             cloneExpression(assignStmt->target.get(), argMap, renameMap),
@@ -802,24 +847,34 @@ StmtPtr InliningPass::cloneStatement(Statement* stmt, const std::map<std::string
         return nullptr;  // void return
     }
     else if (auto* ifStmt = dynamic_cast<IfStmt*>(stmt)) {
+        // IMPORTANT: Clone condition first to ensure walrus variables are renamed
+        // before cloning the then branch (C++ argument evaluation order is unspecified)
+        auto clonedCondition = cloneExpression(ifStmt->condition.get(), argMap, renameMap);
+        auto clonedThenBranch = cloneStatement(ifStmt->thenBranch.get(), argMap, renameMap);
         auto newIf = std::make_unique<IfStmt>(
-            cloneExpression(ifStmt->condition.get(), argMap, renameMap),
-            cloneStatement(ifStmt->thenBranch.get(), argMap, renameMap),
+            std::move(clonedCondition),
+            std::move(clonedThenBranch),
             ifStmt->location
         );
         for (auto& elif : ifStmt->elifBranches) {
+            // Clone elif condition first, then body
+            auto clonedElifCond = cloneExpression(elif.first.get(), argMap, renameMap);
+            auto clonedElifBody = cloneStatement(elif.second.get(), argMap, renameMap);
             newIf->elifBranches.push_back({
-                cloneExpression(elif.first.get(), argMap, renameMap),
-                cloneStatement(elif.second.get(), argMap, renameMap)
+                std::move(clonedElifCond),
+                std::move(clonedElifBody)
             });
         }
         newIf->elseBranch = cloneStatement(ifStmt->elseBranch.get(), argMap, renameMap);
         return newIf;
     }
     else if (auto* whileStmt = dynamic_cast<WhileStmt*>(stmt)) {
+        // Clone condition first to ensure walrus variables are renamed before body
+        auto clonedCondition = cloneExpression(whileStmt->condition.get(), argMap, renameMap);
+        auto clonedBody = cloneStatement(whileStmt->body.get(), argMap, renameMap);
         return std::make_unique<WhileStmt>(
-            cloneExpression(whileStmt->condition.get(), argMap, renameMap),
-            cloneStatement(whileStmt->body.get(), argMap, renameMap),
+            std::move(clonedCondition),
+            std::move(clonedBody),
             whileStmt->location
         );
     }
@@ -869,6 +924,23 @@ StmtPtr InliningPass::cloneStatement(Statement* stmt, const std::map<std::string
             cloneStatement(unsafeBlock->body.get(), argMap, renameMap),
             unsafeBlock->location
         );
+    }
+    else if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt)) {
+        // Rename the bound variable
+        std::string uniqueVar = generateUniqueName(ifLetStmt->varName);
+        renameMap[ifLetStmt->varName] = uniqueVar;
+        
+        auto newIfLet = std::make_unique<IfLetStmt>(
+            uniqueVar,
+            cloneExpression(ifLetStmt->value.get(), argMap, renameMap),
+            cloneStatement(ifLetStmt->thenBranch.get(), argMap, renameMap),
+            ifLetStmt->location
+        );
+        if (ifLetStmt->guard) {
+            newIfLet->guard = cloneExpression(ifLetStmt->guard.get(), argMap, renameMap);
+        }
+        newIfLet->elseBranch = cloneStatement(ifLetStmt->elseBranch.get(), argMap, renameMap);
+        return newIfLet;
     }
     else if (auto* destructDecl = dynamic_cast<DestructuringDecl*>(stmt)) {
         // Rename all destructured variables

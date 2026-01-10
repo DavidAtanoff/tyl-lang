@@ -1,4 +1,5 @@
 // Tyl Compiler - Peephole Optimizer Implementation
+// Enhanced with register coalescing and more patterns for O3 optimization
 #include "peephole.h"
 #include <cstring>
 
@@ -10,27 +11,88 @@ size_t PeepholeOptimizer::optimize(std::vector<uint8_t>& code) {
     
     // Multiple passes until no more optimizations
     bool changed = true;
-    while (changed) {
+    int passes = 0;
+    const int maxPasses = 10;  // Prevent infinite loops
+    
+    while (changed && passes < maxPasses) {
         changed = false;
+        passes++;
         
         for (size_t i = 0; i < code.size(); ) {
-            // Try each optimization pattern
+            // Try each optimization pattern in order of effectiveness
+            
+            // Register coalescing - most impactful for O3
+            if (aggressiveMode_ && optimizeRegisterCoalescing(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // Redundant xor after xor (xor rax,rax; xor rax,rax)
+            if (optimizeRedundantXor(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // Direct push/pop elimination
             if (optimizeDirectPushPop(code, i)) {
                 changed = true;
                 continue;
             }
+            
+            // Redundant push/pop pairs
+            if (optimizeRedundantPushPop(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // Push/pop with mov optimization
             if (optimizePushPop(code, i)) {
                 changed = true;
                 continue;
             }
+            
+            // Small constant optimization
             if (optimizeSmallConstants(code, i)) {
                 changed = true;
                 continue;
             }
+            
+            // Redundant mov elimination
             if (optimizeRedundantMov(code, i)) {
                 changed = true;
                 continue;
             }
+            
+            // xor to zero optimization
+            if (aggressiveMode_ && optimizeXorZero(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // inc/dec optimization
+            if (aggressiveMode_ && optimizeIncDec(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // LEA arithmetic optimization
+            if (aggressiveMode_ && optimizeLeaArithmetic(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // test/cmp optimization
+            if (aggressiveMode_ && optimizeTestCmp(code, i)) {
+                changed = true;
+                continue;
+            }
+            
+            // xor before mov imm optimization
+            if (aggressiveMode_ && optimizeXorBeforeMovImm(code, i)) {
+                changed = true;
+                continue;
+            }
+            
             ++i;
         }
     }
@@ -239,21 +301,20 @@ void PeepholeOptimizer::replaceBytes(std::vector<uint8_t>& code, size_t start,
     }
 }
 
-void PeepholeOptimizer::removeNops(std::vector<uint8_t>& /*code*/) {
-    // Remove all NOP (0x90) instructions
-    // Note: This is safe because we've already resolved all labels
-    // and the code doesn't have any relative jumps that would be affected
-    
-    // Actually, we need to be careful here - removing NOPs would break
-    // relative jump offsets. Since labels are already resolved, we should
-    // NOT remove NOPs as it would invalidate the jump targets.
-    // 
-    // Instead, we should only remove NOPs that were inserted by our
-    // optimizations and are in sequences (multiple NOPs in a row).
-    // For now, let's skip this optimization to be safe.
-    
-    // Future improvement: track which NOPs are safe to remove
-    // (those that don't affect jump targets)
+void PeepholeOptimizer::removeNops(std::vector<uint8_t>& code) {
+    // IMPORTANT: We cannot safely remove NOPs after code generation because
+    // relative jump offsets have already been calculated. Removing bytes
+    // would invalidate all jump targets.
+    //
+    // The NOPs inserted by peephole optimizations are cosmetic - they don't
+    // affect correctness, just code size. A proper solution would require:
+    // 1. Tracking all jump instructions and their targets
+    // 2. Recalculating offsets after NOP removal
+    // 3. Potentially iterating if the offset size changes (e.g., rel8 to rel32)
+    //
+    // For now, we leave NOPs in place. The code is still correct and the
+    // size overhead is minimal (typically a few dozen bytes).
+    (void)code;
 }
 
 bool PeepholeOptimizer::isPushRcx(const std::vector<uint8_t>& code, size_t i) {
@@ -266,6 +327,404 @@ bool PeepholeOptimizer::isPopRax(const std::vector<uint8_t>& code, size_t i) {
 
 bool PeepholeOptimizer::isNop(const std::vector<uint8_t>& code, size_t i) {
     return i < code.size() && code[i] == 0x90;
+}
+
+// ============================================
+// New O3 Optimization Patterns
+// ============================================
+
+// Pattern: xor rax, rax; mov REG, rax -> xor REG, REG
+// This eliminates redundant register moves after zeroing
+bool PeepholeOptimizer::optimizeRegisterCoalescing(std::vector<uint8_t>& code, size_t& i) {
+    if (i + 6 > code.size()) return false;
+    
+    // Check for xor rax, rax (48 31 C0)
+    if (code[i] == 0x48 && code[i+1] == 0x31 && code[i+2] == 0xC0) {
+        // mov rbx, rax = 48 89 C3
+        if (code[i+3] == 0x48 && code[i+4] == 0x89 && code[i+5] == 0xC3) {
+            // Replace with xor ebx, ebx (31 DB) - 2 bytes
+            code[i] = 0x31;
+            code[i+1] = 0xDB;
+            code[i+2] = 0x90;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 4;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov rcx, rax = 48 89 C1
+        if (code[i+3] == 0x48 && code[i+4] == 0x89 && code[i+5] == 0xC1) {
+            // Replace with xor ecx, ecx (31 C9) - 2 bytes
+            code[i] = 0x31;
+            code[i+1] = 0xC9;
+            code[i+2] = 0x90;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 4;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov rdx, rax = 48 89 C2
+        if (code[i+3] == 0x48 && code[i+4] == 0x89 && code[i+5] == 0xC2) {
+            // Replace with xor edx, edx (31 D2) - 2 bytes
+            code[i] = 0x31;
+            code[i+1] = 0xD2;
+            code[i+2] = 0x90;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 4;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov r12, rax = 49 89 C4
+        if (code[i+3] == 0x49 && code[i+4] == 0x89 && code[i+5] == 0xC4) {
+            // Replace with xor r12d, r12d (45 31 E4) - 3 bytes
+            code[i] = 0x45;
+            code[i+1] = 0x31;
+            code[i+2] = 0xE4;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov r13, rax = 49 89 C5
+        if (code[i+3] == 0x49 && code[i+4] == 0x89 && code[i+5] == 0xC5) {
+            // Replace with xor r13d, r13d (45 31 ED)
+            code[i] = 0x45;
+            code[i+1] = 0x31;
+            code[i+2] = 0xED;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov r14, rax = 49 89 C6
+        if (code[i+3] == 0x49 && code[i+4] == 0x89 && code[i+5] == 0xC6) {
+            // Replace with xor r14d, r14d (45 31 F6)
+            code[i] = 0x45;
+            code[i+1] = 0x31;
+            code[i+2] = 0xF6;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+        // mov r15, rax = 49 89 C7
+        if (code[i+3] == 0x49 && code[i+4] == 0x89 && code[i+5] == 0xC7) {
+            // Replace with xor r15d, r15d (45 31 FF)
+            code[i] = 0x45;
+            code[i+1] = 0x31;
+            code[i+2] = 0xFF;
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Pattern: xor rax, rax; xor rax, rax -> xor rax, rax (remove duplicate)
+bool PeepholeOptimizer::optimizeRedundantXor(std::vector<uint8_t>& code, size_t& i) {
+    if (i + 6 > code.size()) return false;
+    
+    // xor rax, rax = 48 31 C0
+    if (code[i] == 0x48 && code[i+1] == 0x31 && code[i+2] == 0xC0) {
+        if (code[i+3] == 0x48 && code[i+4] == 0x31 && code[i+5] == 0xC0) {
+            // NOP out the second xor
+            code[i+3] = 0x90;
+            code[i+4] = 0x90;
+            code[i+5] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 6;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Pattern: push rax; pop rax -> (remove both, they cancel out)
+bool PeepholeOptimizer::optimizeRedundantPushPop(std::vector<uint8_t>& code, size_t& i) {
+    if (i + 2 > code.size()) return false;
+    
+    // push rax (0x50) followed by pop rax (0x58)
+    if (code[i] == 0x50 && code[i+1] == 0x58) {
+        code[i] = 0x90;
+        code[i+1] = 0x90;
+        removedBytes_ += 2;
+        optimizationCount_++;
+        i += 2;
+        return true;
+    }
+    
+    // push rcx (0x51) followed by pop rcx (0x59)
+    if (code[i] == 0x51 && code[i+1] == 0x59) {
+        code[i] = 0x90;
+        code[i+1] = 0x90;
+        removedBytes_ += 2;
+        optimizationCount_++;
+        i += 2;
+        return true;
+    }
+    
+    // push rdx (0x52) followed by pop rdx (0x5A)
+    if (code[i] == 0x52 && code[i+1] == 0x5A) {
+        code[i] = 0x90;
+        code[i+1] = 0x90;
+        removedBytes_ += 2;
+        optimizationCount_++;
+        i += 2;
+        return true;
+    }
+    
+    return false;
+}
+
+// Pattern: mov rax, 0 -> xor eax, eax (smaller and faster)
+bool PeepholeOptimizer::optimizeXorZero(std::vector<uint8_t>& code, size_t& i) {
+    // mov rax, 0 = 48 B8 00 00 00 00 00 00 00 00 (10 bytes)
+    if (i + 10 > code.size()) return false;
+    
+    if (code[i] == 0x48 && code[i+1] == 0xB8) {
+        // Check if immediate is 0
+        bool isZero = true;
+        for (int j = 2; j < 10; j++) {
+            if (code[i+j] != 0) {
+                isZero = false;
+                break;
+            }
+        }
+        if (isZero) {
+            // Replace with xor eax, eax (31 C0) - 2 bytes
+            code[i] = 0x31;
+            code[i+1] = 0xC0;
+            for (int j = 2; j < 10; j++) {
+                code[i+j] = 0x90;
+            }
+            removedBytes_ += 8;
+            optimizationCount_++;
+            i += 10;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Pattern: add rax, 1 -> inc rax (smaller)
+bool PeepholeOptimizer::optimizeIncDec(std::vector<uint8_t>& code, size_t& i) {
+    // add rax, 1 = 48 83 C0 01 (4 bytes) or 48 05 01 00 00 00 (6 bytes)
+    if (i + 4 > code.size()) return false;
+    
+    // add rax, imm8 = 48 83 C0 xx
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xC0) {
+        if (code[i+3] == 0x01) {
+            // Replace with inc rax (48 FF C0) - 3 bytes
+            code[i] = 0x48;
+            code[i+1] = 0xFF;
+            code[i+2] = 0xC0;
+            code[i+3] = 0x90;
+            removedBytes_ += 1;
+            optimizationCount_++;
+            i += 4;
+            return true;
+        }
+        if (code[i+3] == 0xFF) {  // -1 in signed byte
+            // Replace with dec rax (48 FF C8) - 3 bytes
+            code[i] = 0x48;
+            code[i+1] = 0xFF;
+            code[i+2] = 0xC8;
+            code[i+3] = 0x90;
+            removedBytes_ += 1;
+            optimizationCount_++;
+            i += 4;
+            return true;
+        }
+    }
+    
+    // sub rax, 1 = 48 83 E8 01
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xE8 && code[i+3] == 0x01) {
+        // Replace with dec rax (48 FF C8) - 3 bytes
+        code[i] = 0x48;
+        code[i+1] = 0xFF;
+        code[i+2] = 0xC8;
+        code[i+3] = 0x90;
+        removedBytes_ += 1;
+        optimizationCount_++;
+        i += 4;
+        return true;
+    }
+    
+    return false;
+}
+
+// Pattern: add rax, rcx -> lea rax, [rax + rcx] (can be combined with other ops)
+bool PeepholeOptimizer::optimizeLeaArithmetic(std::vector<uint8_t>& code, size_t& i) {
+    // This is more of a preparation for future optimizations
+    // For now, we'll skip this as it doesn't always improve code
+    (void)code;
+    (void)i;
+    return false;
+}
+
+// Pattern: cmp rax, 0; je label -> test rax, rax; je label (smaller)
+bool PeepholeOptimizer::optimizeTestCmp(std::vector<uint8_t>& code, size_t& i) {
+    // cmp rax, 0 = 48 83 F8 00 (4 bytes)
+    if (i + 4 > code.size()) return false;
+    
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xF8 && code[i+3] == 0x00) {
+        // Replace with test rax, rax (48 85 C0) - 3 bytes
+        code[i] = 0x48;
+        code[i+1] = 0x85;
+        code[i+2] = 0xC0;
+        code[i+3] = 0x90;
+        removedBytes_ += 1;
+        optimizationCount_++;
+        i += 4;
+        return true;
+    }
+    
+    // cmp rcx, 0 = 48 83 F9 00
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xF9 && code[i+3] == 0x00) {
+        // Replace with test rcx, rcx (48 85 C9) - 3 bytes
+        code[i] = 0x48;
+        code[i+1] = 0x85;
+        code[i+2] = 0xC9;
+        code[i+3] = 0x90;
+        removedBytes_ += 1;
+        optimizationCount_++;
+        i += 4;
+        return true;
+    }
+    
+    return false;
+}
+
+// Pattern: xor rax, rax followed by mov eax, imm32 -> just mov eax, imm32
+// The xor is redundant because mov eax, imm32 zero-extends to rax
+bool PeepholeOptimizer::optimizeXorBeforeMovImm(std::vector<uint8_t>& code, size_t& i) {
+    // xor rax, rax = 48 31 C0 (3 bytes)
+    // xor eax, eax = 31 C0 (2 bytes)
+    if (i + 5 > code.size()) return false;
+    
+    // Check for xor rax, rax (48 31 C0) followed by mov eax, imm32 (B8 xx xx xx xx)
+    if (code[i] == 0x48 && code[i+1] == 0x31 && code[i+2] == 0xC0) {
+        // Check if next instruction is mov eax, imm32 (B8 xx xx xx xx)
+        if (i + 8 <= code.size() && code[i+3] == 0xB8) {
+            // NOP out the xor rax, rax - mov eax zero-extends to rax anyway
+            code[i] = 0x90;
+            code[i+1] = 0x90;
+            code[i+2] = 0x90;
+            removedBytes_ += 3;
+            optimizationCount_++;
+            i += 3;
+            return true;
+        }
+        // Check for mov r8d, imm32 (41 B8 xx xx xx xx)
+        if (i + 9 <= code.size() && code[i+3] == 0x41 && code[i+4] == 0xB8) {
+            // This is xor rax, rax followed by mov r8d, imm32
+            // The xor is likely for a different purpose, skip
+            return false;
+        }
+    }
+    
+    // Check for xor eax, eax (31 C0) followed by mov eax, imm32 (B8 xx xx xx xx)
+    if (code[i] == 0x31 && code[i+1] == 0xC0) {
+        if (i + 7 <= code.size() && code[i+2] == 0xB8) {
+            // NOP out the xor eax, eax
+            code[i] = 0x90;
+            code[i+1] = 0x90;
+            removedBytes_ += 2;
+            optimizationCount_++;
+            i += 2;
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Pattern: movzx optimization (not commonly needed, placeholder)
+bool PeepholeOptimizer::optimizeMovZeroExtend(std::vector<uint8_t>& code, size_t& i) {
+    (void)code;
+    (void)i;
+    return false;
+}
+
+// Helper functions for new patterns
+bool PeepholeOptimizer::isXorRaxRax(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x48 && code[i+1] == 0x31 && code[i+2] == 0xC0;
+}
+
+bool PeepholeOptimizer::isXorRcxRcx(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x48 && code[i+1] == 0x31 && code[i+2] == 0xC9;
+}
+
+bool PeepholeOptimizer::isMovRaxRcx(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x48 && code[i+1] == 0x89 && code[i+2] == 0xC8;
+}
+
+bool PeepholeOptimizer::isMovRcxRax(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x48 && code[i+1] == 0x89 && code[i+2] == 0xC1;
+}
+
+bool PeepholeOptimizer::isMovR12Rax(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x49 && code[i+1] == 0x89 && code[i+2] == 0xC4;
+}
+
+bool PeepholeOptimizer::isMovR13Rax(const std::vector<uint8_t>& code, size_t i) {
+    if (i + 3 > code.size()) return false;
+    return code[i] == 0x49 && code[i+1] == 0x89 && code[i+2] == 0xC5;
+}
+
+bool PeepholeOptimizer::isAddRaxImm(const std::vector<uint8_t>& code, size_t i, int32_t& imm) {
+    if (i + 4 > code.size()) return false;
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xC0) {
+        imm = (int8_t)code[i+3];  // Sign extend
+        return true;
+    }
+    return false;
+}
+
+bool PeepholeOptimizer::isSubRaxImm(const std::vector<uint8_t>& code, size_t i, int32_t& imm) {
+    if (i + 4 > code.size()) return false;
+    if (code[i] == 0x48 && code[i+1] == 0x83 && code[i+2] == 0xE8) {
+        imm = (int8_t)code[i+3];  // Sign extend
+        return true;
+    }
+    return false;
+}
+
+void PeepholeOptimizer::nopOut(std::vector<uint8_t>& code, size_t start, size_t count) {
+    for (size_t i = 0; i < count && start + i < code.size(); ++i) {
+        code[start + i] = 0x90;
+    }
 }
 
 } // namespace tyl

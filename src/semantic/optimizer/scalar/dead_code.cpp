@@ -98,6 +98,12 @@ void DeadCodeEliminationPass::collectCallsFromStatement(Statement* stmt, std::un
     else if (auto* unsafeBlock = dynamic_cast<UnsafeBlock*>(stmt)) {
         collectCallsFromStatement(unsafeBlock->body.get(), calls);
     }
+    else if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt)) {
+        collectCallsFromExpression(ifLetStmt->value.get(), calls);
+        if (ifLetStmt->guard) collectCallsFromExpression(ifLetStmt->guard.get(), calls);
+        collectCallsFromStatement(ifLetStmt->thenBranch.get(), calls);
+        collectCallsFromStatement(ifLetStmt->elseBranch.get(), calls);
+    }
 }
 
 void DeadCodeEliminationPass::collectCallsFromExpression(Expression* expr, std::unordered_set<std::string>& calls) {
@@ -355,6 +361,13 @@ void DeadCodeEliminationPass::collectFromStatement(Statement* stmt) {
     else if (auto* unsafeBlock = dynamic_cast<UnsafeBlock*>(stmt)) {
         collectFromStatement(unsafeBlock->body.get());
     }
+    else if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt)) {
+        usedIdentifiers_.insert(ifLetStmt->varName);  // The bound variable is used
+        collectFromExpression(ifLetStmt->value.get());
+        if (ifLetStmt->guard) collectFromExpression(ifLetStmt->guard.get());
+        collectFromStatement(ifLetStmt->thenBranch.get());
+        collectFromStatement(ifLetStmt->elseBranch.get());
+    }
 }
 
 void DeadCodeEliminationPass::collectFromExpression(Expression* expr) {
@@ -551,6 +564,18 @@ void DeadCodeEliminationPass::removeDeadFromBlock(std::vector<StmtPtr>& statemen
                 removeUnreachableCode(body->statements);
                 simplifyConstantConditions(body->statements);
                 removeDeadFromBlock(body->statements);
+            }
+        }
+        else if (auto* ifLetStmt = dynamic_cast<IfLetStmt*>(stmt.get())) {
+            if (auto* thenBlock = dynamic_cast<Block*>(ifLetStmt->thenBranch.get())) {
+                removeUnreachableCode(thenBlock->statements);
+                simplifyConstantConditions(thenBlock->statements);
+                removeDeadFromBlock(thenBlock->statements);
+            }
+            if (auto* elseBlock = dynamic_cast<Block*>(ifLetStmt->elseBranch.get())) {
+                removeUnreachableCode(elseBlock->statements);
+                simplifyConstantConditions(elseBlock->statements);
+                removeDeadFromBlock(elseBlock->statements);
             }
         }
     }

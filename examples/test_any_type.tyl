@@ -1,0 +1,11 @@
+// Test any type (gradual typing)
+
+fn print_any val: any:
+    println("Value: ", val)
+
+fn main:
+    print_any(42)
+    print_any("hello")
+    print_any(3.14)
+
+main()

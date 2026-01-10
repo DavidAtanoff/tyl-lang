@@ -1,0 +1,10 @@
+// Test multi-constant declaration in a function
+
+fn test_const:
+    X :: Y :: Z :: 100
+    println("X=", X, " Y=", Y, " Z=", Z)
+
+fn main:
+    test_const()
+
+main()

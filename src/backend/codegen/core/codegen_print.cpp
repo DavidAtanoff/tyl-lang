@@ -217,7 +217,7 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
                     return;
                 }
                 call->args[0]->accept(*this);
-                emitItoa();
+                emitItoaCall();
                 asm_.mov_rdx_rax();
                 asm_.mov_r8_rcx();
                 emitWriteConsoleBuffer();
@@ -240,6 +240,14 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
         std::string numStr = oss.str();
         uint32_t strRVA = addString(numStr);
         emitWriteConsole(strRVA, numStr.length());
+        return;
+    }
+    
+    // Handle boolean literal
+    if (auto* boolLit = dynamic_cast<BoolLiteral*>(expr)) {
+        std::string boolStr = boolLit->value ? "true" : "false";
+        uint32_t strRVA = addString(boolStr);
+        emitWriteConsole(strRVA, boolStr.length());
         return;
     }
     
@@ -299,6 +307,29 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
     
     // Handle identifier (variable)
     if (auto* ident = dynamic_cast<Identifier*>(expr)) {
+        // Check for boolean variable FIRST (before integer constants)
+        if (boolVars_.count(ident->name)) {
+            expr->accept(*this);
+            // rax contains 0 or 1, print "false" or "true"
+            std::string falseLabel = newLabel("print_false");
+            std::string endLabel = newLabel("print_bool_end");
+            
+            asm_.test_rax_rax();
+            asm_.jz_rel32(falseLabel);
+            
+            // Print "true"
+            uint32_t trueRVA = addString("true");
+            emitWriteConsole(trueRVA, 4);
+            asm_.jmp_rel32(endLabel);
+            
+            asm_.label(falseLabel);
+            uint32_t falseRVA = addString("false");
+            emitWriteConsole(falseRVA, 5);
+            
+            asm_.label(endLabel);
+            return;
+        }
+        
         auto strIt = constStrVars.find(ident->name);
         if (strIt != constStrVars.end()) {
             if (!strIt->second.empty()) {
@@ -368,6 +399,31 @@ void NativeCodeGen::emitPrintExpr(Expression* expr) {
         expr->accept(*this);
         emitPrintStringPtr();
         return;
+    }
+    
+    // Handle member expression (record field access)
+    if (auto* member = dynamic_cast<MemberExpr*>(expr)) {
+        // Check if this is accessing a string field
+        if (auto* objId = dynamic_cast<Identifier*>(member->object.get())) {
+            auto varTypeIt = varRecordTypes_.find(objId->name);
+            if (varTypeIt != varRecordTypes_.end()) {
+                auto typeIt = recordTypes_.find(varTypeIt->second);
+                if (typeIt != recordTypes_.end()) {
+                    for (size_t i = 0; i < typeIt->second.fieldNames.size(); i++) {
+                        if (typeIt->second.fieldNames[i] == member->member) {
+                            const std::string& fieldType = typeIt->second.fieldTypes[i];
+                            if (fieldType == "str" || fieldType == "string") {
+                                expr->accept(*this);
+                                emitPrintStringPtr();
+                                return;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // Fall through to default handling for non-string fields
     }
     
     // Runtime evaluation

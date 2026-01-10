@@ -1,0 +1,14 @@
+// Test: Destructuring assignment
+
+fn main:
+    // Direct tuple destructuring
+    let (x, y) = (100, 200)
+    println("x = ", x)
+    println("y = ", y)
+    
+    // List destructuring
+    let nums = [1, 2, 3]
+    let (a, b, c) = nums
+    println("a = ", a)
+    println("b = ", b)
+    println("c = ", c)

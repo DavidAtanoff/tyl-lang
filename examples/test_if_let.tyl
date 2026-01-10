@@ -1,0 +1,32 @@
+// Test if-let syntax
+
+fn get_value -> int:
+    return 42
+
+fn get_zero -> int:
+    return 0
+
+fn main:
+    // Test if-let with non-zero value
+    if let val = get_value():
+        println("Got value: ", val)
+    else:
+        println("No value")
+    
+    // Test if-let with zero (nil) value
+    if let val2 = get_zero():
+        println("Got val2: ", val2)
+    else:
+        println("val2 was zero/nil")
+    
+    // Test if-let with literal
+    if let x = 100:
+        println("x = ", x)
+    
+    // Test if-let with expression
+    if let result = 10 + 20:
+        println("result = ", result)
+    
+    println("if-let test complete!")
+
+main()

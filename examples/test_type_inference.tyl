@@ -1,0 +1,30 @@
+// Test type inference for functions
+
+// Without type annotations - should infer str return type
+fn get_letter score:
+    if score >= 90:
+        return "A"
+    elif score >= 80:
+        return "B"
+    else:
+        return "C"
+
+// Test booleans
+fn is_passing score:
+    return score >= 60
+
+fn main:
+    let grade = get_letter(95)
+    println("Grade: ", grade)
+    
+    let passed = is_passing(75)
+    if passed:
+        println("You passed!")
+    else:
+        println("You failed!")
+    
+    // Direct boolean usage
+    let x = true
+    let y = false
+    println("x = ", x)
+    println("y = ", y)

@@ -1,0 +1,16 @@
+// Test: Range patterns with inline return
+
+fn get_grade score: int -> str:
+    match score:
+        90..100 -> return "A"
+        80..89 -> return "B"
+        70..79 -> return "C"
+        60..69 -> return "D"
+        _ -> return "F"
+
+fn main:
+    println("Score 95: ", get_grade(95))
+    println("Score 85: ", get_grade(85))
+    println("Score 75: ", get_grade(75))
+    println("Score 65: ", get_grade(65))
+    println("Score 55: ", get_grade(55))

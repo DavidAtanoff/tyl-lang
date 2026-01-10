@@ -403,6 +403,9 @@ ExprPtr SROAPass::rewriteExpression(ExprPtr& expr) {
         assign->target = rewriteExpression(assign->target);
         assign->value = rewriteExpression(assign->value);
     }
+    else if (auto* walrus = dynamic_cast<WalrusExpr*>(expr.get())) {
+        walrus->value = rewriteExpression(walrus->value);
+    }
     
     return std::move(expr);
 }
@@ -462,6 +465,12 @@ ExprPtr SROAPass::cloneExpr(Expression* expr) {
             newCall->args.push_back(cloneExpr(arg.get()));
         }
         return newCall;
+    }
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return std::make_unique<WalrusExpr>(
+            walrus->varName,
+            cloneExpr(walrus->value.get()),
+            walrus->location);
     }
     
     return nullptr;

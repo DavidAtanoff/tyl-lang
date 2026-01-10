@@ -432,6 +432,12 @@ ExprPtr LoopRotationPass::cloneExpression(Expression* expr) {
             cloneExpression(assign->value.get()),
             assign->location);
     }
+    if (auto* walrus = dynamic_cast<WalrusExpr*>(expr)) {
+        return std::make_unique<WalrusExpr>(
+            walrus->varName,
+            cloneExpression(walrus->value.get()),
+            walrus->location);
+    }
     
     return nullptr;
 }

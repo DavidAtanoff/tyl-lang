@@ -18,6 +18,8 @@ struct JumpThreadingStats {
     int conditionsFolded = 0;
     int blocksEliminated = 0;
     int phiNodesSimplified = 0;
+    int correlatedConditionsFound = 0;
+    int rangeBasedOptimizations = 0;
 };
 
 // Represents a known value for a variable at a specific point
@@ -26,6 +28,11 @@ struct KnownValue {
     bool isConstant = false;
     int64_t intValue = 0;
     bool boolValue = false;
+    
+    // Range information for more aggressive analysis
+    bool hasRange = false;
+    int64_t minValue = 0;
+    int64_t maxValue = 0;
     
     enum class Type { Unknown, Integer, Boolean };
     Type type = Type::Unknown;
@@ -97,6 +104,25 @@ private:
     
     // Check if condition A implies condition B
     bool conditionImplies(Expression* a, Expression* b, bool aValue);
+    
+    // === Range-Based Analysis ===
+    
+    // Record range information from a comparison
+    void recordRangeFromComparison(Expression* cond, bool condValue);
+    
+    // Check if a comparison can be determined from range info
+    bool canDetermineFromRange(Expression* cond, bool& result);
+    
+    // Merge ranges at control flow join points
+    void mergeRanges(const std::map<std::string, KnownValue>& other);
+    
+    // === Correlated Condition Analysis ===
+    
+    // Find conditions that are correlated (e.g., x < 5 implies x < 10)
+    bool areConditionsCorrelated(Expression* a, Expression* b, bool& impliedValue);
+    
+    // Analyze a chain of conditions for threading opportunities
+    void analyzeConditionChain(std::vector<IfStmt*>& chain);
     
     // === Transformation Helpers ===
     

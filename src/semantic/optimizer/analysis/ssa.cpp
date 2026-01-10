@@ -607,8 +607,47 @@ SSAValuePtr SSABuilder::tryRemoveTrivialPhi(SSAInstruction* phi) {
         return phi->result;
     }
     
-    // Phi is trivial - replace with same
-    // Note: In a full implementation, we'd replace all uses of phi->result with same
+    // Phi is trivial - replace all uses of phi->result with same
+    // First, collect all users of this phi
+    std::vector<SSAInstruction*> users;
+    for (auto& block : currentFunc_->blocks) {
+        for (auto& instr : block->instructions) {
+            // Check operands
+            for (auto& op : instr->operands) {
+                if (op == phi->result) {
+                    users.push_back(instr.get());
+                    break;
+                }
+            }
+            // Check phi operands
+            for (auto& [predBlock, val] : instr->phiOperands) {
+                if (val == phi->result) {
+                    users.push_back(instr.get());
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Replace uses
+    for (auto* user : users) {
+        for (auto& op : user->operands) {
+            if (op == phi->result) {
+                op = same;
+            }
+        }
+        for (auto& [predBlock, val] : user->phiOperands) {
+            if (val == phi->result) {
+                val = same;
+            }
+        }
+        
+        // If user is also a phi, try to simplify it recursively
+        if (user->opcode == SSAOpcode::PHI && user != phi) {
+            tryRemoveTrivialPhi(user);
+        }
+    }
+    
     return same;
 }
 
@@ -885,6 +924,298 @@ std::optional<int64_t> SSAOptimizer::tryEvalConstant(SSAInstruction* instr) {
         return instr->intValue;
     }
     return std::nullopt;
+}
+
+// ============================================
+// SSA to AST Converter Implementation
+// ============================================
+
+std::unique_ptr<Program> SSAToAST::convert(SSAModule& module) {
+    SourceLocation loc;  // Default location
+    auto program = std::make_unique<Program>(loc);
+    tempCounter_ = 0;
+    valueNames_.clear();
+    
+    for (auto& func : module.functions) {
+        if (func->name != "_start") {  // Skip the synthetic start function
+            auto fnStmt = convertFunction(*func);
+            if (fnStmt) {
+                program->statements.push_back(std::move(fnStmt));
+            }
+        }
+    }
+    
+    // Convert _start function as top-level statements
+    if (auto* startFunc = module.getFunction("_start")) {
+        for (auto& block : startFunc->blocks) {
+            for (auto& instr : block->instructions) {
+                auto stmt = convertInstruction(*instr);
+                if (stmt) {
+                    program->statements.push_back(std::move(stmt));
+                }
+            }
+        }
+    }
+    
+    return program;
+}
+
+StmtPtr SSAToAST::convertFunction(SSAFunction& func) {
+    SourceLocation loc;  // Default location
+    
+    // Create parameter list
+    std::vector<std::pair<std::string, std::string>> params;
+    for (auto& param : func.params) {
+        std::string typeName = ssaTypeToString(param->type);
+        params.push_back({param->name, typeName});
+        valueNames_[param->id] = param->name;
+    }
+    
+    // Convert function body
+    auto body = std::make_unique<Block>(loc);
+    
+    // Process blocks in order
+    for (auto& block : func.blocks) {
+        // Add label comment for non-entry blocks
+        if (block.get() != func.entryBlock && !block->label.empty()) {
+            // Could add a comment or label statement here
+        }
+        
+        for (auto& instr : block->instructions) {
+            auto stmt = convertInstruction(*instr);
+            if (stmt) {
+                body->statements.push_back(std::move(stmt));
+            }
+        }
+    }
+    
+    auto fnDecl = std::make_unique<FnDecl>(func.name, loc);
+    fnDecl->params = std::move(params);
+    fnDecl->body = std::move(body);
+    fnDecl->returnType = ssaTypeToString(func.returnType);
+    
+    return fnDecl;
+}
+
+StmtPtr SSAToAST::convertBlock(SSABasicBlock& block) {
+    SourceLocation loc;
+    auto result = std::make_unique<Block>(loc);
+    
+    for (auto& instr : block.instructions) {
+        auto stmt = convertInstruction(*instr);
+        if (stmt) {
+            result->statements.push_back(std::move(stmt));
+        }
+    }
+    
+    return result;
+}
+
+StmtPtr SSAToAST::convertInstruction(SSAInstruction& instr) {
+    SourceLocation loc;
+    
+    switch (instr.opcode) {
+        case SSAOpcode::CONST_INT:
+        case SSAOpcode::CONST_FLOAT:
+        case SSAOpcode::CONST_BOOL:
+        case SSAOpcode::CONST_STRING: {
+            // Create variable declaration for the result
+            if (!instr.result) return nullptr;
+            
+            std::string varName = getValueName(instr.result);
+            ExprPtr init;
+            
+            if (instr.opcode == SSAOpcode::CONST_INT) {
+                init = std::make_unique<IntegerLiteral>(instr.intValue, loc);
+            } else if (instr.opcode == SSAOpcode::CONST_FLOAT) {
+                init = std::make_unique<FloatLiteral>(instr.floatValue, loc);
+            } else if (instr.opcode == SSAOpcode::CONST_BOOL) {
+                init = std::make_unique<BoolLiteral>(instr.boolValue, loc);
+            } else {
+                init = std::make_unique<StringLiteral>(instr.stringValue, loc);
+            }
+            
+            return std::make_unique<VarDecl>(varName, "", std::move(init), loc);
+        }
+        
+        case SSAOpcode::ADD:
+        case SSAOpcode::SUB:
+        case SSAOpcode::MUL:
+        case SSAOpcode::DIV:
+        case SSAOpcode::MOD:
+        case SSAOpcode::EQ:
+        case SSAOpcode::NE:
+        case SSAOpcode::LT:
+        case SSAOpcode::GT:
+        case SSAOpcode::LE:
+        case SSAOpcode::GE:
+        case SSAOpcode::AND:
+        case SSAOpcode::OR: {
+            if (!instr.result || instr.operands.size() < 2) return nullptr;
+            
+            std::string varName = getValueName(instr.result);
+            TokenType op = ssaOpcodeToToken(instr.opcode);
+            
+            auto left = convertValue(instr.operands[0]);
+            auto right = convertValue(instr.operands[1]);
+            auto binExpr = std::make_unique<BinaryExpr>(
+                std::move(left), op, std::move(right), loc);
+            
+            return std::make_unique<VarDecl>(varName, "", std::move(binExpr), loc);
+        }
+        
+        case SSAOpcode::NEG:
+        case SSAOpcode::NOT: {
+            if (!instr.result || instr.operands.empty()) return nullptr;
+            
+            std::string varName = getValueName(instr.result);
+            TokenType op = (instr.opcode == SSAOpcode::NEG) ? TokenType::MINUS : TokenType::NOT;
+            
+            auto operand = convertValue(instr.operands[0]);
+            auto unExpr = std::make_unique<UnaryExpr>(op, std::move(operand), loc);
+            
+            return std::make_unique<VarDecl>(varName, "", std::move(unExpr), loc);
+        }
+        
+        case SSAOpcode::COPY: {
+            if (!instr.result || instr.operands.empty()) return nullptr;
+            
+            std::string varName = getValueName(instr.result);
+            auto value = convertValue(instr.operands[0]);
+            
+            return std::make_unique<VarDecl>(varName, "", std::move(value), loc);
+        }
+        
+        case SSAOpcode::PHI: {
+            // Phi nodes are handled specially - we need to insert assignments
+            // at the end of predecessor blocks
+            // For now, just create a variable with the first operand
+            if (!instr.result) return nullptr;
+            
+            std::string varName = getValueName(instr.result);
+            ExprPtr init;
+            
+            if (!instr.phiOperands.empty()) {
+                init = convertValue(instr.phiOperands[0].second);
+            } else {
+                init = std::make_unique<IntegerLiteral>(0, loc);
+            }
+            
+            return std::make_unique<VarDecl>(varName, "", std::move(init), loc);
+        }
+        
+        case SSAOpcode::CALL: {
+            std::vector<ExprPtr> args;
+            for (auto& op : instr.operands) {
+                args.push_back(convertValue(op));
+            }
+            
+            auto callee = std::make_unique<Identifier>(instr.funcName, loc);
+            auto call = std::make_unique<CallExpr>(std::move(callee), loc);
+            call->args = std::move(args);
+            
+            if (instr.result) {
+                std::string varName = getValueName(instr.result);
+                return std::make_unique<VarDecl>(varName, "", std::move(call), loc);
+            } else {
+                return std::make_unique<ExprStmt>(std::move(call), loc);
+            }
+        }
+        
+        case SSAOpcode::RETURN: {
+            ExprPtr value;
+            if (!instr.operands.empty()) {
+                value = convertValue(instr.operands[0]);
+            }
+            return std::make_unique<ReturnStmt>(std::move(value), loc);
+        }
+        
+        case SSAOpcode::BRANCH: {
+            // Convert to if statement
+            if (instr.operands.empty()) return nullptr;
+            
+            auto cond = convertValue(instr.operands[0]);
+            
+            // Create goto-like structure (simplified)
+            // In a full implementation, we'd need to restructure the CFG
+            auto thenBranch = std::make_unique<Block>(loc);
+            // Add comment about target block
+            
+            auto ifStmt = std::make_unique<IfStmt>(std::move(cond), std::move(thenBranch), loc);
+            return ifStmt;
+        }
+        
+        case SSAOpcode::JUMP:
+        case SSAOpcode::NOP:
+            // These don't produce AST statements
+            return nullptr;
+            
+        default:
+            return nullptr;
+    }
+}
+
+ExprPtr SSAToAST::convertValue(SSAValuePtr value) {
+    SourceLocation loc;
+    
+    if (!value) {
+        return std::make_unique<IntegerLiteral>(0, loc);
+    }
+    
+    // Check if this value has a name
+    std::string name = getValueName(value);
+    return std::make_unique<Identifier>(name, loc);
+}
+
+std::string SSAToAST::getValueName(SSAValuePtr value) {
+    if (!value) return "__null";
+    
+    auto it = valueNames_.find(value->id);
+    if (it != valueNames_.end()) {
+        return it->second;
+    }
+    
+    // Generate a name
+    std::string name;
+    if (!value->name.empty()) {
+        name = value->name + "_" + std::to_string(value->version);
+    } else {
+        name = "__t" + std::to_string(tempCounter_++);
+    }
+    
+    valueNames_[value->id] = name;
+    return name;
+}
+
+std::string SSAToAST::ssaTypeToString(SSAType type) {
+    switch (type) {
+        case SSAType::VOID: return "void";
+        case SSAType::INT: return "int";
+        case SSAType::FLOAT: return "float";
+        case SSAType::BOOL: return "bool";
+        case SSAType::STRING: return "string";
+        case SSAType::POINTER: return "ptr";
+        default: return "";
+    }
+}
+
+TokenType SSAToAST::ssaOpcodeToToken(SSAOpcode op) {
+    switch (op) {
+        case SSAOpcode::ADD: return TokenType::PLUS;
+        case SSAOpcode::SUB: return TokenType::MINUS;
+        case SSAOpcode::MUL: return TokenType::STAR;
+        case SSAOpcode::DIV: return TokenType::SLASH;
+        case SSAOpcode::MOD: return TokenType::PERCENT;
+        case SSAOpcode::EQ: return TokenType::EQ;
+        case SSAOpcode::NE: return TokenType::NE;
+        case SSAOpcode::LT: return TokenType::LT;
+        case SSAOpcode::GT: return TokenType::GT;
+        case SSAOpcode::LE: return TokenType::LE;
+        case SSAOpcode::GE: return TokenType::GE;
+        case SSAOpcode::AND: return TokenType::AND;
+        case SSAOpcode::OR: return TokenType::OR;
+        default: return TokenType::ERROR;
+    }
 }
 
 } // namespace tyl

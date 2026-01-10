@@ -158,6 +158,10 @@ public:
     void visit(HasFieldExpr& n) override;
     void visit(HasMethodExpr& n) override;
     void visit(FieldTypeExpr& n) override;
+    // New Syntax Enhancements
+    void visit(IfLetStmt& n) override;
+    void visit(MultiVarDecl& n) override;
+    void visit(WalrusExpr& n) override;
     void visit(Program& n) override;
 };
 

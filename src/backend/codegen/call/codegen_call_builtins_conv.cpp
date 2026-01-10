@@ -132,10 +132,10 @@ void NativeCodeGen::emitConvStr(CallExpr& node) {
     
     if (lastExprWasFloat_) {
         // Float to string - use ftoa which returns pointer in rax
-        emitFtoa();
+        emitFtoaCall();
     } else {
         // Int to string - use itoa which returns pointer in rax, length in rcx
-        emitItoa();
+        emitItoaCall();
     }
     
     // Result is already in rax (pointer to string in static buffer)

@@ -69,7 +69,11 @@ const std::unordered_map<std::string, TokenType> Lexer::keywords = {
     {"resume", TokenType::RESUME},
     // Type classes / concepts keywords
     {"concept", TokenType::CONCEPT},
-    {"where", TokenType::WHERE}
+    {"where", TokenType::WHERE},
+    // New syntax enhancements - Lua-style block terminators
+    {"end", TokenType::END},
+    {"then", TokenType::THEN},
+    {"do", TokenType::DO}
 };
 
 Lexer::Lexer(const std::string& src, const std::string& fname)

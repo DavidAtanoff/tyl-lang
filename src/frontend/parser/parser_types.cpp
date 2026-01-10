@@ -220,7 +220,13 @@ std::string Parser::parseType() {
 }
 
 std::vector<std::pair<std::string, std::string>> Parser::parseParams() {
+    std::vector<ExprPtr> defaults;  // Ignored
+    return parseParamsWithDefaults(defaults);
+}
+
+std::vector<std::pair<std::string, std::string>> Parser::parseParamsWithDefaults(std::vector<ExprPtr>& defaults) {
     std::vector<std::pair<std::string, std::string>> params;
+    defaults.clear();
     
     // Support both parenthesized and non-parenthesized params
     // fn add(a, b) or fn add a, b
@@ -232,10 +238,13 @@ std::vector<std::pair<std::string, std::string>> Parser::parseParams() {
         return params;
     }
     
+    bool seenDefault = false;  // Track if we've seen a default value
+    
     // Check for self or identifier as parameter name
     while (check(TokenType::IDENTIFIER) || check(TokenType::SELF)) {
         std::string name = advance().lexeme;
         std::string type;
+        ExprPtr defaultValue = nullptr;
         
         if (match(TokenType::COLON)) {
             if (check(TokenType::IDENTIFIER) || check(TokenType::PTR) || 
@@ -246,11 +255,22 @@ std::vector<std::pair<std::string, std::string>> Parser::parseParams() {
             } else {
                 current--;
                 params.emplace_back(name, "");
+                defaults.push_back(nullptr);
                 break;
             }
         }
         
+        // Check for default value: param: type = value
+        if (match(TokenType::ASSIGN)) {
+            defaultValue = expression();
+            seenDefault = true;
+        } else if (seenDefault) {
+            // Error: non-default param after default param
+            // For now, just allow it (could add warning later)
+        }
+        
         params.emplace_back(name, type);
+        defaults.push_back(std::move(defaultValue));
         if (!match(TokenType::COMMA)) break;
     }
     

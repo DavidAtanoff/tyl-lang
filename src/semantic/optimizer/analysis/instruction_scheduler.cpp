@@ -334,34 +334,236 @@ void InstructionSchedulerPass::scheduleStatements(std::vector<StmtPtr>& stmts,
 // ============================================
 
 void MachineCodeScheduler::scheduleBlock(std::vector<uint8_t>& code, size_t start, size_t end) {
-    // This is a simplified machine code scheduler
-    // A full implementation would decode instructions and build a dependency graph
+    // Machine code scheduler for x64 instructions
+    // Reorders independent instructions to hide latencies and improve ILP
     
     if (end <= start || end - start < 6) return;  // Too small to schedule
     
-    // For now, we just look for simple patterns that can be reordered
-    // Example: independent mov instructions can be interleaved
-    
+    // Decode all instructions in the block
+    std::vector<DecodedInstruction> instructions;
     size_t pos = start;
-    while (pos < end - 6) {
-        int len1 = decodeInstructionLength(code, pos);
-        if (len1 <= 0) break;
+    
+    while (pos < end) {
+        DecodedInstruction instr;
+        instr.offset = pos;
+        instr.length = decodeInstructionLength(code, pos);
+        if (instr.length <= 0) break;
         
-        size_t pos2 = pos + len1;
-        if (pos2 >= end) break;
+        // Decode register usage
+        decodeRegisterUsage(code, pos, instr);
         
-        int len2 = decodeInstructionLength(code, pos2);
-        if (len2 <= 0) break;
+        // Get latency info
+        uint8_t opcode = code[pos];
+        if (opcode >= 0x40 && opcode <= 0x4F && pos + 1 < code.size()) {
+            opcode = code[pos + 1];  // Skip REX prefix
+        }
+        auto latency = getInstructionLatency(opcode);
+        instr.latency = latency.latency;
+        instr.throughput = latency.throughput;
         
-        // Check if we can reorder these two instructions
-        if (canReorder(code, pos, pos2)) {
-            // Check if reordering would help (e.g., break dependency chain)
-            // For now, we don't actually reorder - this is a placeholder
-            // A full implementation would analyze latencies and dependencies
+        instructions.push_back(instr);
+        pos += instr.length;
+    }
+    
+    if (instructions.size() < 3) return;  // Not enough to schedule
+    
+    // Build dependency graph
+    std::vector<std::vector<int>> deps(instructions.size());
+    for (size_t i = 0; i < instructions.size(); ++i) {
+        for (size_t j = i + 1; j < instructions.size(); ++j) {
+            if (hasDataDependency(instructions[i], instructions[j])) {
+                deps[j].push_back(static_cast<int>(i));
+            }
+        }
+    }
+    
+    // List scheduling algorithm
+    std::vector<int> schedule;
+    std::vector<bool> scheduled(instructions.size(), false);
+    std::vector<int> readyTime(instructions.size(), 0);
+    
+    int currentCycle = 0;
+    while (schedule.size() < instructions.size()) {
+        // Find ready instructions
+        std::vector<int> ready;
+        for (size_t i = 0; i < instructions.size(); ++i) {
+            if (scheduled[i]) continue;
+            
+            bool allDepsScheduled = true;
+            int maxDepFinish = 0;
+            for (int dep : deps[i]) {
+                if (!scheduled[dep]) {
+                    allDepsScheduled = false;
+                    break;
+                }
+                maxDepFinish = std::max(maxDepFinish, 
+                    readyTime[dep] + instructions[dep].latency);
+            }
+            
+            if (allDepsScheduled && maxDepFinish <= currentCycle) {
+                ready.push_back(static_cast<int>(i));
+            }
         }
         
-        pos = pos2;
+        if (ready.empty()) {
+            currentCycle++;
+            continue;
+        }
+        
+        // Sort by priority (higher latency first to expose more parallelism)
+        std::sort(ready.begin(), ready.end(), [&](int a, int b) {
+            return instructions[a].latency > instructions[b].latency;
+        });
+        
+        // Schedule highest priority
+        int toSchedule = ready[0];
+        schedule.push_back(toSchedule);
+        scheduled[toSchedule] = true;
+        readyTime[toSchedule] = currentCycle;
     }
+    
+    // Check if schedule differs from original order
+    bool changed = false;
+    for (size_t i = 0; i < schedule.size(); ++i) {
+        if (schedule[i] != static_cast<int>(i)) {
+            changed = true;
+            break;
+        }
+    }
+    
+    if (changed) {
+        // Reorder the actual bytes
+        std::vector<uint8_t> newCode;
+        newCode.reserve(end - start);
+        
+        for (int idx : schedule) {
+            const auto& instr = instructions[idx];
+            for (size_t i = 0; i < static_cast<size_t>(instr.length); ++i) {
+                newCode.push_back(code[instr.offset + i]);
+            }
+        }
+        
+        // Copy back
+        for (size_t i = 0; i < newCode.size(); ++i) {
+            code[start + i] = newCode[i];
+        }
+    }
+}
+
+void MachineCodeScheduler::decodeRegisterUsage(const std::vector<uint8_t>& code, 
+                                                size_t offset, DecodedInstruction& instr) {
+    if (offset >= code.size()) return;
+    
+    uint8_t b = code[offset];
+    size_t pos = offset;
+    
+    // Handle REX prefix
+    uint8_t rex = 0;
+    if (b >= 0x40 && b <= 0x4F) {
+        rex = b;
+        pos++;
+        if (pos >= code.size()) return;
+        b = code[pos];
+    }
+    
+    // Decode based on opcode
+    switch (b) {
+        case 0x50: case 0x51: case 0x52: case 0x53:  // push r64
+        case 0x54: case 0x55: case 0x56: case 0x57:
+            instr.regsRead.insert(b - 0x50 + ((rex & 0x01) ? 8 : 0));
+            instr.regsRead.insert(4);  // RSP
+            instr.regsWritten.insert(4);  // RSP
+            break;
+            
+        case 0x58: case 0x59: case 0x5A: case 0x5B:  // pop r64
+        case 0x5C: case 0x5D: case 0x5E: case 0x5F:
+            instr.regsWritten.insert(b - 0x58 + ((rex & 0x01) ? 8 : 0));
+            instr.regsRead.insert(4);  // RSP
+            instr.regsWritten.insert(4);  // RSP
+            break;
+            
+        case 0x89: case 0x8B:  // mov r/m, r or mov r, r/m
+            if (pos + 1 < code.size()) {
+                uint8_t modrm = code[pos + 1];
+                int reg = (modrm >> 3) & 7;
+                int rm = modrm & 7;
+                if (rex & 0x04) reg += 8;  // REX.R
+                if (rex & 0x01) rm += 8;   // REX.B
+                
+                if (b == 0x89) {  // mov r/m, r
+                    instr.regsRead.insert(reg);
+                    if ((modrm >> 6) == 3) {  // Register mode
+                        instr.regsWritten.insert(rm);
+                    } else {
+                        instr.writesMemory = true;
+                    }
+                } else {  // mov r, r/m
+                    instr.regsWritten.insert(reg);
+                    if ((modrm >> 6) == 3) {
+                        instr.regsRead.insert(rm);
+                    } else {
+                        instr.readsMemory = true;
+                    }
+                }
+            }
+            break;
+            
+        case 0x01: case 0x03:  // add
+        case 0x29: case 0x2B:  // sub
+        case 0x21: case 0x23:  // and
+        case 0x09: case 0x0B:  // or
+        case 0x31: case 0x33:  // xor
+            if (pos + 1 < code.size()) {
+                uint8_t modrm = code[pos + 1];
+                int reg = (modrm >> 3) & 7;
+                int rm = modrm & 7;
+                if (rex & 0x04) reg += 8;
+                if (rex & 0x01) rm += 8;
+                
+                instr.regsRead.insert(reg);
+                if ((modrm >> 6) == 3) {
+                    instr.regsRead.insert(rm);
+                    instr.regsWritten.insert(rm);
+                } else {
+                    instr.readsMemory = true;
+                    instr.writesMemory = true;
+                }
+            }
+            break;
+            
+        default:
+            // For unknown instructions, be conservative
+            instr.readsMemory = true;
+            instr.writesMemory = true;
+            break;
+    }
+}
+
+bool MachineCodeScheduler::hasDataDependency(const DecodedInstruction& a, 
+                                              const DecodedInstruction& b) {
+    // RAW: b reads something a writes
+    for (int reg : a.regsWritten) {
+        if (b.regsRead.count(reg)) return true;
+    }
+    
+    // WAW: both write to same register
+    for (int reg : a.regsWritten) {
+        if (b.regsWritten.count(reg)) return true;
+    }
+    
+    // WAR: b writes something a reads
+    for (int reg : a.regsRead) {
+        if (b.regsWritten.count(reg)) return true;
+    }
+    
+    // Memory dependencies (conservative)
+    if ((a.writesMemory && b.readsMemory) ||
+        (a.writesMemory && b.writesMemory) ||
+        (a.readsMemory && b.writesMemory)) {
+        return true;
+    }
+    
+    return false;
 }
 
 int MachineCodeScheduler::decodeInstructionLength(const std::vector<uint8_t>& code, size_t offset) {

@@ -7,6 +7,7 @@
 #include "semantic/symbols/symbol_table.h"
 #include "semantic/ownership/ownership.h"
 #include <vector>
+#include <set>
 
 namespace tyl {
 
@@ -27,6 +28,7 @@ public:
     TypePtr getType(Expression* expr);
     SymbolTable& symbols() { return symbols_; }
     OwnershipTracker& ownership() { return ownership_; }
+    const std::set<std::string>& getFunctionsWithStringReturns() const { return functionsWithStringReturns_; }
     
 private:
     SymbolTable symbols_;
@@ -35,6 +37,8 @@ private:
     TypePtr expectedReturn_;
     OwnershipTracker ownership_;  // Ownership and borrow tracking
     bool borrowCheckEnabled_ = true;  // Enable/disable borrow checking
+    std::vector<TypePtr> inferredReturnTypes_;  // Collected return types for inference
+    std::set<std::string> functionsWithStringReturns_;  // Functions that have at least one string return
     
     // Generic type context
     std::unordered_map<std::string, TypePtr> currentTypeParams_;  // Active type parameter bindings
@@ -219,6 +223,10 @@ private:
     void visit(HasFieldExpr& node) override;
     void visit(HasMethodExpr& node) override;
     void visit(FieldTypeExpr& node) override;
+    // New Syntax Enhancements
+    void visit(IfLetStmt& node) override;
+    void visit(MultiVarDecl& node) override;
+    void visit(WalrusExpr& node) override;
     void visit(Program& node) override;
     
     std::unordered_map<Expression*, TypePtr> exprTypes_;

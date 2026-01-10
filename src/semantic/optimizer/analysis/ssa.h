@@ -267,7 +267,17 @@ private:
     
     StmtPtr convertFunction(SSAFunction& func);
     StmtPtr convertBlock(SSABasicBlock& block);
+    StmtPtr convertInstruction(SSAInstruction& instr);
     ExprPtr convertValue(SSAValuePtr value);
+    
+    // Get or create a name for an SSA value
+    std::string getValueName(SSAValuePtr value);
+    
+    // Convert SSA type to string
+    std::string ssaTypeToString(SSAType type);
+    
+    // Convert SSA opcode to token type
+    TokenType ssaOpcodeToToken(SSAOpcode op);
 };
 
 } // namespace tyl

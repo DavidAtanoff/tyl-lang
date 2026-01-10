@@ -1,0 +1,13 @@
+// Test truly mixed return types
+fn weird x:
+    if x > 0:
+        return 42
+    else:
+        return "negative"
+
+fn main:
+    let a = weird(5)
+    println("weird(5) = ", a)
+    
+    let b = weird(-1)
+    println("weird(-1) = ", b)

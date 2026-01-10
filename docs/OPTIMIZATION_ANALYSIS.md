@@ -47,10 +47,12 @@
 | Loop Optimizer | `loop_optimizer.h/cpp` | ✅ Complete | O2+ | Main loop optimization driver (LICM, unrolling, strength reduction) |
 | Enhanced LICM | `enhanced_licm.h/cpp` | ✅ Complete | O3+ | Advanced Loop Invariant Code Motion with alias analysis |
 | Loop Rotation | `loop_rotation.h/cpp` | ✅ Complete | O2+ | Transforms loops to have exit at bottom |
-| IndVar Simplify | `indvar_simplify.h/cpp` | ✅ Complete | O2+ | Induction Variable canonicalization |
+| IndVar Simplify | `indvar_simplify.h/cpp` | ✅ Complete | O2+ | Induction Variable canonicalization with strength reduction |
 | Loop Deletion | `loop_deletion.h/cpp` | ✅ Complete | O2+ | Removes loops with no side effects |
 | Loop Idiom | `loop_idiom.h/cpp` | ✅ Complete | O2+ | Recognizes memset/memcpy patterns |
 | Loop Simplify | `loop_simplify.h/cpp` | ✅ Complete | O2+ | Loop canonicalization (preheaders, single latch) |
+| Loop Unswitching | `loop_unswitch.h/cpp` | ✅ Complete | O3+ | Moves invariant conditionals out of loops |
+| Loop Peeling | `loop_peeling.h/cpp` | ✅ Complete | O3+ | Peels first/last iterations for optimization |
 
 ### CFG Optimizations (`cfg/`)
 
@@ -133,12 +135,12 @@ All O3 passes plus:
 | Category | Count |
 |----------|-------|
 | Scalar | 16 |
-| Loop | 7 |
+| Loop | 9 |
 | CFG | 2 |
 | Function | 3 |
 | IPO | 5 |
 | Analysis | 3 |
-| **Total** | **36** |
+| **Total** | **38** |
 
 ---
 
@@ -159,6 +161,8 @@ All O3 passes plus:
 | `loop-idiom` | LoopIdiomRecognition | ✅ |
 | `loop-deletion` | LoopDeletion | ✅ |
 | `loop-unroll` | LoopUnrolling | ✅ |
+| `loop-unswitch` | LoopUnswitch | ✅ |
+| `loop-peel` | LoopPeeling | ✅ |
 | `gvn` | GVN + GVN-PRE | ✅ |
 | `memcpyopt` | MemCpyOpt | ✅ |
 | `sccp` | ConstProp | ✅ |
@@ -171,7 +175,7 @@ All O3 passes plus:
 | `deadargelim` | DeadArgElim | ✅ |
 | `globalopt` | GlobalOpt | ✅ |
 
-**Coverage**: 24/24 core O2 passes (100%)
+**Coverage**: 26/26 core O2 passes (100%)
 
 ---
 
@@ -188,3 +192,43 @@ All O3 passes plus:
 | Argument Promotion | Medium | Pointer to value conversion |
 
 These passes are deferred until multi-platform backend support is implemented.
+
+---
+
+## Recent Improvements (January 2026)
+
+### IndVarSimplify Enhancements
+- Implemented `simplifyDerivedIV`: Now performs strength reduction on derived induction variables
+  - Converts multiplications by powers of 2 to left shifts
+  - Example: `j = i * 4` becomes `j = i << 2`
+- Implemented `replaceExitValue`: Replaces uses of loop induction variables after the loop with their final computed value
+  - Enables further constant propagation and dead code elimination
+
+### MachineCodeScheduler Improvements
+- Implemented full instruction scheduling with dependency analysis
+- Added register usage decoding for x64 instructions
+- Implemented list scheduling algorithm with latency-based priorities
+- Added support for detecting RAW, WAW, and WAR dependencies
+
+### GVN/CSE Invalidation Refinement
+- Changed from conservative "clear all" to precise invalidation
+- Now only invalidates variables that are actually modified in branches/loops
+- Added `collectModifiedVars` to track which variables change in each scope
+- Added `invalidateExpressionsUsing` to remove cached expressions that depend on modified variables
+
+### SSA Optimizer Improvements
+- Enhanced `tryRemoveTrivialPhi` to properly propagate replacements
+- Now recursively simplifies phi nodes that become trivial after replacement
+- Properly replaces all uses of trivial phi results
+
+### Jump Threading Enhancements
+- Added range-based analysis for more aggressive condition folding
+- Implemented `recordRangeFromComparison` to track variable ranges from comparisons
+- Implemented `canDetermineFromRange` to fold comparisons using range info
+- Added `areConditionsCorrelated` for detecting implied conditions
+- Example: `x < 5` implies `x < 10`, enabling jump threading
+
+### New Optimization Passes
+- **Loop Unswitching**: Moves loop-invariant conditionals outside loops by duplicating the loop body
+- **Loop Peeling**: Peels first/last iterations to enable bounds check elimination and other optimizations
+- **SSA-to-AST Converter**: Full implementation for backends that don't use SSA directly

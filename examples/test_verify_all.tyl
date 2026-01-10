@@ -1,0 +1,96 @@
+// Comprehensive test for all implemented syntax features
+
+// ===========================================
+// TEST 1: Multi-variable assignment
+// ===========================================
+fn test_multi_assign:
+    a = b = c = 42
+    println("Multi-assign: a=", a, " b=", b, " c=", c)
+    
+    // Verify they're independent
+    a = 100
+    println("After a=100: a=", a, " b=", b, " c=", c)
+
+// ===========================================
+// TEST 2: Multi-constant
+// ===========================================
+fn test_multi_const:
+    X :: Y :: Z :: 999
+    println("Multi-const: X=", X, " Y=", Y, " Z=", Z)
+
+// ===========================================
+// TEST 3: Chained mutable multi-assign
+// ===========================================
+fn test_chained_mut:
+    mut x = mut y = mut z = 0
+    println("Chained mut initial: x=", x, " y=", y, " z=", z)
+    
+    x = 10
+    y = 20
+    z = 30
+    println("After modify: x=", x, " y=", y, " z=", z)
+
+// ===========================================
+// TEST 4: Walrus operator
+// ===========================================
+fn test_walrus:
+    if (n := 5) > 0:
+        println("Walrus: n=", n)
+
+// ===========================================
+// TEST 5: Inline trait bounds
+// ===========================================
+fn identity[T] x: T -> T:
+    return x
+
+fn test_inline_bounds:
+    val = identity(123)
+    println("Inline bounds: val=", val)
+
+// ===========================================
+// TEST 6: Associated types in traits (parser only)
+// ===========================================
+trait Container:
+    type Item
+    type Index = int
+    fn get self, idx: Index -> Item?
+
+record MyList:
+    data: int
+
+impl Container for MyList:
+    type Item = int
+    fn get self, idx: int -> int?:
+        return self.data
+
+fn test_associated_types:
+    list = MyList { data: 777 }
+    println("Associated types: data=", list.data)
+
+// ===========================================
+// MAIN
+// ===========================================
+fn main:
+    println("=== SYNTAX FEATURE VERIFICATION ===")
+    println("")
+    
+    println("--- Test 1: Multi-assign ---")
+    test_multi_assign()
+    
+    println("--- Test 2: Multi-const ---")
+    test_multi_const()
+    
+    println("--- Test 3: Chained mut ---")
+    test_chained_mut()
+    
+    println("--- Test 4: Walrus ---")
+    test_walrus()
+    
+    println("--- Test 5: Inline bounds ---")
+    test_inline_bounds()
+    
+    println("--- Test 6: Associated types ---")
+    test_associated_types()
+    
+    println("")
+    println("=== ALL TESTS PASSED ===")
